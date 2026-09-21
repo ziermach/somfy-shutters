@@ -1,11 +1,22 @@
 # somfy-shutters
 
+![Status: work in progress](https://img.shields.io/badge/status-work_in_progress-E8A33D?style=for-the-badge)
+![Code: none yet](https://img.shields.io/badge/application_code-none_yet-8A8276?style=for-the-badge)
+
+# 🚧 WORK IN PROGRESS 🚧
+
+> **There is no application code in this repository.** Nothing here runs, nothing here
+> controls a shutter. What exists so far is the design work: the project constitution,
+> a throwaway UI mock you can open in a browser, and the spec-driven scaffolding.
+>
+> Do not clone this expecting a working system. Everything below describes what is
+> being built, not what is finished.
+
+---
+
 Self-hosted control for SIMU/Somfy RTS roller shutters through
 [Pi-Somfy](https://github.com/Nickduino/Pi-Somfy): a live animated view of where every
 shutter stands, and automations that run on the house's own network.
-
-> **Status: no application code yet.** What exists is the constitution, a throwaway UI
-> mock, and the spec-driven scaffolding. The first feature spec is next.
 
 ## The problem this project takes seriously
 
