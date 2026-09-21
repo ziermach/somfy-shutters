@@ -1,6 +1,6 @@
-# HomeControll Constitution
+# somfy-shutters Constitution
 
-HomeControll is a self-hosted app that controls SIMU/Somfy RTS roller shutters through
+somfy-shutters is a self-hosted app that controls SIMU/Somfy RTS roller shutters through
 Pi-Somfy, displays their state as a live animation, and runs user-defined automations.
 
 ## Core Principles
@@ -8,7 +8,7 @@ Pi-Somfy, displays their state as a live animation, and runs user-defined automa
 ### I. Pi-Somfy Owns the Radio (NON-NEGOTIABLE)
 
 Pi-Somfy MUST remain the single process that holds RTS rolling-code state and transmits on
-433.42 MHz. No component of HomeControll may drive the CC1101 over SPI, send RTS frames, or
+433.42 MHz. No component of this project may drive the CC1101 over SPI, send RTS frames, or
 persist rolling counters. All shutter movement MUST be requested by publishing to the MQTT
 command topic.
 
@@ -17,7 +17,7 @@ its own counter desynchronizes the motors and requires physical re-pairing at ev
 
 ### II. MQTT Is the Only Integration Boundary
 
-HomeControll MUST talk to the shutter layer exclusively over MQTT topics — `somfy/<address>/level/cmd`
+This project MUST talk to the shutter layer exclusively over MQTT topics — `somfy/<address>/level/cmd`
 outbound, `somfy/<address>/level/set_state` inbound. Pi-Somfy's Flask routes, its HTML, its
 database, and its config files MUST NOT be scraped, called, or written by this project.
 

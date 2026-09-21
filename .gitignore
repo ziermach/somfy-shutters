@@ -1,2 +1,26 @@
+# editors
 .idea/
+.vscode/
+*.swp
+
+# macOS
 .DS_Store
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# node
+node_modules/
+dist/
+build/
+
+# runtime — never commit these
+*.db
+*.sqlite3
+operateShutters.conf
+.env

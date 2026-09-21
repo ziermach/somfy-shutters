@@ -1,4 +1,4 @@
-# HomeControll
+# somfy-shutters
 
 App for controlling SIMU/Somfy RTS roller shutters through Pi-Somfy: live animated
 state, plus user-defined automations. **Greenfield** — no application code exists yet.
