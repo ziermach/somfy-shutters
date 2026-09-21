@@ -21,6 +21,8 @@ build/
 
 # runtime — never commit these
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
 operateShutters.conf
 .env
