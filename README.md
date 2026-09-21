@@ -1,22 +1,37 @@
 # somfy-shutters
 
 ![Status: work in progress](https://img.shields.io/badge/status-work_in_progress-E8A33D?style=for-the-badge)
-![Code: none yet](https://img.shields.io/badge/application_code-none_yet-8A8276?style=for-the-badge)
+![Runs against: simulator](https://img.shields.io/badge/runs_against-simulator_only-8A8276?style=for-the-badge)
 
 # 🚧 WORK IN PROGRESS 🚧
 
-> **There is no application code in this repository.** Nothing here runs, nothing here
-> controls a shutter. What exists so far is the design work: the project constitution,
-> a throwaway UI mock you can open in a browser, and the spec-driven scaffolding.
+> **It runs, but it has never moved a real shutter.** Feature 001 is implemented and
+> tested against a simulated house; no motor in this project has been paired yet, so
+> the MQTT path to Pi-Somfy is written and unit-tested but unproven on hardware.
 >
-> Do not clone this expecting a working system. Everything below describes what is
-> being built, not what is finished.
+> Clone it to read it or to try the simulator. Do not put it in front of your windows
+> and expect it to be right yet.
 
 ---
 
 Self-hosted control for SIMU/Somfy RTS roller shutters through
 [Pi-Somfy](https://github.com/Nickduino/Pi-Somfy): a live animated view of where every
 shutter stands, and automations that run on the house's own network.
+
+## What works today
+
+| | |
+|---|---|
+| ✅ | Open, close, stop and drive to a position, on one shutter or all of them |
+| ✅ | Animation at the shutter's real travel speed, starting the moment you tap |
+| ✅ | Every position states whether it is certain, estimated or unknown, and how old that is |
+| ✅ | Live updates to every open client; reconnect with backoff after any interruption |
+| ✅ | A simulated house with soft start and non-linear travel, so it develops without hardware |
+| ⬜ | **Travel-time calibration** — feature 002, currently the times come from configuration |
+| ⬜ | Automations and schedules |
+| ⬜ | Anything confirmed on a real motor |
+
+74 tests, all against the real API surface or the tracker's rules.
 
 ## The problem this project takes seriously
 
@@ -76,27 +91,50 @@ against:
 - **Measured physical values** — travel times, addresses, direction — live in
   configuration, never in code.
 
+## Running it
+
+No broker and no hardware needed — `bridge.kind = "sim"` runs a simulated house.
+
+```bash
+cp config/shutters.example.toml config/shutters.toml
+
+cd backend
+uv venv --python 3.11 .venv && uv pip install -e ".[dev]"
+.venv/bin/uvicorn somfy_shutters.main:app --reload --host 0.0.0.0
+
+cd ../frontend && npm install && npm run dev     # proxies /api to the backend
+```
+
+Point `bridge.kind` at `"mqtt"` and nothing else changes. Details in
+[`backend/README.md`](backend/README.md); the validation scenarios, including the
+reconciliation cases, are in
+[`specs/001-mqtt-live-position/quickstart.md`](specs/001-mqtt-live-position/quickstart.md).
+
+The simulator is not a stub. It gives each window a soft-start dead time, a non-linear
+travel curve and different speeds up and down — none of it visible through the port the
+app talks to. An app that could see those would prove nothing by passing.
+
 ## The mock
 
 [`mocks/rolladen-ui.html`](mocks/rolladen-ui.html) opens in any browser, no build step.
-Four screens on one shared model, in German: overview, detail, automations, and
-calibration. Each shutter carries a hidden "truth" — soft start plus a non-linear run —
-that the app only learns by measuring, so the difference between a guessed travel time
-and a calibrated one is visible by clicking around.
+Four screens in German: overview, detail, automations, and calibration, including
+adding and removing a shutter and the power-cycle reset for when every remote is lost.
 
-It is **deliberately throwaway**. The real frontend gets built in the chosen stack
-against a simulator; this file exists to settle the visual language and the calibration
-flow, and gets deleted once that exists.
+It predates the real frontend and is **throwaway**. Where the two disagree, the code
+wins. It survives for one reason: it holds the calibration flow that feature 002 will
+build, which is not implemented yet.
 
-### Calibration
+### Calibration, once it exists
 
 Travel times cannot be read off the motor, so the user is the sensor: two button presses
 per trip, one when the shutter starts moving, one when it arrives. Runs alternate
-direction, so every trip starts from an end stop and none is wasted. The median over
-three runs per direction lands within about a percentage point of what perfect presses
-would give; further presses buy almost nothing (measured in the mock's explainer).
-After that, every uninterrupted end-stop-to-end-stop trip in daily use re-measures for
-free.
+direction, so every trip starts from an end stop and none is wasted.
+
+Two presses leave about 9 percentage points of error mid-travel, because the motor does
+not move linearly; perfect presses would leave 8.8. A third press makes it *worse* —
+the curve is symmetric, so a halfway mark lands where the error is already zero. Four
+presses reach 3.7. Not worth it across eight windows, so two it is, and every
+uninterrupted end-stop-to-end-stop trip in daily use re-measures for free afterwards.
 
 ## Development
 
@@ -106,18 +144,39 @@ Work is spec-driven with [GitHub Spec Kit](https://github.com/github/spec-kit):
 /speckit-constitution → /speckit-specify → /speckit-plan → /speckit-tasks → /speckit-implement
 ```
 
-Feature code is not written before its spec exists. See [CLAUDE.md](CLAUDE.md) for the
-conventions and the repository layout.
+Feature code is not written before its spec exists. Feature 001 is specified, planned,
+broken into tasks and implemented under
+[`specs/001-mqtt-live-position/`](specs/001-mqtt-live-position/) — the plan's
+[research.md](specs/001-mqtt-live-position/research.md) is where the non-obvious
+decisions are argued. See [CLAUDE.md](CLAUDE.md) for conventions and build commands.
+
+```bash
+cd backend && .venv/bin/python -m pytest       # 74 tests
+cd frontend && npx svelte-check --tsconfig ./tsconfig.json
+```
 
 ## Open hardware questions
 
-Blocking — each has to be measured on real hardware before a feature depends on it:
+None of these has been answered yet, which is why nothing here is proven on a motor.
+The software is built so that answering them changes configuration, not code:
 
-1. Direction of `level/cmd`: is 0 fully open or fully closed?
-2. Per-window travel times, up and down separately.
-3. Radio range to the furthest window, antenna attached.
-4. Whether CC1101 receive mode gets enabled, which tracks physical remotes.
-5. Rolling-code pairing per window, addresses recorded in `operateShutters.conf`.
+1. **Direction of `level/cmd`** — is 0 fully open or fully closed? One setting,
+   `invert_level`, applied in a single file; a test asserts nothing else knows about it.
+2. **Per-window travel times**, up and down separately. Read from `shutters.toml`; a
+   shutter with none still animates, on a stated default, and is marked uncalibrated.
+3. **Radio range** to the furthest window, antenna attached. A command lost in the air
+   is indistinguishable from one delivered — the simulator can reproduce that with a
+   loss rate.
+4. Whether **CC1101 receive mode** gets enabled, which tracks physical remotes. Without
+   it, drift from manual use is invisible and the age of the estimate is all the app can
+   offer.
+5. **Rolling-code pairing** per window, addresses recorded in `operateShutters.conf` and
+   copied into ours.
+
+One more, found by reading Pi-Somfy rather than by measuring: `stop` is sent as a level
+command at the current position, because `level/cmd` is the only topic this project
+speaks. Whether a motor halts crisply that way is unverified; if not, the button-press
+topic is the fix and the MQTT contract changes.
 
 **The CC1101 runs on 3.3V only** (Pi pin 1 or 17). 5V destroys the module.
 
