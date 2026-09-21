@@ -1,0 +1,115 @@
+"""Configuration: which shutters exist, and the physical values someone measured.
+
+The constitution keeps measured values out of code, so travel times and addresses
+live here. Validation is strict and startup fails loudly — a mistyped address is
+otherwise completely silent, since the radio never answers.
+"""
+
+from __future__ import annotations
+
+import tomllib
+from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+ADDRESS_PATTERN = r"^0x[0-9a-f]{6}$"
+ID_PATTERN = r"^[a-z0-9_-]+$"
+
+
+class GeneralConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stale_after_hours: float = Field(default=12, gt=0)
+    default_travel_seconds: float = Field(default=20, ge=1, le=600)
+
+
+class BridgeConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["mqtt", "sim"] = "sim"
+    host: str = "localhost"
+    port: int = Field(default=1883, ge=1, le=65535)
+    user: str | None = None
+    password: str | None = None
+    invert_level: bool = False
+    """Open hardware question 1. Flipping this must be sufficient on its own."""
+
+
+class ShutterConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(pattern=ID_PATTERN)
+    name: str = Field(min_length=1)
+    address: str
+    travel_up_seconds: float | None = Field(default=None, ge=1, le=600)
+    travel_down_seconds: float | None = Field(default=None, ge=1, le=600)
+
+    @field_validator("address")
+    @classmethod
+    def _address_shape(cls, value: str) -> str:
+        import re
+
+        lowered = value.strip().lower()
+        if not re.match(ADDRESS_PATTERN, lowered):
+            raise ValueError(f"address must look like 0x279621, got {value!r}")
+        return lowered
+
+    @property
+    def calibrated(self) -> bool:
+        return self.travel_up_seconds is not None and self.travel_down_seconds is not None
+
+
+class Settings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    general: GeneralConfig = Field(default_factory=GeneralConfig)
+    bridge: BridgeConfig = Field(default_factory=BridgeConfig)
+    shutter: list[ShutterConfig] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _unique_ids_and_addresses(self) -> Settings:
+        for field in ("id", "address"):
+            seen: dict[str, str] = {}
+            for shutter in self.shutter:
+                value = getattr(shutter, field)
+                if value in seen:
+                    raise ValueError(
+                        f"duplicate {field} {value!r}: used by {seen[value]!r} and {shutter.id!r}"
+                    )
+                seen[value] = shutter.id
+        return self
+
+    @property
+    def shutters(self) -> dict[str, ShutterConfig]:
+        return {s.id: s for s in self.shutter}
+
+    def by_address(self, address: str) -> ShutterConfig | None:
+        wanted = address.strip().lower()
+        return next((s for s in self.shutter if s.address == wanted), None)
+
+    def travel_seconds(self, shutter_id: str, direction: str) -> float:
+        """Measured value where there is one, the stated default otherwise (FR-015)."""
+        shutter = self.shutters[shutter_id]
+        measured = shutter.travel_up_seconds if direction == "up" else shutter.travel_down_seconds
+        return measured if measured is not None else self.general.default_travel_seconds
+
+
+class ConfigError(RuntimeError):
+    pass
+
+
+def load_settings(path: str | Path) -> Settings:
+    path = Path(path)
+    if not path.is_file():
+        raise ConfigError(
+            f"no configuration at {path}. Copy config/shutters.example.toml to {path} and edit it."
+        )
+    try:
+        raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"{path} is not valid TOML: {exc}") from exc
+    try:
+        return Settings.model_validate(raw)
+    except Exception as exc:
+        raise ConfigError(f"{path} is invalid:\n{exc}") from exc

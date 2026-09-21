@@ -1,0 +1,205 @@
+"""Commands and queries.
+
+A command is a one-shot request that wants a status code and a message a person
+can read; state comes back over the WebSocket instead. Errors share one shape so
+the client has a single code path.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, Literal
+
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+
+from ..bridge.base import BridgeUnreachable
+from ..models import Action
+from ..tracker import Tracker, UnknownShutter
+from .serialize import movement_json, shutter_json, snapshot_json
+
+log = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api")
+
+BRIDGE_UNREACHABLE = {
+    "error": "bridge_unreachable",
+    "message": "Der Befehl konnte nicht zugestellt werden. Die Funkbrücke antwortet nicht.",
+    "detail": None,
+}
+
+
+class CommandBody(BaseModel):
+    action: Literal["open", "close", "stop", "position"]
+    target_percent: int | None = Field(default=None, ge=0, le=100)
+
+
+def _tracker(request: Request) -> Tracker:
+    return request.app.state.tracker
+
+
+async def _apply(request: Request, shutter_id: str, body: CommandBody) -> dict[str, Any]:
+    """Issue one command. Raises BridgeUnreachable if it could not be handed over."""
+    tracker: Tracker = request.app.state.tracker
+    bridge = request.app.state.bridge
+    action = Action(body.action)
+
+    if action is Action.STOP:
+        # Expressed as a level command at the current position: we only speak
+        # level/cmd. See contracts/mqtt.md — this is an approximation, and
+        # hardware bring-up has to confirm the motor halts crisply.
+        current = tracker.position(shutter_id)
+        target = current.percent if current.percent is not None else 0
+        await bridge.send_level(tracker.settings.shutters[shutter_id].address, target)
+        await tracker.stop(shutter_id)
+        return {"accepted": True, "movement": None}
+
+    target = tracker.plan(shutter_id, action, body.target_percent)
+    assert target is not None
+    await bridge.send_level(tracker.settings.shutters[shutter_id].address, target)
+    movement = await tracker.start_movement(shutter_id, target)
+    log.info("command %s on %s -> %s%%", body.action, shutter_id, target)
+    return {"accepted": True, "movement": movement_json(movement)}
+
+
+@router.get("/shutters")
+async def list_shutters(request: Request) -> dict[str, Any]:
+    bridge = request.app.state.bridge
+    return snapshot_json(_tracker(request), bridge.kind, bridge.connected)
+
+
+@router.get("/health")
+async def health(request: Request) -> dict[str, Any]:
+    bridge = request.app.state.bridge
+    tracker = _tracker(request)
+    # 'ok' even when the bridge is down: the service is up and correctly
+    # reporting a broken dependency. Conflating the two makes this useless.
+    return {
+        "status": "ok",
+        "bridge": {"connected": bridge.connected, "kind": bridge.kind},
+        "shutters": len(tracker.settings.shutters),
+    }
+
+
+@router.post("/shutters/command")
+async def command_all(request: Request, body: CommandBody) -> JSONResponse:
+    tracker = _tracker(request)
+    results: list[dict[str, Any]] = []
+    for shutter_id in tracker.settings.shutters:
+        try:
+            await _apply(request, shutter_id, body)
+            results.append({"id": shutter_id, "accepted": True})
+        except BridgeUnreachable:
+            results.append({"id": shutter_id, "accepted": False, "error": "bridge_unreachable"})
+    accepted = sum(1 for r in results if r["accepted"])
+    status = 200 if accepted == len(results) else 503 if accepted == 0 else 207
+    return JSONResponse({"results": results}, status_code=status)
+
+
+@router.post("/shutters/{shutter_id}/command")
+async def command_one(request: Request, shutter_id: str, body: CommandBody) -> JSONResponse:
+    tracker = _tracker(request)
+    if shutter_id not in tracker.settings.shutters:
+        raise HTTPException(
+            404,
+            detail={
+                "error": "unknown_shutter",
+                "message": f"Kein Rolladen {shutter_id!r}.",
+                "detail": None,
+            },
+        )
+    if body.action == "position" and body.target_percent is None:
+        raise HTTPException(
+            422,
+            detail={
+                "error": "target_required",
+                "message": "Für 'position' fehlt target_percent.",
+                "detail": None,
+            },
+        )
+    try:
+        return JSONResponse(await _apply(request, shutter_id, body))
+    except BridgeUnreachable:
+        return JSONResponse({"accepted": False, **BRIDGE_UNREACHABLE}, status_code=503)
+    except UnknownShutter:
+        raise HTTPException(
+            404,
+            detail={
+                "error": "unknown_shutter",
+                "message": f"Kein Rolladen {shutter_id!r}.",
+                "detail": None,
+            },
+        ) from None
+
+
+@router.post("/shutters/{shutter_id}/resync")
+async def resync(request: Request, shutter_id: str) -> JSONResponse:
+    """Drive to an end stop for the sole purpose of making the position certain."""
+    tracker = _tracker(request)
+    if shutter_id not in tracker.settings.shutters:
+        raise HTTPException(
+            404,
+            detail={
+                "error": "unknown_shutter",
+                "message": f"Kein Rolladen {shutter_id!r}.",
+                "detail": None,
+            },
+        )
+    target = tracker.nearest_end_stop(shutter_id)
+    bridge = request.app.state.bridge
+    try:
+        await bridge.send_level(tracker.settings.shutters[shutter_id].address, target)
+        movement = await tracker.start_movement(shutter_id, target)
+    except BridgeUnreachable:
+        return JSONResponse({"accepted": False, **BRIDGE_UNREACHABLE}, status_code=503)
+    return JSONResponse(
+        {"accepted": True, "target_percent": target, "movement": movement_json(movement)}
+    )
+
+
+@router.get("/shutters/{shutter_id}")
+async def get_shutter(request: Request, shutter_id: str) -> dict[str, Any]:
+    tracker = _tracker(request)
+    if shutter_id not in tracker.settings.shutters:
+        raise HTTPException(
+            404,
+            detail={
+                "error": "unknown_shutter",
+                "message": f"Kein Rolladen {shutter_id!r}.",
+                "detail": None,
+            },
+        )
+    return shutter_json(shutter_id, tracker)
+
+
+# --- simulator-only, registered only when bridge.kind == "sim" ----------------
+
+sim_router = APIRouter(prefix="/api/sim")
+
+
+class ReportBody(BaseModel):
+    shutter_id: str
+    percent: int = Field(ge=0, le=100)
+
+
+@sim_router.post("/bridge/{state}")
+async def sim_bridge(request: Request, state: Literal["offline", "online"]) -> dict[str, Any]:
+    bridge = request.app.state.bridge
+    bridge.set_connected(state == "online")
+    await request.app.state.bus.publish(
+        {"type": "bridge", "connected": bridge.connected, "kind": bridge.kind}
+    )
+    return {"connected": bridge.connected}
+
+
+@sim_router.post("/report")
+async def sim_report(request: Request, body: ReportBody) -> dict[str, Any]:
+    tracker = _tracker(request)
+    if body.shutter_id not in tracker.settings.shutters:
+        raise HTTPException(
+            404, detail={"error": "unknown_shutter", "message": "unbekannt", "detail": None}
+        )
+    address = tracker.settings.shutters[body.shutter_id].address
+    await tracker.handle_report(address, body.percent)
+    return {"applied": True, "position": shutter_json(body.shutter_id, tracker)["position"]}

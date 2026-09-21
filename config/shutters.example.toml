@@ -1,0 +1,53 @@
+# Copy to config/shutters.toml and edit. The real file is gitignored: it holds
+# the RTS addresses of actual motors, and this repository is public.
+
+[general]
+# An estimate older than this is shown de-emphasised, with a resync offered (FR-008).
+stale_after_hours = 12
+# Used for a shutter whose travel time has not been measured yet (FR-015).
+# It still animates; the interface marks it as not calibrated.
+default_travel_seconds = 20
+
+[bridge]
+# "sim" runs a simulated house and needs no broker — this is how the app is
+# developed. "mqtt" talks to Pi-Somfy through Mosquitto.
+kind = "sim"
+host = "localhost"
+port = 1883
+# user = "somfy"
+# password = "..."
+
+# Whether Pi-Somfy treats 0 as open or as closed is open hardware question 1 and
+# has not been measured. Our whole system uses 100 = fully open. If bring-up shows
+# the bridge expects the opposite, flip this — and nothing else should need to change.
+invert_level = false
+
+# One block per shutter. The address is the RTS address Pi-Somfy assigned, copied
+# by hand from its operateShutters.conf. We deliberately do not read that file:
+# see specs/001-mqtt-live-position/research.md, section 5.
+[[shutter]]
+id = "wohnzimmer"
+name = "Wohnzimmer"
+address = "0x279621"
+travel_up_seconds = 18.2
+travel_down_seconds = 16.1
+
+[[shutter]]
+id = "kueche"
+name = "Küche"
+address = "0x279622"
+travel_up_seconds = 12.4
+# travel_down_seconds not measured yet — falls back to default_travel_seconds
+
+[[shutter]]
+id = "schlafzimmer"
+name = "Schlafzimmer"
+address = "0x279623"
+# neither direction measured
+
+[[shutter]]
+id = "buero"
+name = "Büro"
+address = "0x279624"
+travel_up_seconds = 13.0
+travel_down_seconds = 11.8

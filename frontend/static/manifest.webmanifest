@@ -1,0 +1,13 @@
+{
+  "name": "Rolladen",
+  "short_name": "Rolladen",
+  "description": "Rolladensteuerung im Haus",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0e0d0b",
+  "theme_color": "#14130f",
+  "lang": "de",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

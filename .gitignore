@@ -24,3 +24,6 @@ build/
 *.sqlite3
 operateShutters.conf
 .env
+
+# runtime config holds real RTS addresses — never commit
+config/shutters.toml

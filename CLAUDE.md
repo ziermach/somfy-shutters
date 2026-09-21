@@ -64,7 +64,23 @@ not just a plan.
 Backend, broker and Pi-Somfy all run on the same Raspberry Pi. No extra hardware, no container
 orchestrator, no DB server.
 
-Build/test/run commands: none yet — add them here with the first feature.
+### Build, test, run
+
+```bash
+# backend (Python 3.11; system python may be older — uv fetches it)
+cd backend && uv venv --python 3.11 .venv && uv pip install -e ".[dev]"
+.venv/bin/uvicorn somfy_shutters.main:app --reload --host 0.0.0.0
+.venv/bin/python -m pytest && .venv/bin/ruff check . && .venv/bin/ruff format --check .
+
+# frontend
+cd frontend && npm install
+npm run dev            # proxies /api to localhost:8000
+npm run build          # backend serves frontend/dist in production
+npx svelte-check --tsconfig ./tsconfig.json
+```
+
+`config/shutters.toml` (gitignored) decides which shutters exist. With
+`bridge.kind = "sim"` everything runs without a broker or hardware.
 
 ## Non-negotiables
 
