@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--
+  THROWAWAY LOOK MOCK — not the real UI.
+  Purpose: settle the visual language and the position-confidence states.
+  The real frontend is built in the chosen stack against the simulator
+  (see .specify/memory/constitution.md, principle III). Delete once it exists.
+  Assumptions: 100 % = fully open, travel times invented.
+-->
+<title>Rolladen UI Mock</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --page: #0E0D0B;
+    --ink: #14130F;
+    --surface: #211F1A;
+    --surface-2: #2C2923;
+    --line: #3A3630;
+    --text: #F2EDE3;
+    --muted: #A79F91;
+    --faint: #8A8276;
+    --amber: #E8A33D;
+    --amber-soft: #2A2418;
+    --amber-line: #5C4A28;
+    --teal: #6FA89B;
+    --grey-dot: #7A736A;
+    --window: #D8C9AB;
+    --mullion: #B8A98C;
+    --slat-a: #4A443B;
+    --slat-b: #332F29;
+    --slat-edge: #5C544A;
+
+    --display: 'Bricolage Grotesque', 'Avenir Next', 'Segoe UI', sans-serif;
+    --body: 'IBM Plex Sans', 'Helvetica Neue', 'Segoe UI', sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  button, input { font-family: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+  .page {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 40px 20px 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 48px;
+  }
+
+  /* intro */
+  .intro { display: flex; flex-direction: column; gap: 10px; max-width: 68ch; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--amber); font-weight: 600; }
+  .intro h1 { margin: 0; font-family: var(--display); font-size: clamp(30px, 4vw, 40px); font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
+  .intro p { margin: 0; color: var(--muted); font-size: 15px; }
+  .assumptions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+
+  /* phones */
+  .screens { display: flex; flex-wrap: wrap; gap: 32px; justify-content: center; }
+  .screen-col { display: flex; flex-direction: column; gap: 10px; width: min(390px, 100%); }
+  .screen-label { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); font-weight: 600; padding-left: 4px; }
+  .phone {
+    background: var(--ink);
+    border: 1px solid var(--surface-2);
+    border-radius: 28px;
+    padding: 24px 20px 20px;
+    min-height: 800px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .phone h2 { margin: 0; font-family: var(--display); font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+  .sub { font-size: 13px; color: var(--muted); }
+  .footnote { margin-top: auto; font-size: 12px; color: var(--faint); }
+
+  .btn {
+    height: 44px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 500;
+    flex: 1 1 0;
+  }
+  .btn:hover { border-color: var(--slat-edge); }
+  .btn.big { height: 52px; border-radius: 14px; font-size: 16px; font-weight: 600; }
+  .btn.ghost { background: var(--surface); border-radius: 12px; font-size: 15px; }
+  .btn.amber { background: var(--amber-soft); border-color: var(--amber-line); color: var(--amber); font-weight: 600; }
+  .row { display: flex; gap: 8px; }
+
+  /* the window graphic */
+  .win {
+    position: relative;
+    overflow: hidden;
+    background: var(--window);
+    border: 2px solid var(--line);
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+  .win .slats {
+    position: absolute; left: 0; right: 0; top: 0;
+    background: repeating-linear-gradient(180deg, var(--slat-a) 0 5px, var(--slat-b) 5px 7px);
+    border-bottom: 2px solid var(--slat-edge);
+    transition: height 120ms linear;
+  }
+  .win.lg { width: 210px; height: 250px; border-width: 3px; border-radius: 10px; }
+  .win.lg .slats { background: repeating-linear-gradient(180deg, var(--slat-a) 0 9px, var(--slat-b) 9px 12px); border-bottom-width: 3px; }
+  .win.lg::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; background: var(--mullion); transform: translateX(-50%); }
+  .win.sm { width: 46px; height: 58px; }
+  .win.tile { width: 100%; height: 152px; border-radius: 8px; }
+  .win.tile .slats { background: repeating-linear-gradient(180deg, var(--slat-a) 0 7px, var(--slat-b) 7px 10px); }
+  .win.dim { opacity: 0.5; }
+  .win.unknown { border-style: dashed; border-color: var(--slat-edge); }
+  .win.unknown .slats { border-bottom-style: dashed; }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--grey-dot); }
+  .dot.sure { background: var(--teal); }
+  .dot.est { background: var(--amber); }
+
+  /* overview cards */
+  .cards { display: flex; flex-direction: column; gap: 12px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--surface-2);
+    border-radius: 16px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .card.selected { border-color: var(--amber-line); }
+  .card-top { display: flex; gap: 14px; align-items: center; }
+  .card-meta { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .name {
+    all: unset;
+    cursor: pointer;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .name:hover { color: var(--amber); }
+  .name:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; border-radius: 4px; }
+  .sync { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .pct { font-family: var(--mono); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+  /* detail */
+  .detail-head { display: flex; flex-direction: column; gap: 2px; }
+  .detail-win { display: flex; justify-content: center; }
+  .readout { display: flex; align-items: baseline; justify-content: center; gap: 10px; }
+  .readout .pct { font-size: 44px; line-height: 1; }
+  .readout .sub { font-size: 15px; }
+  .slider { display: flex; flex-direction: column; gap: 6px; }
+  .slider input { width: 100%; height: 44px; accent-color: var(--amber); }
+  .slider-scale { display: flex; justify-content: space-between; font-size: 12px; color: var(--faint); }
+  .conf { background: var(--surface); border: 1px solid var(--surface-2); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .conf-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
+  .conf-body { font-size: 13px; color: var(--muted); }
+  .next { margin-top: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+
+  /* rules */
+  .rules { display: flex; flex-direction: column; gap: 12px; }
+  .rule { background: var(--surface); border: 1px solid var(--surface-2); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .rule.off { opacity: 0.55; }
+  .rule-top { display: flex; gap: 12px; align-items: flex-start; }
+  .rule-meta { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .rule-name { font-size: 17px; font-weight: 600; }
+  .rule-when { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .rule-when .mono { font-family: var(--mono); }
+  .rule-when svg { color: var(--amber); }
+  .rule.off .rule-when svg { color: var(--grey-dot); }
+  .switch {
+    width: 52px; height: 30px; flex-shrink: 0;
+    border-radius: 15px; padding: 2px;
+    border: 1px solid var(--line); background: var(--surface-2);
+    display: flex; align-items: center; justify-content: flex-start;
+  }
+  .switch::after { content: ''; width: 24px; height: 24px; border-radius: 50%; background: var(--grey-dot); }
+  .switch[aria-checked="true"] { background: var(--amber); border-color: var(--amber-line); justify-content: flex-end; }
+  .switch[aria-checked="true"]::after { background: var(--ink); }
+  .days { display: flex; gap: 6px; flex-wrap: wrap; }
+  .day { font-size: 11px; font-weight: 500; padding: 4px 8px; border-radius: 7px; border: 1px solid var(--surface-2); color: var(--faint); }
+  .day.on { background: var(--surface-2); border-color: var(--line); color: var(--text); }
+  .add { height: 48px; border-radius: 14px; border: 1px dashed var(--slat-a); background: transparent; color: var(--muted); font-size: 15px; font-weight: 500; }
+  .offline { margin-top: auto; background: #1B1A15; border: 1px solid var(--surface-2); border-radius: 14px; padding: 14px; display: flex; gap: 10px; align-items: flex-start; font-size: 12px; color: var(--muted); }
+  .offline svg { color: var(--teal); flex-shrink: 0; margin-top: 2px; }
+
+  /* states */
+  .states { display: flex; flex-direction: column; gap: 24px; }
+  .states h2 { margin: 0; font-family: var(--display); font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+  .states > header p { margin: 4px 0 0; color: var(--muted); max-width: 70ch; font-size: 15px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 28px; }
+  .tile { display: flex; flex-direction: column; gap: 12px; }
+  .tile-pct { display: flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 15px; }
+  .tile-title { font-size: 13px; font-weight: 600; }
+  .tile-note { font-size: 12px; color: var(--muted); }
+  .legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; border-top: 1px solid var(--surface-2); padding-top: 20px; }
+  .legend-item { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--muted); }
+  .legend-item .dot { margin-top: 6px; }
+  .legend-item strong { color: var(--text); font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .win .slats { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+
+  <header class="intro">
+    <span class="eyebrow">Wegwerf-Mock · HomeControll</span>
+    <h1>Rolladen-App: Aussehen und Zustands-Sprache</h1>
+    <p>Klärt nur, wie die App aussieht und wie ehrlich sie ihre Position zeigt. Alle drei Bildschirme teilen einen Zustand — auf/stop/zu laufen echt über die Laufzeit, ein Tipp auf einen Namen öffnet ihn im Detail.</p>
+    <div class="assumptions">
+      <span class="chip">Annahme: 100 % = ganz offen</span>
+      <span class="chip">Laufzeiten erfunden (12–18 s)</span>
+      <span class="chip">Animation startet beim Senden</span>
+    </div>
+  </header>
+
+  <section class="screens" aria-label="Bildschirme">
+
+    <div class="screen-col">
+      <span class="screen-label">Übersicht</span>
+      <div class="phone">
+        <div>
+          <h2>Zuhause</h2>
+          <div class="sub">4 Rolladen · Anzeige: 100 % = ganz offen</div>
+        </div>
+        <div class="row">
+          <button type="button" class="btn ghost" id="all-up">Alle auf</button>
+          <button type="button" class="btn ghost" id="all-down">Alle zu</button>
+        </div>
+        <div class="cards" id="cards"></div>
+        <div class="footnote">Position ist eine Zeitschätzung, kein Rückmeldewert. Nur die Endlagen sind sicher.</div>
+      </div>
+    </div>
+
+    <div class="screen-col">
+      <span class="screen-label">Detail</span>
+      <div class="phone">
+        <div class="detail-head">
+          <h2 id="d-name">Wohnzimmer</h2>
+          <div class="sub" id="d-travel"></div>
+        </div>
+        <div class="detail-win">
+          <div class="win lg"><div class="slats" id="d-slats"></div></div>
+        </div>
+        <div class="readout">
+          <span class="pct" id="d-pct"></span>
+          <span class="sub" id="d-state"></span>
+        </div>
+        <div class="slider">
+          <label for="d-level" class="sub">Zielposition</label>
+          <input type="range" id="d-level" min="0" max="100" step="1">
+          <div class="slider-scale"><span>0 % geschlossen</span><span>100 % offen</span></div>
+        </div>
+        <div class="row">
+          <button type="button" class="btn big" id="d-up">auf</button>
+          <button type="button" class="btn big" id="d-stop">stop</button>
+          <button type="button" class="btn big" id="d-down">zu</button>
+        </div>
+        <div class="conf">
+          <div class="conf-title"><span class="dot" id="d-dot"></span><span id="d-conf-title"></span></div>
+          <div class="conf-body" id="d-conf-body"></div>
+          <button type="button" class="btn amber" id="d-resync">Resync — einmal ganz auf fahren</button>
+        </div>
+        <div class="next">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+          <span>Nächste Automatik: Sonnenuntergang −30 Min · 19:42 → zu</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen-col">
+      <span class="screen-label">Automatik</span>
+      <div class="phone">
+        <h2>Automatik</h2>
+        <div class="rules" id="rules"></div>
+        <button type="button" class="add">+ Neue Regel</button>
+        <div class="offline">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 3v2M12 19v2M5 12H3M21 12h-2M6 6 4.5 4.5M19.5 19.5 18 18M6 18l-1.5 1.5M19.5 4.5 18 6"></path></svg>
+          <span>Sonnenzeiten werden lokal aus Standort und Datum gerechnet. Kein Internet nötig, kein Ausfall bei Verbindungsproblemen.</span>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <section class="states" aria-labelledby="states-title">
+    <header>
+      <h2 id="states-title">Zustands-Sprache</h2>
+      <p>RTS meldet nichts zurück. Die Anzeige muss zeigen, wie sicher sie ist — sonst handelt man auf einer Schätzung wie auf einer Messung.</p>
+    </header>
+    <div class="tiles" id="tiles"></div>
+    <div class="legend">
+      <div class="legend-item"><span class="dot sure"></span><span><strong>Sicher</strong> — nur direkt nach einer Endlage. Der einzige Zustand, den das System wirklich weiß.</span></div>
+      <div class="legend-item"><span class="dot est"></span><span><strong>Geschätzt</strong> — aus Laufzeit gerechnet. Zahl bleibt, Alter des letzten Syncs steht dabei.</span></div>
+      <div class="legend-item"><span class="dot"></span><span><strong>Unsicher</strong> — lange kein Sync, oder Neustart. Anzeige gedimmt, Resync angeboten.</span></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+(function () {
+  // --- model: one shared state for all screens -------------------------------
+  const shutters = [
+    { id: 'wz', name: 'Wohnzimmer', level: 62, target: 62, moving: 0, up: 18, down: 16, sync: 125 },
+    { id: 'ku', name: 'Küche', level: 100, target: 100, moving: 0, up: 12, down: 11, sync: 0 },
+    { id: 'sz', name: 'Schlafzimmer', level: 0, target: 0, moving: 0, up: 15, down: 14, sync: 0 },
+    { id: 'bu', name: 'Büro', level: 35, target: 35, moving: 0, up: 14, down: 13, sync: 4300 }
+  ];
+  let selected = 'wz';
+
+  const rules = [
+    { id: 'r1', name: 'Werktags morgens', icon: 'clock', when: '06:45', what: 'Alle Rolladen → auf', days: [1, 1, 1, 1, 1, 0, 0], on: true },
+    { id: 'r2', name: 'Abends zu', icon: 'moon', when: 'Sonnenuntergang −30 Min', what: 'Alle Rolladen → zu', days: [1, 1, 1, 1, 1, 1, 1], on: true },
+    { id: 'r3', name: 'Mittagshitze Süd', icon: 'sun', when: '12:00', what: 'Wohnzimmer, Küche → 30 %', days: [0, 0, 0, 0, 0, 1, 1], on: false }
+  ];
+
+  const byId = (id) => shutters.find((s) => s.id === id);
+  const $ = (id) => document.getElementById(id);
+
+  function goTo(s, target) {
+    s.target = target;
+    s.moving = target > s.level ? 1 : target < s.level ? -1 : 0;
+  }
+
+  function stop(s) {
+    s.level = Math.round(s.level);
+    s.target = s.level;
+    s.moving = 0;
+  }
+
+  // travel time is per direction; end stops are the only certain positions
+  function tick() {
+    let changed = false;
+    for (const s of shutters) {
+      if (!s.moving) continue;
+      changed = true;
+      const secs = s.moving > 0 ? s.up : s.down;
+      const next = s.level + (100 / secs) * 0.1 * s.moving;
+      const done = s.moving > 0 ? next >= s.target : next <= s.target;
+      if (done) {
+        s.level = s.target;
+        s.moving = 0;
+        if (s.target === 0 || s.target === 100) s.sync = 0;
+      } else {
+        s.level = next;
+      }
+    }
+    if (changed) update();
+  }
+
+  // --- presentation helpers --------------------------------------------------
+  function ago(min) {
+    if (min < 60) return min + ' Min.';
+    if (min < 2880) return Math.round(min / 60) + ' Std.';
+    return Math.round(min / 1440) + ' Tagen';
+  }
+  function confClass(s) {
+    if (s.sync === 0) return 'sure';
+    if (s.sync > 1440) return '';
+    return 'est';
+  }
+  function stateText(s) {
+    const p = Math.round(s.level);
+    if (s.moving > 0) return 'fährt auf …';
+    if (s.moving < 0) return 'fährt zu …';
+    if (p === 100) return 'offen';
+    if (p === 0) return 'geschlossen';
+    return 'Teilposition';
+  }
+  function syncText(s) {
+    return s.sync === 0 ? 'Endlage · sicher' : 'Schätzung · Sync vor ' + ago(s.sync);
+  }
+  const closedPct = (level) => 100 - level + '%';
+
+  // --- overview: build once, update in place ---------------------------------
+  function buildCards() {
+    const root = $('cards');
+    root.innerHTML = shutters.map((s) => `
+      <div class="card" data-id="${s.id}">
+        <div class="card-top">
+          <div class="win sm"><div class="slats"></div></div>
+          <div class="card-meta">
+            <button type="button" class="name">${s.name}</button>
+            <div class="sub" data-f="state"></div>
+            <div class="sync"><span class="dot" data-f="dot"></span><span data-f="sync"></span></div>
+          </div>
+          <span class="pct" data-f="pct"></span>
+        </div>
+        <div class="row">
+          <button type="button" class="btn" data-a="up">auf</button>
+          <button type="button" class="btn" data-a="stop">stop</button>
+          <button type="button" class="btn" data-a="down">zu</button>
+        </div>
+      </div>`).join('');
+
+    root.addEventListener('click', (e) => {
+      const card = e.target.closest('.card');
+      if (!card) return;
+      const s = byId(card.dataset.id);
+      if (e.target.closest('.name')) { selected = s.id; update(); return; }
+      const a = e.target.closest('[data-a]');
+      if (!a) return;
+      if (a.dataset.a === 'up') goTo(s, 100);
+      if (a.dataset.a === 'down') goTo(s, 0);
+      if (a.dataset.a === 'stop') stop(s);
+      update();
+    });
+  }
+
+  function updateCards() {
+    for (const card of $('cards').children) {
+      const s = byId(card.dataset.id);
+      card.classList.toggle('selected', s.id === selected);
+      card.querySelector('.slats').style.height = closedPct(s.level);
+      card.querySelector('[data-f="pct"]').textContent = Math.round(s.level) + ' %';
+      card.querySelector('[data-f="state"]').textContent = stateText(s);
+      card.querySelector('[data-f="sync"]').textContent = syncText(s);
+      card.querySelector('[data-f="dot"]').className = 'dot ' + confClass(s);
+    }
+  }
+
+  // --- detail ----------------------------------------------------------------
+  let dragging = false;
+  function buildDetail() {
+    const slider = $('d-level');
+    slider.addEventListener('pointerdown', () => { dragging = true; });
+    slider.addEventListener('pointerup', () => { dragging = false; });
+    slider.addEventListener('change', () => { dragging = false; goTo(byId(selected), Number(slider.value)); update(); });
+    $('d-up').addEventListener('click', () => { goTo(byId(selected), 100); update(); });
+    $('d-down').addEventListener('click', () => { goTo(byId(selected), 0); update(); });
+    $('d-stop').addEventListener('click', () => { stop(byId(selected)); update(); });
+    $('d-resync').addEventListener('click', () => { goTo(byId(selected), 100); update(); });
+  }
+
+  function updateDetail() {
+    const s = byId(selected);
+    const fresh = s.sync === 0;
+    $('d-name').textContent = s.name;
+    $('d-travel').textContent = 'Laufzeit ' + s.up + ' s auf · ' + s.down + ' s zu';
+    $('d-slats').style.height = closedPct(s.level);
+    $('d-pct').textContent = Math.round(s.level) + ' %';
+    $('d-state').textContent = s.moving ? stateText(s) : fresh ? 'Endlage' : 'geschätzt';
+    if (!dragging) $('d-level').value = Math.round(s.moving ? s.target : s.level);
+    $('d-dot').className = 'dot ' + confClass(s);
+    $('d-conf-title').textContent = fresh ? 'Endlage erreicht — Position sicher' : 'Position ist geschätzt';
+    $('d-conf-body').textContent = fresh
+      ? 'Der Rolladen steht an einem mechanischen Anschlag. Bis zur nächsten Bewegung stimmt die Anzeige.'
+      : 'Letzter sicherer Stand vor ' + ago(s.sync) + '. Seitdem aus Laufzeit gerechnet — Fernbedienung, Stromausfall oder ein Hindernis können die Anzeige verschoben haben.';
+  }
+
+  // --- rules -----------------------------------------------------------------
+  const icons = {
+    clock: '<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>',
+    moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"></path>',
+    sun: '<circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"></path>'
+  };
+  const dayLabels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+  function renderRules() {
+    $('rules').innerHTML = rules.map((r) => `
+      <div class="rule${r.on ? '' : ' off'}">
+        <div class="rule-top">
+          <div class="rule-meta">
+            <div class="rule-name">${r.name}</div>
+            <div class="rule-when">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[r.icon]}</svg>
+              <span class="mono">${r.when}</span>
+            </div>
+            <div class="sub">${r.what}</div>
+          </div>
+          <button type="button" class="switch" role="switch" aria-checked="${r.on}" aria-label="${r.name} ein- oder ausschalten" data-rule="${r.id}"></button>
+        </div>
+        <div class="days">${dayLabels.map((d, i) => `<span class="day${r.days[i] ? ' on' : ''}">${d}</span>`).join('')}</div>
+      </div>`).join('');
+  }
+
+  function buildRules() {
+    renderRules();
+    $('rules').addEventListener('click', (e) => {
+      const sw = e.target.closest('[data-rule]');
+      if (!sw) return;
+      const r = rules.find((x) => x.id === sw.dataset.rule);
+      r.on = !r.on;
+      renderRules();
+      const again = document.querySelector('[data-rule="' + r.id + '"]');
+      if (again) again.focus();
+    });
+  }
+
+  // --- states (static) -------------------------------------------------------
+  function renderTiles() {
+    const tiles = [
+      { level: 0, pct: '0 %', conf: 'sure', title: 'Geschlossen', note: 'Unterer Anschlag. Mechanisch fix.' },
+      { level: 45, pct: '45 %', conf: 'sure', title: 'Fährt auf', note: 'Animation läuft über die konfigurierte Laufzeit — wartet nicht auf set_state.' },
+      { level: 62, pct: '62 %', conf: 'est', title: 'Teilposition', note: 'Schätzung · Sync vor 2 Std.' },
+      { level: 100, pct: '100 %', conf: 'sure', title: 'Offen', note: 'Oberer Anschlag. Mechanisch fix.' },
+      { level: 35, pct: '~35 %', conf: 'stale', title: 'Veraltet', note: 'Sync vor 3 Tagen. Fernbedienung könnte gefahren sein.' },
+      { level: 50, pct: '? %', conf: 'unknown', title: 'Unbekannt', note: 'Nach Neustart. Erst ein Resync verankert die Anzeige wieder.' }
+    ];
+    const dot = { sure: 'sure', est: 'est', stale: '', unknown: '' };
+    $('tiles').innerHTML = tiles.map((t) => {
+      const cls = ['win', 'tile'];
+      if (t.conf === 'stale' || t.conf === 'unknown') cls.push('dim');
+      if (t.conf === 'unknown') cls.push('unknown');
+      return `
+        <div class="tile">
+          <div class="${cls.join(' ')}"><div class="slats" style="height:${closedPct(t.level)}"></div></div>
+          <div class="tile-pct"><span class="dot ${dot[t.conf]}"></span><span>${t.pct}</span></div>
+          <div>
+            <div class="tile-title">${t.title}</div>
+            <div class="tile-note">${t.note}</div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // --- wiring ----------------------------------------------------------------
+  function update() {
+    updateCards();
+    updateDetail();
+  }
+
+  $('all-up').addEventListener('click', () => { shutters.forEach((s) => goTo(s, 100)); update(); });
+  $('all-down').addEventListener('click', () => { shutters.forEach((s) => goTo(s, 0)); update(); });
+
+  buildCards();
+  buildDetail();
+  buildRules();
+  renderTiles();
+  update();
+  setInterval(tick, 100);
+})();
+</script>
+</body>
+</html>
