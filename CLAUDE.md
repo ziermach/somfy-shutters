@@ -22,9 +22,8 @@ Do not write feature code before a spec exists. The pipeline, in order:
 `/speckit-checklist` generates quality checklists after planning.
 `/speckit-converge` assesses existing code and appends remaining work as tasks.
 
-Each feature gets its own git branch and its own `specs/<nnn>-<slug>/` directory,
-both created by `.specify/scripts/bash/create-new-feature.sh`. Let the skills call
-the scripts — don't hand-create spec directories.
+Each feature gets its own `specs/<nnn>-<slug>/` directory. Let the skills create it —
+don't hand-create spec directories.
 
 ## Repository layout
 
@@ -42,7 +41,7 @@ deliberately, since `specify init` overwrites them on upgrade.
 
 ## Conventions
 
-- Branch per feature, named after the spec directory (e.g. `001-device-registry`).
+- **Single-developer repository: commit straight to `main`, no feature branches.**
 - Specs describe user-visible behavior and requirements; technology decisions
   belong in `plan.md`, not in `spec.md`.
 - Keep the constitution current — the planning and analysis skills check against it.
