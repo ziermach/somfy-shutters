@@ -133,8 +133,14 @@ direction, so every trip starts from an end stop and none is wasted.
 Two presses leave about 9 percentage points of error mid-travel, because the motor does
 not move linearly; perfect presses would leave 8.8. A third press makes it *worse* —
 the curve is symmetric, so a halfway mark lands where the error is already zero. Four
-presses reach 3.7. Not worth it across eight windows, so two it is, and every
-uninterrupted end-stop-to-end-stop trip in daily use re-measures for free afterwards.
+presses reach 3.7. Not worth it across eight windows, so two it is.
+
+Staying accurate afterwards costs one tap: after an end-to-end travel the app asks once
+whether the shutter has arrived, and that answer is a measurement. It cannot do this by
+itself, because **nothing in the system observes when a travel ends** — the motor is
+silent, the bridge reports its own dead reckoning, and receive mode hears commands
+rather than arrivals. Every number here ultimately comes from somebody looking at a
+window.
 
 ## Development
 

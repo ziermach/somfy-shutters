@@ -31,7 +31,18 @@
 
 ## Notes
 
-Two iterations.
+**Amended 2026-09-21, after planning.** User Story 2 asked for passive recalibration
+with no user involvement. Phase 0 established that it cannot be built — nothing observes
+when a travel ends, so the measurement would be the configured travel time played back
+([research.md §1](../research.md)). The story, FR-018 to FR-020, SC-004 and SC-008 now
+describe a one-tap confirmation, which is the cheapest observation that actually exists.
+The checklist was re-run against the amended text and still passes.
+
+This is also a correction to claims made earlier in the project: the README and the
+throwaway mock both said an uninterrupted end-to-end trip re-measures for free. It does
+not. Both have been fixed.
+
+Two iterations before that.
 
 **First pass, two failures.** SC-003 originally stated the mid-travel error as "within
 about a percentage point", carried over from an early and wrong estimate. The mock's

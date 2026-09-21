@@ -54,37 +54,48 @@ with the real shutter. Delivers correct animation on its own.
 
 ---
 
-### User Story 2 - Stay accurate without being asked (Priority: P2)
+### User Story 2 - Stay accurate with one tap (Priority: P2)
 
-Nobody wants to repeat the wizard. Whenever a shutter happens to travel from one end
-stop to the other uninterrupted during normal use, the system quietly records how long
-it took and keeps the stored value current. Months later the times still match, even
-though the motor has aged and the slats are heavier in winter.
+Nobody wants to repeat the wizard. When a shutter has travelled from one end stop to the
+other and somebody happens to have the app open, it asks a single question — *should be
+up by now, is it?* — and one tap keeps the stored value current. Months later the times
+still match, even though the motor has aged and the slats are heavier in winter.
 
 **Why this priority**: This is what keeps the feature true over time; the wizard only
 bootstraps it. It is P2 because it cannot be observed until measurements exist and some
 normal use has happened.
 
+**Amended 2026-09-21.** This story originally asked for *passive* recalibration with no
+user involvement at all. That cannot be built: nothing in the system observes when a
+travel ends, so the recorded duration would be the configured travel time played back —
+see [research.md §1](./research.md). A tap is the cheapest observation that actually
+exists.
+
 **Independent Test**: Seed a deliberately wrong travel time, drive the shutter end to
-end a few times through the normal view, and confirm the stored value converges toward
-the real one without anybody opening the calibration screen.
+end a few times through the normal view answering the prompt each time, and confirm the
+stored value converges toward the real one without the calibration screen being opened.
 
 **Acceptance Scenarios**:
 
-1. **Given** a shutter travelling from one end stop to the other without interruption,
-   **When** it arrives, **Then** the elapsed time is recorded as a measurement for that
-   direction.
-2. **Given** a travel that was stopped, reversed, or started from an intermediate
-   position, **When** it ends, **Then** nothing is recorded.
-3. **Given** a recorded set of measurements, **When** a new one arrives, **Then** the
-   stored value follows the median of the recent ones rather than jumping to the latest.
-4. **Given** a measurement far outside the established range, **When** it arrives,
+1. **Given** a travel from one end stop to the other has just finished and the app is in
+   the foreground, **When** the expected arrival passes, **Then** the user is asked once
+   whether the shutter has arrived.
+2. **Given** the user answers that it has arrived, **When** the answer is recorded,
+   **Then** the moment of the answer is a measurement for that direction, recorded like
+   a guided run's arrival press.
+3. **Given** the user answers "not yet", **When** the shutter does arrive and they say
+   so, **Then** that later moment is the measurement instead.
+4. **Given** the user ignores the question, **When** it disappears, **Then** nothing is
+   recorded and nothing is inferred from the silence.
+5. **Given** a travel that was stopped, reversed, or started from an intermediate
+   position, **When** it ends, **Then** no question is asked and nothing is recorded.
+6. **Given** a new measurement arrives this way, **When** it is applied, **Then** the
+   stored value follows the median of recent ones rather than jumping to the latest.
+7. **Given** a measurement far outside the established range, **When** it arrives,
    **Then** it is rejected and does not affect the stored value.
-5. **Given** a shutter whose real travel time has genuinely changed, **When** enough new
-   measurements accumulate, **Then** the stored value follows the change.
-6. **Given** measurements arriving passively, **When** the user opens the calibration
-   view, **Then** they can see that the value is being maintained and when it last
-   changed.
+8. **Given** confirmations accumulating over weeks, **When** the user opens the
+   calibration view, **Then** they can see that the value is being maintained and when
+   it last changed.
 
 ---
 
@@ -130,8 +141,10 @@ end stops stay exactly right.
   short travel that must be rejected as implausible.
 - The radio command that starts a run is never received. No movement, no presses, and
   the flow has to time out rather than wait forever.
-- A passive measurement is taken while somebody operates the shutter by hand at the same
-  time.
+- A confirmation is tapped while somebody operates the same shutter by hand, so the
+  moment confirmed belongs to a different travel than the one being measured.
+- The app is left open on a forgotten tab and a confirmation is tapped long after the
+  travel finished.
 - A shutter is measured, then the physical installation changes (new motor, serviced
   roller) and every stored value is suddenly wrong.
 - Travel up and travel down differ; a value must never be copied from one direction to
@@ -182,14 +195,19 @@ end stops stay exactly right.
 - **FR-017**: Measured values MUST take effect immediately for the live view, with no
   restart and no further confirmation.
 
-**Passive maintenance**
+**Maintenance during normal use**
 
-- **FR-018**: A travel from one end stop to the other, uninterrupted and initiated by
-  the system, MUST be recorded as a measurement for that direction.
-- **FR-019**: A travel that was stopped, reversed, started from an intermediate
-  position, or not initiated by the system MUST NOT be recorded.
-- **FR-020**: Passive measurements MUST be subject to the same plausibility rejection as
-  guided ones.
+- **FR-018**: After a travel from one end stop to the other, uninterrupted and initiated
+  by the system, the interface MUST offer the user a single confirmation that the
+  shutter has arrived, and MUST record the moment of that confirmation as a measurement.
+- **FR-018a**: The confirmation MUST be offered at most once per shutter per day, only
+  while the interface is in the foreground, and MUST be dismissable without consequence.
+  An unanswered question MUST record nothing.
+- **FR-019**: No measurement may be derived from a travel alone. A travel that was
+  stopped, reversed, started from an intermediate position, or not initiated by the
+  system MUST NOT prompt and MUST NOT be recorded.
+- **FR-020**: Confirmed measurements MUST be subject to the same plausibility rejection
+  as guided ones, and MUST be distinguishable from guided runs in the history.
 - **FR-021**: The stored value MUST follow the median of a bounded number of recent
   measurements, so a genuine change in the shutter is eventually followed while a single
   outlier is not.
@@ -241,8 +259,8 @@ end stops stay exactly right.
 - **SC-003**: Mid-travel, the displayed position is within 10 percentage points of the
   real one after guided calibration alone, and within 4 after verification checks.
 - **SC-004**: A deliberately wrong stored value converges to within 5 % of the true
-  travel time after at most ten uninterrupted end-to-end travels in normal use, with no
-  user involvement.
+  travel time after at most ten confirmed end-to-end travels in normal use, each costing
+  the user one tap and no navigation.
 - **SC-005**: A single implausible measurement, guided or passive, never changes the
   stored value.
 - **SC-006**: Every shutter's calibration state — measured, partly measured, never
@@ -250,7 +268,8 @@ end stops stay exactly right.
 - **SC-007**: An uncalibrated shutter remains fully operable, and a user can tell from
   the interface that its position display is less trustworthy.
 - **SC-008**: A person returning after six months finds travel times still accurate to
-  within 1 second on shutters that get daily use, without having recalibrated.
+  within 1 second on shutters that get daily use, without having opened the calibration
+  screen once in that time.
 
 ## Assumptions
 
@@ -259,6 +278,10 @@ end stops stay exactly right.
   feature supplies those values rather than introducing them.
 - The person calibrating can see the shutter while holding the device. Remote
   calibration is out of scope and would be meaningless.
+- **Nothing observes when a travel ends.** The motor is silent, the radio bridge
+  reports its own dead reckoning, and receive mode hears commands rather than arrivals.
+  Every measurement in this feature therefore comes from a person looking at a window.
+  Power monitoring would change that and is excluded by the constitution.
 - Reaction time is part of the measurement and cannot be eliminated. Taking the median
   of three runs is accepted as the mitigation; the design does not attempt to model or
   subtract it.
