@@ -1,50 +1,112 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# HomeControll Constitution
+
+HomeControll is a self-hosted app that controls SIMU/Somfy RTS roller shutters through
+Pi-Somfy, displays their state as a live animation, and runs user-defined automations.
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Pi-Somfy Owns the Radio (NON-NEGOTIABLE)
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+Pi-Somfy MUST remain the single process that holds RTS rolling-code state and transmits on
+433.42 MHz. No component of HomeControll may drive the CC1101 over SPI, send RTS frames, or
+persist rolling counters. All shutter movement MUST be requested by publishing to the MQTT
+command topic.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+Rationale: rolling codes are the replay-protection mechanism of RTS. A second transmitter with
+its own counter desynchronizes the motors and requires physical re-pairing at every window.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### II. MQTT Is the Only Integration Boundary
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+HomeControll MUST talk to the shutter layer exclusively over MQTT topics — `somfy/<address>/level/cmd`
+outbound, `somfy/<address>/level/set_state` inbound. Pi-Somfy's Flask routes, its HTML, its
+database, and its config files MUST NOT be scraped, called, or written by this project.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+Rationale: MQTT is Pi-Somfy's documented, supported interface; the web UI is not. Holding this
+boundary keeps the transmitter swappable — moving to ESPSomfy-RTS changes an endpoint, not the app.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### III. Honest Position State (NON-NEGOTIABLE)
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+RTS is one-way: the motors report nothing. Only the two mechanical end stops are reliable; every
+intermediate percentage is a time-based estimate and MUST be treated as such. The UI MUST NOT
+present an estimate as confirmed feedback. It MUST expose the estimate's age or confidence when
+drift is plausible, and MUST offer a resync that drives to a known end stop.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+Rationale: a shutter graphic that silently lies is worse than no graphic — users act on it
+(leaving for the day, closing up at night) and cannot tell when it has drifted.
+
+### IV. Local-First Operation
+
+The full control path — UI, backend, broker, Pi-Somfy — MUST work on the home network with no
+internet connection. Sun-based triggers MUST be computed offline from coordinates. No cloud
+service may sit in the path between a user action and a shutter moving.
+
+Rationale: a shutter that will not close because an external API is down is a failed product;
+this is house infrastructure, not an online service.
+
+### V. Single-Pi Simplicity
+
+The system MUST run alongside Pi-Somfy on one Raspberry Pi and MUST NOT require additional
+hardware, a container orchestrator, or a standalone database server. New dependencies and new
+moving parts MUST be justified against the alternative of doing without them.
+
+Rationale: the deployment target is one small board maintained by one person; every added
+component is something that breaks unattended.
+
+## Technology and Hardware Constraints
+
+Stack decisions are fixed at the constitution level; deviations require an amendment:
+
+| Layer | Choice |
+|-------|--------|
+| Radio bridge | Pi-Somfy with CC1101 (E07-M1101D-SMA) over SPI |
+| Message bus | Mosquitto on the Pi |
+| Backend | Python + FastAPI (REST + WebSocket) |
+| Scheduling | APScheduler for time triggers, `astral` for sun triggers (offline) |
+| Storage | SQLite |
+| Frontend | Web app (React or Svelte), installable as a PWA |
+| Animation | SVG or Canvas, time-interpolated in JS |
+
+Hardware rules:
+
+- The CC1101 MUST be powered from 3.3V (Pi pin 1 or 17). 5V destroys the module (max ≈3.6V).
+- The antenna MUST be attached before transmitting.
+- Wiring is fixed as: SCK→pin 40/GPIO21, MOSI→pin 38/GPIO20, MISO→pin 35/GPIO19,
+  CSN→pin 36/GPIO16, GDO0→pin 37/GPIO26, GND→pin 39.
+
+Interface rules:
+
+- RTS addresses live in `operateShutters.conf` and are referenced by the app, never invented.
+- The backend subscribes to `set_state` for all shutters and pushes changes to clients over
+  WebSocket; clients MUST NOT connect to MQTT directly.
+- Command animation starts on send and runs for the configured travel time; it MUST NOT wait
+  for a `set_state` message, which arrives sparsely.
+
+## Development Workflow
+
+- Work is spec-driven: `/speckit-specify` → `/speckit-plan` → `/speckit-tasks` →
+  `/speckit-implement`. Feature code MUST NOT be written before its spec exists.
+- Specs describe behavior; technology choices belong in `plan.md` and must not contradict the
+  stack table above.
+- Physical unknowns MUST be resolved by live measurement before any feature depends on them.
+  Open at ratification: the direction of `level/cmd` (whether 0 is open or closed), per-window
+  travel times up and down, radio range to the furthest window, whether CC1101 receive mode is
+  enabled, and per-window rolling-code pairing.
+- A measured physical value (travel time, address, direction) MUST be recorded in configuration
+  or documentation, never hardcoded in application logic.
+- Changes touching the command path MUST be verified against real hardware, not only tests.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution supersedes other conventions in the repository. Where a plan, task, or review
+conflicts with it, the constitution wins.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+- Amendments are made by editing this file in a dedicated commit that states what changed and
+  why, and bumping the version below.
+- Versioning is semantic: MAJOR for removing or redefining a principle in a
+  backward-incompatible way, MINOR for a new principle or materially expanded guidance, PATCH
+  for clarifications and wording.
+- `/speckit-plan` and `/speckit-analyze` check artifacts against this file; violations are either
+  fixed or recorded with an explicit justification in the plan's complexity tracking.
+- Runtime development guidance lives in `CLAUDE.md` and must stay consistent with this document.
+
+**Version**: 1.0.0 | **Ratified**: 2026-09-21 | **Last Amended**: 2026-09-21
