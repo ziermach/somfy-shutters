@@ -142,3 +142,13 @@ def test_a_locked_address_gets_4429_on_the_feed(tmp_path) -> None:
         ):
             ws.receive_json()
         assert caught.value.code == 4429
+
+
+async def test_an_unpaired_device_opening_the_app_is_not_locked_out(locked) -> None:  # noqa: F811
+    """Presenting nothing is not a guess: twenty anonymous loads, then pairing works."""
+    _, code = locked.app.state.auth.mint(ALL_ABILITIES, None, 15)
+    async with from_address(locked.app, "10.0.0.8") as phone:
+        for _ in range(20):
+            assert (await phone.get("/api/auth/me")).status_code == 401
+        paired = await phone.post("/api/auth/pair", json={"code": code, "name": "Handy"})
+        assert paired.status_code == 201

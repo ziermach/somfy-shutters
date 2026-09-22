@@ -151,6 +151,9 @@ SC-007).
 
 - **Failed authentication per source address**: 10 failures within 5 minutes → refused
   (`429`) for 15 minutes. Configurable under `[auth]`.
+  A request presenting **no** credential is not counted — it is not a guess, and an
+  unpaired phone opening the app makes two per load; counting them would lock it out of
+  pairing (found walking quickstart A in the browser). It is still recorded.
 - **Commands per credential**: token bucket, 10 requests burst, refilled at 1 per second.
   Applies to routes needing `command`. A group command is one request. The excess is
   refused and recorded, never forwarded (FR-023). The ability is checked first: a request
@@ -178,8 +181,10 @@ the insert is wrapped so that a failure logs an error and never raises (FR-020).
 Refusals (permission, throttle) are recorded by the gate, which knows the route and,
 where the path names one, the shutter.
 
-Inferred movement (FR-016): an event-bus listener records every `movement` event whose
-origin is `external` — a physical remote or another controller — with actor `bridge`.
+Inferred movement (FR-016): an event-bus listener records, with actor `bridge`, every
+`correction` — a report that moved the app's estimate, which is how a physical remote
+shows up in features 001–004 — and every `movement` event whose origin is `external`,
+which spec 006's start/stop reports will produce.
 Reports that merely confirm a movement the app started are not recorded; they would
 drown the record in echoes.
 

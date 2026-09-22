@@ -97,7 +97,9 @@ class Gate:
         self, conn: HTTPConnection, reason: str, *, count: bool = True, record: bool = True
     ) -> Refused:
         source = self.source(conn)
-        if count and self.throttle is not None:
+        # Presenting nothing is not a guess: an unpaired phone opening the app asks
+        # twice per load, and counting that would lock it out of pairing itself.
+        if count and reason != "none" and self.throttle is not None:
             self.throttle.fail(source)
         if count and record:
             self.audit.record(

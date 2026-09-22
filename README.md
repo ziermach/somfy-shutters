@@ -5,7 +5,7 @@
 
 # 🚧 WORK IN PROGRESS 🚧
 
-> **It runs, but it has never moved a real shutter.** Features 001–004 are
+> **It runs, but it has never moved a real shutter.** Features 001–004 and 008 are
 > implemented and tested against a simulated house; no motor in this project has been
 > paired yet, so the MQTT path to Pi-Somfy is written and unit-tested but unproven on
 > hardware.
@@ -39,9 +39,12 @@ shutter stands, and automations that run on the house's own network.
 | ✅ | Pause all automations, or skip one rule's next firing; deleting a rule asks first |
 | ✅ | Groups — rooms, floors, a side of the house — that overlap, move with one tap, and serve as rule targets |
 | ✅ | Installable as an app; opens without the backend and says positions are not current; updates reach every phone |
+| ✅ | Nothing moves without a credential: every phone pairs once with a six-character code, and each can be revoked alone |
+| ✅ | A credential may do less than everything — watch, drive, configure, calibrate, manage devices |
+| ✅ | A record of who moved what, including rules and movements the app only observed; guessing and flooding are throttled |
 | ⬜ | Anything confirmed on a real motor |
 
-541 backend and 65 frontend tests, against the real API surface, the tracker's rules,
+663 backend and 72 frontend tests, against the real API surface, the tracker's rules,
 the calibration arithmetic, and the simulated house end to end.
 
 ## The problem this project takes seriously
@@ -218,6 +221,23 @@ groups; membership is read when the rule fires, so a shutter added to "Obergesch
 is closed by the evening rule without editing it, and a shutter reached through two
 groups is commanded once.
 
+### Who may move the shutters
+
+With a real bridge, every request needs a credential — the live feed included, and it
+closes before sending anything to a stranger. A phone gets one by typing a six-character
+code that an already paired device shows; the first code comes from
+`somfy-shutters auth recover` on the Pi, which is also the way back in if every device is
+lost. The web app keeps its credential in an `HttpOnly` cookie and never asks again;
+scripts send a bearer token. Credentials are 256 random bits stored only as a hash.
+
+Each credential says what it may do — watch, drive, configure rules and groups,
+calibrate, manage devices — and cannot hand on more than it has. Revoking one closes
+its open feed at once. Every command is recorded with who asked, written after the frame
+went out so it never slows one; rules and movements seen from a physical remote are in
+the record too. Ten failed logins lock an address out for fifteen minutes, on a clock
+that does not jump when the Pi's does. The simulator runs open, so development needs
+nothing new; `auth.mode = "open"` with a real bridge refuses to start.
+
 ## The mock
 
 [`mocks/rolladen-ui.html`](mocks/rolladen-ui.html) opens in any browser, no build step.
@@ -246,8 +266,8 @@ recalibration with no user involvement, and
 [CLAUDE.md](CLAUDE.md) for conventions and build commands.
 
 ```bash
-cd backend && .venv/bin/python -m pytest       # 541 tests
-cd frontend && npx vitest run                  # 65 tests
+cd backend && .venv/bin/python -m pytest       # 663 tests
+cd frontend && npx vitest run                  # 72 tests
 cd frontend && npx svelte-check --tsconfig ./tsconfig.json
 ```
 

@@ -199,9 +199,10 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ## Phase 10: Polish & Cross-Cutting Concerns
 
-- [ ] T046 [P] Scenario tests A–H of [quickstart.md](./quickstart.md) in `backend/tests/integration/test_auth_quickstart.py` with the simulator and `mode = "required"`; plus **SC-004**: median time of 200 `POST /api/shutters/{id}/command` requests with a bearer credential is within **5 ms** of the same in open mode
+- [X] T046 [P] Scenario tests A–H of [quickstart.md](./quickstart.md) in `backend/tests/integration/test_auth_quickstart.py` with the simulator and `mode = "required"`; plus **SC-004**: median time of 200 `POST /api/shutters/{id}/command` requests with a bearer credential is within **5 ms** of the same in open mode
 - [ ] T047 Walk quickstart A4, B, D1 and F1 by hand in two browsers (one a private window), including pairing from a phone on the home network
-- [ ] T048 [P] Update `README.md` ("What works today", test counts), `CLAUDE.md` (auth mode, `somfy-shutters auth recover`) and `deploy/README.md` (first run after upgrade)
+  - *Partly done 2026-09-22, desktop Chrome against the simulator with `mode = "required"`:* first run via `auth recover`, pairing by code (typed lower-case, formatted as `XXX-XXX`), a command by cookie, reload stays paired (A4), minting a code with countdown and redeeming it from a second client (D1), the devices list picking the new device up, the record screen. Found and fixed: an unpaired device's own page loads counted as failed logins and would have locked it out of pairing. **Still open:** a real phone, a private window, and F1 (lock out, recover) by hand.
+- [X] T048 [P] Update `README.md` ("What works today", test counts), `CLAUDE.md` (auth mode, `somfy-shutters auth recover`) and `deploy/README.md` (first run after upgrade)
 - [ ] T049 On the Pi, once a motor is paired: quickstart I1 — a paired phone moves it and the move is recorded; without a credential nothing reaches Pi-Somfy (broker log). Joins the pending hardware checks of features 001–004
 
 ---
