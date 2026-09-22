@@ -1,4 +1,6 @@
-# Install: sudo cp deploy/somfy-shutters.service /etc/systemd/system/
+# Install: see deploy/README.md — the app lives in /opt/somfy-shutters and runs as the
+#          system user "somfy", whatever your own login is called.
+#          sudo cp deploy/somfy-shutters.service /etc/systemd/system/
 #          sudo systemctl enable --now somfy-shutters
 [Unit]
 Description=somfy-shutters — roller shutter control
@@ -10,18 +12,24 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/somfy-shutters
-Environment=SHUTTERS_CONFIG=/home/pi/somfy-shutters/config/shutters.toml
-Environment=SHUTTERS_DB=/home/pi/somfy-shutters/config/state.db
-ExecStart=/home/pi/somfy-shutters/backend/.venv/bin/uvicorn somfy_shutters.main:app --host 0.0.0.0 --port 8000
+# A dedicated account: the service never runs as a person's login, and needs no
+# gpio/spi groups because it never touches the radio (constitution, principle I).
+User=somfy
+Group=somfy
+WorkingDirectory=/opt/somfy-shutters
+Environment=SHUTTERS_CONFIG=/opt/somfy-shutters/config/shutters.toml
+Environment=SHUTTERS_DB=/opt/somfy-shutters/config/state.db
+ExecStart=/opt/somfy-shutters/backend/.venv/bin/uvicorn somfy_shutters.main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=5
-# The config holds RTS addresses; keep the unit from writing anywhere else.
+# The code is owned by "somfy" so updates need no root, but at runtime everything
+# outside config/ is read-only to the service: it cannot rewrite its own code.
 ProtectSystem=strict
-ReadWritePaths=/home/pi/somfy-shutters/config
+ProtectHome=true
+ReadWritePaths=/opt/somfy-shutters/config
 PrivateTmp=true
 NoNewPrivileges=true
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target

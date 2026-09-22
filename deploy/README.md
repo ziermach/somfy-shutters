@@ -26,10 +26,20 @@ broker. Nothing in this path leaves the house.
 
 | | |
 |---|---|
-| Pi | Pi 3 or newer, Raspberry Pi OS Bookworm (64-bit). A Zero 2 W works but see [building the frontend](#4-build-the-frontend). |
+| Pi | Pi 3 or newer, Raspberry Pi OS **Lite** (64-bit), Bookworm or Trixie. A Zero 2 W works but see [building the frontend](#4-build-the-frontend). |
 | Radio | CC1101 (E07-M1101D-SMA) wired to the SPI header — see [wiring the radio](#wiring-the-radio). **3.3V only.** |
 | Pi-Somfy | Installed, paired with every window, publishing to MQTT. This project does not install or configure it. |
 | Network | Ethernet, WiFi or a phone hotspot — see [network](#1-network). |
+
+Use Lite, not the desktop image. On a 1 GB Pi 3 booting over USB 2.0 the desktop image
+can start so slowly that `systemd-logind`, `accounts-daemon` and cloud-init's final
+stage time out on first boot — and when cloud-init fails, the user, SSH and WiFi you
+set in Raspberry Pi Imager are never applied. Lite starts a fraction of the services
+and a shutter controller has no screen anyway.
+
+Nothing below assumes a particular login name. The app gets its own system user,
+`somfy`, and lives in `/opt/somfy-shutters`; you run the commands as whatever user
+you created in Imager, with `sudo`.
 
 Pi-Somfy owns the radio and the rolling-code counters. Never run a second transmitter
 against the same motors — resynchronising means walking to every window and
@@ -186,25 +196,37 @@ If nothing appears here, nothing will appear in the app either — fix it at thi
 
 ## 3. Install the app
 
-```bash
-sudo apt install -y git python3.11 python3.11-venv
-git clone https://github.com/ziermach/somfy-shutters.git /home/pi/somfy-shutters
-cd /home/pi/somfy-shutters/backend
+A system user with no login shell, and its own home for pip and npm caches so they do
+not land inside the checkout:
 
-python3.11 -m venv .venv          # or: uv venv --python 3.11 .venv
-.venv/bin/pip install -e .        # production needs no ".[dev]"
+```bash
+sudo apt install -y git python3 python3-venv
+sudo useradd --system --user-group --create-home --home-dir /var/lib/somfy \
+             --shell /usr/sbin/nologin somfy
+sudo install -d -o somfy -g somfy /opt/somfy-shutters
+sudo -u somfy git clone https://github.com/ziermach/somfy-shutters.git /opt/somfy-shutters
+
+cd /opt/somfy-shutters/backend
+sudo -u somfy python3 -m venv .venv
+sudo -u somfy .venv/bin/pip install -e .      # production needs no ".[dev]"
 ```
 
-The unit file expects exactly `/home/pi/somfy-shutters`. A different path means
-editing the five places it appears in `somfy-shutters.service`.
+`python3` is 3.11 on Bookworm and 3.13 on Trixie; the app needs 3.11 or newer, so
+either works.
+
+Everything from here on that touches `/opt/somfy-shutters` runs as `somfy` —
+`sudo -u somfy …`. The code belongs to that user so updating needs no root; the unit's
+`ProtectSystem=strict` still keeps the running service from writing anywhere but
+`config/`. The unit expects exactly `/opt/somfy-shutters`.
 
 ## 4. Build the frontend
 
 The backend serves `frontend/dist` itself, so production is one process on one port.
 
 ```bash
-cd /home/pi/somfy-shutters/frontend
-npm ci && npm run build
+sudo apt install -y nodejs npm                    # Vite needs Node 18 or newer
+cd /opt/somfy-shutters/frontend
+sudo -u somfy npm ci && sudo -u somfy npm run build
 ```
 
 On a Pi Zero 2 W or a 1 GB Pi 3 the Vite build can run out of memory. Build on a
@@ -214,8 +236,12 @@ architecture-specific:
 ```bash
 # on your machine
 cd frontend && npm ci && npm run build
-rsync -a dist/ pi@somfy.local:/home/pi/somfy-shutters/frontend/dist/
+rsync -a --rsync-path="sudo -u somfy rsync" \
+      dist/ <you>@<hostname>.local:/opt/somfy-shutters/frontend/dist/
 ```
+
+`--rsync-path` makes the far end write as `somfy`, so the files end up owned by the
+app user rather than by your login.
 
 Without a build the API still works, and the log says
 `no built frontend at … — run npm run build`.
@@ -223,9 +249,13 @@ Without a build the API still works, and the log says
 ## 5. Configure
 
 ```bash
-cd /home/pi/somfy-shutters
-cp config/shutters.example.toml config/shutters.toml
+cd /opt/somfy-shutters
+sudo -u somfy install -m 600 config/shutters.example.toml config/shutters.toml
+sudo -u somfy nano config/shutters.toml
 ```
+
+Mode `600`: the file will hold the broker password, and nobody but the app needs to
+read it.
 
 `config/shutters.toml` is gitignored — it holds the real RTS addresses and this
 repository is public. Copy each `address` by hand out of Pi-Somfy's
@@ -279,7 +309,7 @@ to.
 Only after the simulator works end to end:
 
 ```bash
-sudo -u pi sed -i 's/^kind = "sim"/kind = "mqtt"/' /home/pi/somfy-shutters/config/shutters.toml
+sudo -u somfy sed -i 's/^kind = "sim"/kind = "mqtt"/' /opt/somfy-shutters/config/shutters.toml
 sudo systemctl restart somfy-shutters
 journalctl -u somfy-shutters -f
 ```
@@ -318,20 +348,24 @@ sudo systemctl restart somfy-shutters
 
 ```bash
 sudo systemctl stop somfy-shutters
-tar czf ~/somfy-backup-$(date +%F).tar.gz -C /home/pi/somfy-shutters config
+sudo tar czf ~/somfy-backup-$(date +%F).tar.gz -C /opt/somfy-shutters config
+sudo chown "$USER" ~/somfy-backup-*.tar.gz
 sudo systemctl start somfy-shutters
 ```
 
 Stop the service first: SQLite is in WAL mode and a live copy can catch a torn write.
+`sudo` because the service creates its files readable only by `somfy`.
 
 **Updating:**
 
 ```bash
-cd /home/pi/somfy-shutters
+cd /opt/somfy-shutters
 sudo systemctl stop somfy-shutters
-git pull
-backend/.venv/bin/pip install -e backend
-cd frontend && npm ci && npm run build
+sudo -u somfy git pull
+sudo -u somfy backend/.venv/bin/pip install -e backend
+cd frontend && sudo -u somfy npm ci && sudo -u somfy npm run build
+sudo cp /opt/somfy-shutters/deploy/somfy-shutters.service /etc/systemd/system/ \
+  && sudo systemctl daemon-reload                  # in case the unit changed
 sudo systemctl start somfy-shutters
 ```
 
@@ -341,6 +375,7 @@ sudo systemctl start somfy-shutters
 |---|---|
 | Service will not start | `journalctl -u somfy-shutters -n 50`. A config error prints the offending field and exits. |
 | `no configuration at …` | `config/shutters.toml` is missing, or the unit's `SHUTTERS_CONFIG` points elsewhere. |
+| `Permission denied` on anything in `config/` | A file there was created by you or root instead of `somfy`. `sudo chown -R somfy:somfy /opt/somfy-shutters/config`. |
 | `bridge.connected` stays `false` | Broker down, wrong credentials, or the app is not on the Pi and Mosquitto is bound to loopback. Reconnect backs off 1 → 30s and logs each attempt. |
 | App works, shutters do not move | Prove the broker path outside the app: `mosquitto_pub -h 127.0.0.1 -u somfy -P '…' -t 'somfy/0x279621/level/cmd' -m 50`. If that moves nothing, it is Pi-Somfy or the radio, not this app. |
 | Positions never become "sicher" | Expected until a shutter reaches an end stop. Only the end stops are certain. |
