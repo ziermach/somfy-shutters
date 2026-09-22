@@ -36,8 +36,8 @@ broker nor a clock.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SHUTTERS_CONFIG` | `../config/shutters.toml` | which shutters exist |
-| `SHUTTERS_DB` | `../config/state.db` | persisted positions |
+| `SHUTTERS_CONFIG` | `../config/shutters.toml` | settings and hand-listed shutters |
+| `SHUTTERS_DB` | `../config/state.db` | positions, shutters confirmed in the app, groups, rules, history |
 | `SHUTTERS_CALIBRATION` | `calibration.toml` beside the database | measured travel times, written by the app |
 | `LOG_LEVEL` | `INFO` | |
 
@@ -49,4 +49,10 @@ Registered only when `bridge.kind == "sim"`, used by the quickstart scenarios:
 curl -XPOST localhost:8000/api/sim/bridge/offline
 curl -XPOST localhost:8000/api/sim/report -H 'content-type: application/json' \
      -d '{"shutter_id":"wohnzimmer","percent":40}'
+
+# feature 005: a person working in Pi-Somfy's own interface
+curl -XPOST localhost:8000/api/sim/bridge/shutters -H 'content-type: application/json' \
+     -d '{"name":"Bad"}'                                  # added, not announced yet
+curl -XPOST localhost:8000/api/sim/bridge/restart          # announced live now
+curl -XDELETE localhost:8000/api/sim/bridge/shutters/0x279625   # deleted; forgotten after the next restart
 ```

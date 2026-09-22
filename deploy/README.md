@@ -26,9 +26,9 @@ broker. Nothing in this path leaves the house.
 
 | | |
 |---|---|
-| Pi | Pi 3 or newer, Raspberry Pi OS **Lite** (64-bit), Bookworm or Trixie. A Zero 2 W works but see [building the frontend](#4-build-the-frontend). |
+| Pi | Pi 3 or newer, Raspberry Pi OS **Lite** (64-bit), Bookworm or Trixie. A Zero 2 W works but see [building the frontend](#5-build-the-frontend). |
 | Radio | CC1101 (E07-M1101D-SMA) wired to the SPI header — see [wiring the radio](#wiring-the-radio). **3.3V only.** |
-| Pi-Somfy | Installed, paired with every window, publishing to MQTT. This project does not install or configure it. |
+| Pi-Somfy | Release 3.3 or newer, installed in [step 3](#3-pi-somfy-and-pigpiod), then paired with every window in its own web UI. |
 | Network | Ethernet, WiFi or a phone hotspot — see [network](#1-network). |
 
 Use Lite, not the desktop image. On a 1 GB Pi 3 booting over USB 2.0 the desktop image
@@ -153,7 +153,7 @@ Know what it costs:
   automations exist, they will fire at wrong times. Make sure the hotspot is up before
   the Pi boots, or check `timedatectl` shows `System clock synchronized: yes`.
 - **Data use is small.** Commands and state updates are bytes. The expensive part is
-  installing — `apt`, `pip`, `npm` — so build the frontend elsewhere (step 4) and do
+  installing — `apt`, `pip`, `npm` — so build the frontend elsewhere (step 5) and do
   big installs on a better connection if you can.
 
 Apply the power-saving fix above to the hotspot connection too; it is a WiFi
@@ -184,16 +184,25 @@ allow_anonymous false
 password_file /etc/mosquitto/passwd
 CONF
 
-sudo mosquitto_passwd -c /etc/mosquitto/passwd somfy      # prompts for a password
+# a random password, kept root-only: Pi-Somfy's config and the app's config read it from here
+sudo sh -c 'umask 077; openssl rand -base64 24 | tr -d "=+/" > /etc/mosquitto/somfy.password'
+sudo sh -c 'umask 077; touch /etc/mosquitto/passwd'
+sudo mosquitto_passwd -b /etc/mosquitto/passwd somfy "$(sudo cat /etc/mosquitto/somfy.password)"
+sudo chown root:mosquitto /etc/mosquitto/passwd && sudo chmod 640 /etc/mosquitto/passwd
 sudo systemctl enable --now mosquitto
+sudo systemctl restart mosquitto
 ```
 
-Point Pi-Somfy at the same credentials, then check that it actually publishes. With a
-shutter moved by its physical remote, or by Pi-Somfy's own UI:
+Check it, and that anonymous clients are refused:
 
 ```bash
-mosquitto_sub -h 127.0.0.1 -u somfy -P '<password>' -t 'somfy/#' -v
+P="$(sudo cat /etc/mosquitto/somfy.password)"
+mosquitto_sub -h 127.0.0.1 -u somfy -P "$P" -t 'somfy/#' -v     # Ctrl+C to stop
+mosquitto_pub -h 127.0.0.1 -t test -m x                         # expect: not authorised
 ```
+
+Once Pi-Somfy runs (next step), `somfy/bridge/availability online` shows up in that
+subscription.
 
 If nothing appears here, nothing will appear in the app either — fix it at this layer.
 
@@ -201,7 +210,104 @@ If nothing appears here, nothing will appear in the app either — fix it at thi
 > (`listener 1883 0.0.0.0`). Keep 1883 off the internet regardless: no TLS is
 > configured here, and the credentials go over the wire in the clear.
 
-## 3. Install the app
+## 3. Pi-Somfy and pigpiod
+
+Pi-Somfy is the transmitter and the only holder of rolling codes (constitution, principle
+I). This project talks to it over MQTT only; installing it is still part of the house.
+
+### pigpiod
+
+On a Pi 3 or 4, Pi-Somfy generates the RTS waveform with pigpio, whose daemon times it by
+DMA. **Trixie packages no pigpio daemon** — only the Python client — so build it. If
+`apt-cache policy pigpiod` shows a candidate on your release, `sudo apt install pigpiod`
+replaces the build below.
+
+```bash
+sudo apt install -y build-essential unzip python3-pigpio python3-lgpio python3-spidev python3-pip
+cd /tmp && curl -fsSL -o pigpio.zip https://github.com/joan2937/pigpio/archive/refs/heads/master.zip
+unzip -q pigpio.zip && cd pigpio-master && make -j4          # about a minute on a Pi 3
+
+sudo install -m 0755 pigpiod pigs pig2vcd /usr/local/bin/
+sudo install -m 0755 libpigpio.so.1 libpigpiod_if.so.1 libpigpiod_if2.so.1 /usr/local/lib/
+sudo install -m 0644 pigpio.h pigpiod_if.h pigpiod_if2.h /usr/local/include/
+cd /usr/local/lib && for l in libpigpio libpigpiod_if libpigpiod_if2; do sudo ln -fs $l.so.1 $l.so; done
+sudo ldconfig
+```
+
+Not `make install`: that also runs `python3 setup.py install` into the system Python, on
+top of Debian's `python3-pigpio`.
+
+```bash
+sudo tee /etc/systemd/system/pigpiod.service >/dev/null <<'UNIT'
+[Unit]
+Description=pigpio daemon (built from joan2937/pigpio)
+
+[Service]
+Type=forking
+# -l: localhost only
+ExecStart=/usr/local/bin/pigpiod -l
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+sudo systemctl daemon-reload && sudo systemctl enable --now pigpiod
+pigs hwver          # prints the board revision, e.g. 10494082 (= a02082, a Pi 3B)
+```
+
+### Pi-Somfy
+
+SPI0 has to be on first — see [wiring the radio](#wiring-the-radio). Then, following
+upstream's own layout in `/opt/Pi-Somfy`:
+
+```bash
+sudo git clone https://github.com/Nickduino/Pi-Somfy.git /opt/Pi-Somfy
+cd /opt/Pi-Somfy
+sudo python3 -m venv --system-site-packages .venv       # uses the apt pigpio/lgpio/spidev
+sudo .venv/bin/pip install -r requirements.txt
+curl -fsSL https://raw.githubusercontent.com/ziermach/somfy-shutters/main/deploy/pi-somfy-pi5-detection.patch \
+  | sudo git apply
+```
+
+**The patch matters.** Unpatched, Pi-Somfy (3.3) decides every Pi on a current kernel is
+a Pi 5 — they all have a `/dev/gpiochip4` link now — and sends RTS frames through its
+experimental, software-timed lgpio path instead of pigpiod. RTS is one-way, so a badly
+timed frame fails silently. See the header of
+[`pi-somfy-pi5-detection.patch`](pi-somfy-pi5-detection.patch). Re-apply it after every
+`git pull` in `/opt/Pi-Somfy` until upstream fixes the detection.
+
+Its configuration — root-only, it will hold the broker password and every rolling code:
+
+```bash
+sudo install -m 600 defaultConfig.conf operateShutters.conf
+sudo nano operateShutters.conf
+```
+
+| Section | Key | Value |
+|---|---|---|
+| `[General]` | `RFBackend` | `cc1101` *(add it)* |
+| | `CC1101Frequency` | `433.42` *(add it)* |
+| | `SendRepeat` | `5` — upstream's recommendation for the CC1101 |
+| | `TXGPIO` | `4` — the pin GDO0 is wired to |
+| `[MQTT]` | `MQTT_Server` | `127.0.0.1` |
+| | `MQTT_User` | `somfy` |
+| | `MQTT_Password` | from `sudo cat /etc/mosquitto/somfy.password` |
+| | `EnableDiscovery` | `true` — the app finds shutters through these announcements |
+
+Run it as a service with the web UI and MQTT on, and no Alexa (which would need the
+internet). `installService.sh` is not executable in the checkout, hence `bash`:
+
+```bash
+sudo PI_SOMFY_ARGS="-a -m" bash installService.sh
+grep -E "pigpio|lgpio|MQTT" /var/log/operateShutters.log | tail -4
+```
+
+Expect `pigpio's pi instantiated` and `somfy/bridge/availability = online`. One
+`Disconnected from MQTT (rc=7)` right after start is normal; it reconnects within a
+second. Pi-Somfy runs as root, as upstream designs it (port 80, `/dev/spidev0.0`), and
+its web UI is at `http://<hostname>.local` — that is where shutters are added and paired.
+
+## 4. Install the app
 
 A system user with no login shell, and its own home for pip and npm caches so they do
 not land inside the checkout:
@@ -226,7 +332,7 @@ Everything from here on that touches `/opt/somfy-shutters` runs as `somfy` —
 `ProtectSystem=strict` still keeps the running service from writing anywhere but
 `config/`. The unit expects exactly `/opt/somfy-shutters`.
 
-## 4. Build the frontend
+## 5. Build the frontend
 
 The backend serves `frontend/dist` itself, so production is one process on one port.
 
@@ -253,7 +359,7 @@ app user rather than by your login.
 Without a build the API still works, and the log says
 `no built frontend at … — run npm run build`.
 
-## 5. Configure
+## 6. Configure
 
 ```bash
 cd /opt/somfy-shutters
@@ -277,7 +383,7 @@ matched to Pi-Somfy's announcement by address and never appears twice.
 
 ```toml
 [bridge]
-kind = "sim"          # start here; switch to "mqtt" in step 7
+kind = "sim"          # start here; switch to "mqtt" in step 8
 host = "127.0.0.1"
 port = 1883
 user = "somfy"
@@ -289,7 +395,7 @@ times out of the file for any window you have not measured: the shutter still
 animates on `default_travel_seconds`, marked uncalibrated, and the calibration flow
 fills it in.
 
-## 6. Run it as a service
+## 7. Run it as a service
 
 ```bash
 sudo cp deploy/somfy-shutters.service /etc/systemd/system/
@@ -339,7 +445,7 @@ the credentials. `somfy-shutters auth list` shows which exist, without secrets.
 **Upgrading an installation from before feature 008:** nothing is migrated or lost, but
 after the restart the app shows the pairing screen. Run `auth recover` once, as above.
 
-## 7. Switch to the real radio
+## 8. Switch to the real radio
 
 Only after the simulator works end to end:
 
