@@ -5,9 +5,10 @@
 
 # 🚧 WORK IN PROGRESS 🚧
 
-> **It runs, but it has never moved a real shutter.** Features 001–004 are
-> implemented and tested against a simulated house; no motor in this project has been
-> paired yet, so the MQTT path to Pi-Somfy is written and unit-tested but unproven on
+> **It runs, but it has never moved a real shutter.** Features 001–004 and 006 are
+> implemented and tested against a simulated house; the MQTT path speaks Pi-Somfy's
+> current interface and has been walked against a real Mosquitto broker impersonating
+> Pi-Somfy — but no motor in this project has been paired yet, so it is unproven on
 > hardware.
 >
 > Clone it to read it or to try the simulator. Do not put it in front of your windows
@@ -42,7 +43,7 @@ shutter stands, and automations that run on the house's own network.
 | ✅ | Speaks Pi-Somfy's current MQTT interface (v3.1+): explicit stop, the bridge's own availability, retained reports treated as old news |
 | ⬜ | Anything confirmed on a real motor |
 
-541 backend and 65 frontend tests, against the real API surface, the tracker's rules,
+571 backend and 65 frontend tests, against the real API surface, the tracker's rules,
 the calibration arithmetic, and the simulated house end to end.
 
 ## The problem this project takes seriously
@@ -128,9 +129,11 @@ unit and backups, is [`deploy/README.md`](deploy/README.md); the validation scen
 reconciliation cases, are in the quickstarts of
 [001](specs/001-mqtt-live-position/quickstart.md),
 [002](specs/002-travel-calibration/quickstart.md),
-[003](specs/003-shutter-automations/quickstart.md) and
-[004](specs/004-shutter-groups/quickstart.md) — most of them automated, and all of
-001's walked once more in the browser against the simulator.
+[003](specs/003-shutter-automations/quickstart.md),
+[004](specs/004-shutter-groups/quickstart.md) and
+[006](specs/006-pisomfy-mqtt-topics/quickstart.md) — most of them automated, all of
+001's walked once more in the browser against the simulator, and 006's against a local
+Mosquitto with `mosquitto_pub`/`mosquitto_sub` playing Pi-Somfy.
 
 The simulator is not a stub. It gives each window a soft-start dead time, a non-linear
 travel curve and different speeds up and down — none of it visible through the port the
@@ -240,16 +243,17 @@ Work is spec-driven with [GitHub Spec Kit](https://github.com/github/spec-kit):
 /speckit-constitution → /speckit-specify → /speckit-plan → /speckit-tasks → /speckit-implement
 ```
 
-Feature code is not written before its spec exists. All three features are specified,
+Feature code is not written before its spec exists. Features 001–004 and 006 are specified,
 planned, broken into tasks and implemented under
-[`specs/`](specs/) — each plan's `research.md` is where the non-obvious decisions are
+[`specs/`](specs/); feature 005 — adding and removing shutters, learned from Pi-Somfy's own
+announcements instead of hand-copied addresses — is specified and next. Each plan's `research.md` is where the non-obvious decisions are
 argued, including the one that killed a user story: feature 002 originally asked for
 recalibration with no user involvement, and
 [that is not possible here](specs/002-travel-calibration/research.md). See
 [CLAUDE.md](CLAUDE.md) for conventions and build commands.
 
 ```bash
-cd backend && .venv/bin/python -m pytest       # 541 tests
+cd backend && .venv/bin/python -m pytest       # 571 tests
 cd frontend && npx vitest run                  # 65 tests
 cd frontend && npx svelte-check --tsconfig ./tsconfig.json
 ```
