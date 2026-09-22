@@ -170,12 +170,12 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/{unit,contract,in
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T051 [P] Update `CLAUDE.md`: shutters come from the bridge's announcements (hand configuration still possible), the discovery topic is inbound only, and open hardware question 5's addresses no longer need copying
-- [ ] T052 [P] Update `README.md`: adding and removing shutters, the bridge-restart step, what "vergessen" and "beiseitegelegt" mean, and `config/shutters.toml` now optional for shutters
-- [ ] T053 [P] Update `deploy/README.md`: `EnableDiscovery = true` in Pi-Somfy (its default) is required for the app to find shutters
-- [ ] T054 Run [quickstart.md](./quickstart.md) A1–A6 against the simulator in the browser
-- [ ] T055 Run quickstart B against a local Mosquitto impersonating Pi-Somfy with `mosquitto_pub` (announce, `web_url`, restart without one shutter → forgotten)
-- [ ] T056 Full backend suite, ruff check and format, frontend vitest and svelte-check; every feature 001–004 and 006 scenario green
+- [X] T051 [P] Update `CLAUDE.md`: shutters come from the bridge's announcements (hand configuration still possible), the discovery topic is inbound only, and open hardware question 5's addresses no longer need copying
+- [X] T052 [P] Update `README.md`: adding and removing shutters, the bridge-restart step, what "vergessen" and "beiseitegelegt" mean, and `config/shutters.toml` now optional for shutters
+- [X] T053 [P] Update `deploy/README.md`: `EnableDiscovery = true` in Pi-Somfy (its default) is required for the app to find shutters
+- [X] T054 Run [quickstart.md](./quickstart.md) A1–A6 against the simulator in the browser — done 2026-09-22: A1 hint and naming; A2 nothing before the restart, guide jumped to "Neuer Rolladen gefunden: Dusche" on restart without reload, offered measurement; A3 hints after the clock was shifted 11 min; A4 consequences named, group and rule cleaned (`no_targets`), set aside; A5 forgotten, all three buttons disabled, 409; A6 warning before the power-cycle steps; no console errors
+- [X] T055 Run quickstart B against a local Mosquitto impersonating Pi-Somfy with `mosquitto_pub` (announce, `web_url`, restart without one shutter → forgotten) — done 2026-09-22 against Mosquitto (Homebrew): retained announcements before the app started showed Bad as new with `web_url`, a foreign cover and a configured address were not new; `OPEN`/`STOP` on `somfy/0x279630/command`, nothing ever under `homeassistant/`; the app's own connect (retained only) forgot nothing; `offline` → `online` with only the other shutter re-announced live marked Bad forgotten after 30 s (409 `forgotten`); a live re-announcement cleared it
+- [X] T056 Full backend suite, ruff check and format, frontend vitest and svelte-check; every feature 001–004 and 006 scenario green
 - [ ] T057 On the Pi with current Pi-Somfy: quickstart C — add, program, restart → found; delete, restart → forgotten (joins the pending hardware tasks)
 
 ---

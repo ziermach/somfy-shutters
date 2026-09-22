@@ -4,13 +4,24 @@ Scenarios mapped to [spec.md](./spec.md); API in [contracts/rest.md](./contracts
 
 ## A — Simulator
 
-`config/shutters.toml` with `bridge.kind = "sim"` and **no** `[[shutter]]` entries except one
-hand-configured (to check FR-004). The simulator announces its own shutters.
+`config/shutters.toml` with `bridge.kind = "sim"`. The simulated bridge knows every
+configured shutter and every shutter in the app's table; a person working in Pi-Somfy's
+interface is played with the sim-only endpoints below.
 
-**A1 Take over (US1).** Start the app. The simulator's announced shutters show as "Neuer
-Rolladen gefunden" (they are new, not yet in the household — FR-002); confirm each with a
-name. They appear on the overview, "Laufzeit nicht gemessen". The hand-configured one is
-there once, unchanged.
+**A1 Take over (US1).** Give the simulated bridge three shutters the app does not know
+yet, as if they had been set up in Pi-Somfy before the app was installed:
+
+```bash
+for n in Bad Gästezimmer Arbeitszimmer; do
+  curl -XPOST localhost:8000/api/sim/bridge/shutters -H 'content-type: application/json' -d "{\"name\":\"$n\"}"
+done
+curl -XPOST localhost:8000/api/sim/bridge/restart
+```
+
+The overview says "3 neue Rolladen gefunden" (new, not yet in the household — FR-002);
+under "Rolladen" confirm each with a name. They appear on the overview, "Laufzeit nicht
+gemessen". The hand-configured ones are there once, unchanged (automated:
+`tests/integration/test_roster_takeover.py`).
 
 **A2 Add, guided (US2).** "Rolladen hinzufügen" → read the steps → in another terminal play
 the person working in the bridge:
@@ -35,7 +46,7 @@ Rolladen mehr", and the simulator received nothing. It shows under "beiseitegele
 **A5 The bridge forgets (US4).**
 
 ```bash
-curl -XDELETE localhost:8000/api/sim/bridge/shutters/0x2796xx
+curl -XDELETE localhost:8000/api/sim/bridge/shutters/<address of "Bad">
 curl -XPOST localhost:8000/api/sim/bridge/restart
 ```
 
