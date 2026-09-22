@@ -149,9 +149,9 @@ Web app per [plan.md](./plan.md): `backend/src/somfy_shutters/`, `backend/tests/
 - [X] T055 Verify offline operation per quickstart: `grep -rEn "https?://(?!localhost)" frontend/dist/` returns nothing (Constitution IV)
 - [X] T056 [P] Write `backend/README.md` with the run commands, and fill the "Build/test/run commands" gap in root `CLAUDE.md`
 - [X] T057 [P] Add a systemd unit in `deploy/somfy-shutters.service` so it starts with the Pi
-- [ ] T058 Run the full [quickstart.md](./quickstart.md) against the simulator, every scenario, and fix what it surfaces
+- [X] T058 Run the full [quickstart.md](./quickstart.md) against the simulator, every scenario, and fix what it surfaces — done 2026-09-22 in the browser. Found and fixed: animations kept running while disconnected (now frozen on close); `loss_rate` was not settable as the quickstart claimed (now `POST /api/sim/loss`); the PWA service worker served stale code forever. Noted: with the 30 s backoff cap a client may take up to ~39 s to reconnect after the server returns; SC-006's 5 s holds from the moment the socket reconnects.
 - [ ] T059 Measure SC-001 (visible movement under 200 ms) and SC-003 (other clients within 1 s) on a phone over home Wi-Fi, not on the development machine; record the numbers in `specs/001-mqtt-live-position/quickstart.md`
-- [ ] T060 Walk every screen under `frontend/src/routes/` for SC-004: no bare number presented as fact anywhere
+- [X] T060 Walk every screen under `frontend/src/routes/` for SC-004: no bare number presented as fact anywhere — done 2026-09-22: every position carries its confidence on every screen; percentages elsewhere are targets or travel times. Found: the overview's `calibrated` ignored measured travel times (fixed).
 
 ---
 

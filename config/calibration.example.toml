@@ -9,12 +9,12 @@
 travel_seconds = 18.12   # command to arrival, as measured
 dead_seconds = 0.74      # command to first movement
 runs = 3                 # how many valid runs the median rests on
-curve_k = 0.2            # verification adjustment, ±0.8, 0 means linear
+curve_a = 1.15           # travel shape from verification, 0.7-1.4, 1 is linear
 updated_at = "2026-09-22T09:14:02+00:00"
 
 [wohnzimmer.down]
 travel_seconds = 16.04
 dead_seconds = 0.69
 runs = 3
-curve_k = 0.2
+curve_a = 1.15
 updated_at = "2026-09-22T09:16:41+00:00"

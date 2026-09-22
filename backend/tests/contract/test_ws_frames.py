@@ -33,7 +33,9 @@ def test_first_frame_is_always_a_full_snapshot(test_client) -> None:
         frame = socket.receive_json()
     assert frame["type"] == "snapshot"
     assert frame["seq"] == 1
-    assert set(frame["data"]) == {"shutters", "bridge"}
+    assert set(frame["data"]) == {"shutters", "bridge", "automations", "groups"}
+    assert frame["data"]["automations"]["paused"] is False
+    assert frame["data"]["groups"] == []
     assert len(frame["data"]["shutters"]) == 3
 
 
@@ -61,6 +63,7 @@ def test_movement_frame_shape(test_client) -> None:
         "started_at",
         "expected_arrival",
         "origin",
+        "curve_a",
     }
     assert frame["movement"]["origin"] == "local"
 
@@ -120,3 +123,25 @@ def test_every_client_sees_the_movement(test_client) -> None:
         b = second.receive_json()
 
     assert a["movement"] == b["movement"]
+
+
+def test_a_measurement_announces_itself_to_every_client(test_client) -> None:
+    """Open clients have to stop offering buttons the server would refuse."""
+    test_client.post("/api/sim/report", json={"shutter_id": "kueche", "percent": 0})
+    with test_client.websocket_connect("/api/ws") as socket:
+        socket.receive_json()  # snapshot
+
+        test_client.post("/api/calibration/kueche/run")
+        frames = [socket.receive_json() for _ in range(2)]
+        started = next(f for f in frames if f["type"] == "measuring")
+        assert started["shutter_id"] == "kueche"
+        assert started["active"] is True
+
+        test_client.delete("/api/calibration/kueche/run")
+        ended = None
+        for _ in range(4):
+            frame = socket.receive_json()
+            if frame["type"] == "measuring":
+                ended = frame
+                break
+        assert ended is not None and ended["active"] is False

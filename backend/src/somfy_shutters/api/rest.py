@@ -14,8 +14,9 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from .. import commands
 from ..bridge.base import BridgeUnreachable
-from ..models import Action
+from ..commands import MeasurementInProgress
 from ..tracker import Tracker, UnknownShutter
 from .serialize import movement_json, shutter_json, snapshot_json
 
@@ -40,33 +41,16 @@ def _tracker(request: Request) -> Tracker:
 
 
 async def _apply(request: Request, shutter_id: str, body: CommandBody) -> dict[str, Any]:
-    """Issue one command. Raises BridgeUnreachable if it could not be handed over."""
-    tracker: Tracker = request.app.state.tracker
-    bridge = request.app.state.bridge
-    action = Action(body.action)
-
-    if action is Action.STOP:
-        # Expressed as a level command at the current position: we only speak
-        # level/cmd. See contracts/mqtt.md — this is an approximation, and
-        # hardware bring-up has to confirm the motor halts crisply.
-        current = tracker.position(shutter_id)
-        target = current.percent if current.percent is not None else 0
-        await bridge.send_level(tracker.settings.shutters[shutter_id].address, target)
-        await tracker.stop(shutter_id)
-        return {"accepted": True, "movement": None}
-
-    target = tracker.plan(shutter_id, action, body.target_percent)
-    assert target is not None
-    await bridge.send_level(tracker.settings.shutters[shutter_id].address, target)
-    movement = await tracker.start_movement(shutter_id, target)
-    log.info("command %s on %s -> %s%%", body.action, shutter_id, target)
-    return {"accepted": True, "movement": movement_json(movement)}
+    """Issue one command through the shared path (commands.apply)."""
+    return await commands.apply(request.app.state, shutter_id, body.action, body.target_percent)
 
 
 @router.get("/shutters")
 async def list_shutters(request: Request) -> dict[str, Any]:
     bridge = request.app.state.bridge
-    return snapshot_json(_tracker(request), bridge.kind, bridge.connected)
+    return snapshot_json(
+        _tracker(request), bridge.kind, bridge.connected, getattr(request.app.state, "runs", None)
+    )
 
 
 @router.get("/health")
@@ -82,19 +66,31 @@ async def health(request: Request) -> dict[str, Any]:
     }
 
 
+TARGET_REQUIRED = {
+    "error": "target_required",
+    "message": "Für 'position' fehlt target_percent.",
+    "detail": None,
+}
+
+
+def many_status(results: list[dict[str, Any]]) -> int:
+    """200 when every shutter took the command, 503 when none did, 207 in between."""
+    accepted = sum(1 for r in results if r["accepted"])
+    return 200 if accepted == len(results) else 503 if accepted == 0 else 207
+
+
 @router.post("/shutters/command")
 async def command_all(request: Request, body: CommandBody) -> JSONResponse:
-    tracker = _tracker(request)
-    results: list[dict[str, Any]] = []
-    for shutter_id in tracker.settings.shutters:
-        try:
-            await _apply(request, shutter_id, body)
-            results.append({"id": shutter_id, "accepted": True})
-        except BridgeUnreachable:
-            results.append({"id": shutter_id, "accepted": False, "error": "bridge_unreachable"})
-    accepted = sum(1 for r in results if r["accepted"])
-    status = 200 if accepted == len(results) else 503 if accepted == 0 else 207
-    return JSONResponse({"results": results}, status_code=status)
+    if body.action == "position" and body.target_percent is None:
+        raise HTTPException(422, detail=TARGET_REQUIRED)
+    # The others still move when one cannot; that one is reported with its reason.
+    results = await commands.apply_many(
+        request.app.state,
+        list(_tracker(request).settings.shutters),
+        body.action,
+        body.target_percent,
+    )
+    return JSONResponse({"results": results}, status_code=many_status(results))
 
 
 @router.post("/shutters/{shutter_id}/command")
@@ -109,9 +105,11 @@ async def command_one(request: Request, shutter_id: str, body: CommandBody) -> J
                 "detail": None,
             },
         )
-    # A command now would ruin the measurement in progress, and the user should
-    # be told so rather than have it silently swallowed (FR-028).
-    if getattr(request.app.state, "runs", None) and request.app.state.runs.is_measuring(shutter_id):
+    if body.action == "position" and body.target_percent is None:
+        raise HTTPException(422, detail=TARGET_REQUIRED)
+    try:
+        return JSONResponse(await _apply(request, shutter_id, body))
+    except MeasurementInProgress:
         return JSONResponse(
             {
                 "accepted": False,
@@ -121,17 +119,6 @@ async def command_one(request: Request, shutter_id: str, body: CommandBody) -> J
             },
             status_code=409,
         )
-    if body.action == "position" and body.target_percent is None:
-        raise HTTPException(
-            422,
-            detail={
-                "error": "target_required",
-                "message": "Für 'position' fehlt target_percent.",
-                "detail": None,
-            },
-        )
-    try:
-        return JSONResponse(await _apply(request, shutter_id, body))
     except BridgeUnreachable:
         return JSONResponse({"accepted": False, **BRIDGE_UNREACHABLE}, status_code=503)
     except UnknownShutter:
@@ -161,8 +148,9 @@ async def resync(request: Request, shutter_id: str) -> JSONResponse:
     target = tracker.nearest_end_stop(shutter_id)
     bridge = request.app.state.bridge
     try:
-        await bridge.send_level(tracker.settings.shutters[shutter_id].address, target)
-        movement = await tracker.start_movement(shutter_id, target)
+        level = tracker.level_for(shutter_id, target)
+        await bridge.send_level(tracker.settings.shutters[shutter_id].address, level)
+        movement = await tracker.start_movement(shutter_id, target, level)
     except BridgeUnreachable:
         return JSONResponse({"accepted": False, **BRIDGE_UNREACHABLE}, status_code=503)
     return JSONResponse(
@@ -182,7 +170,7 @@ async def get_shutter(request: Request, shutter_id: str) -> dict[str, Any]:
                 "detail": None,
             },
         )
-    return shutter_json(shutter_id, tracker)
+    return shutter_json(shutter_id, tracker, getattr(request.app.state, "runs", None))
 
 
 # --- simulator-only, registered only when bridge.kind == "sim" ----------------
@@ -193,6 +181,9 @@ sim_router = APIRouter(prefix="/api/sim")
 class ReportBody(BaseModel):
     shutter_id: str
     percent: int = Field(ge=0, le=100)
+    """The bridge's level, which is what a real report carries. Named percent
+    because that is what it is called on the wire; the two coincide only when
+    the travel curve is neutral."""
 
 
 @sim_router.post("/bridge/{state}")
@@ -203,6 +194,21 @@ async def sim_bridge(request: Request, state: Literal["offline", "online"]) -> d
         {"type": "bridge", "connected": bridge.connected, "kind": bridge.kind}
     )
     return {"connected": bridge.connected}
+
+
+class LossBody(BaseModel):
+    rate: float = Field(ge=0, le=1)
+
+
+@sim_router.post("/loss")
+async def sim_loss(request: Request, body: LossBody) -> dict[str, Any]:
+    """Drop this share of commands in the air, silently (quickstart S3.3).
+
+    One-way radio cannot tell a lost command from a delivered one; this is how to
+    watch the app not pretend otherwise.
+    """
+    request.app.state.bridge.loss_rate = body.rate
+    return {"loss_rate": body.rate}
 
 
 @sim_router.get("/truth")
@@ -224,7 +230,7 @@ async def sim_truth(request: Request) -> dict[str, Any]:
             "dead_seconds": round(sim.dead_time, 2),
             "travel_up_seconds": round(sim.travel_up, 2),
             "travel_down_seconds": round(sim.travel_down, 2),
-            "curve_k": sim.curve_k,
+            "curve_a": sim.curve_a,
             "percent_now": round(sim.percent, 1),
             "command_to_arrival_up": round(sim.dead_time + sim.travel_up, 2),
             "command_to_arrival_down": round(sim.dead_time + sim.travel_down, 2),
@@ -242,5 +248,25 @@ async def sim_report(request: Request, body: ReportBody) -> dict[str, Any]:
     address = tracker.settings.shutters[body.shutter_id].address
     # the same entry point the bridge's reports use, so a report injected here
     # disturbs a measurement exactly as a real one would
+    tracker.forget_bridge_run(body.shutter_id)
     await request.app.state.on_report(address, body.percent)
-    return {"applied": True, "position": shutter_json(body.shutter_id, tracker)["position"]}
+    return {
+        "applied": True,
+        "as_percent": tracker.percent_from_level(body.shutter_id, body.percent),
+        "position": shutter_json(body.shutter_id, tracker)["position"],
+    }
+
+
+@sim_router.post("/clock")
+async def sim_clock(request: Request) -> dict[str, Any]:
+    """Force the clock guard's verdict (feature 003, FR-013), or hand it back with null.
+
+    Pulling the network cable on a development machine does not make its clock
+    unreliable; this does, so the held path can be walked on purpose.
+    """
+    body = await request.json()
+    reliable = body.get("reliable") if isinstance(body, dict) else None
+    engine = request.app.state.automation
+    engine.guard.override = None if reliable is None else bool(reliable)
+    await engine.check_clock()
+    return engine.state_json()

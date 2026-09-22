@@ -12,7 +12,6 @@ known (constitution III).
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from statistics import median
@@ -29,8 +28,10 @@ RETAIN_RUNS = 10
 """How many recent valid runs feed the median. Bounded so a genuine change in
 the shutter is followed, while a single outlier is not (FR-021)."""
 
-CURVE_STEP = 0.1
-CURVE_BOUND = 0.8
+CURVE_STEP = 0.05
+CURVE_NEUTRAL = 1.0
+CURVE_MIN = 0.7
+CURVE_MAX = 1.4
 CONFIRM_COOLDOWN_HOURS = 24
 
 CONTRARY_DELTA = 3
@@ -49,38 +50,71 @@ class RejectionReason:
 # --- the curve ---------------------------------------------------------------
 
 
-def travel_curve(progress: float, k: float) -> float:
+def travel_curve(progress: float, a: float) -> float:
     """Map linear progress to displayed progress.
 
-    ``k = 0`` is the linear behaviour of feature 001. For every ``k`` within
-    ±1 this passes through exactly 0 and 1 and stays monotonic, so end points
-    cannot drift and the display never runs backwards — by construction, not by
-    a clamp somebody could forget (FR-025).
+    ``a = 1`` is the linear behaviour of feature 001. For every ``a > 0`` this
+    passes through exactly 0 and 1 and stays monotonic, so end points cannot
+    drift and the display never runs backwards — by construction, not by a clamp
+    somebody could forget (FR-025).
+
+    The first version of this used ``p - k·sin(2πp)/2π``, which has the same two
+    properties and one fatal extra one: it is antisymmetric about the midpoint,
+    so it passes through exactly (0.5, 0.5) for every k. The check drives to the
+    midpoint and asks how it looks, which would have been the one place where
+    there was never anything to see.
     """
-    return progress - (k * math.sin(2 * math.pi * progress)) / (2 * math.pi)
+    return progress**a
 
 
-def clamp_curve(k: float) -> float:
-    return max(-CURVE_BOUND, min(CURVE_BOUND, k))
+def to_level(percent: float, a: float) -> float:
+    """What to ask the bridge for, so the shutter physically lands on `percent`.
+
+    The bridge works in time, linearly: level 50 means half a travel time. The
+    window does not respond linearly, so the two coordinates differ and the
+    curve is the transform between them. Applying it only to the animation, as
+    the first version did, left "drive to 50 %" landing wherever the motor's
+    speed profile put it — the display moved and the shutter did not.
+    """
+    return 100 * (max(0.0, min(100.0, percent)) / 100) ** (1 / a)
+
+
+def to_percent(level: float, a: float) -> float:
+    """Where the shutter physically is, given what the bridge was asked for."""
+    return 100 * (max(0.0, min(100.0, level)) / 100) ** a
+
+
+def clamp_curve(a: float) -> float:
+    return max(CURVE_MIN, min(CURVE_MAX, a))
 
 
 def curve_from_answers(answers: list[CheckAnswer]) -> float:
     """Accumulate check answers into one shape parameter.
 
-    "Too high" means the shutter is lower than shown, so the displayed middle
-    has to come down: k decreases.
+    The answers describe **the shutter**, not the display, because that is what
+    the person is looking at. "Zu hoch" means it hangs higher — more open — than
+    the halfway mark the display claims, so the display has to show *more* at
+    the same point in the travel: `a` shrinks, since ``p**a > p`` below 1.
+
+    This was the other way round at first, which converged just as neatly while
+    meaning the opposite of what the buttons say.
     """
-    k = 0.0
+    a = CURVE_NEUTRAL
     for answer in answers:
         if answer.answer == "too_high":
-            k -= CURVE_STEP
+            a -= CURVE_STEP
         elif answer.answer == "too_low":
-            k += CURVE_STEP
-    return clamp_curve(k)
+            a += CURVE_STEP
+    return clamp_curve(a)
 
 
-def at_curve_limit(k: float) -> bool:
-    return abs(k) >= CURVE_BOUND - 1e-9
+def at_curve_limit(a: float) -> bool:
+    return a <= CURVE_MIN + 1e-9 or a >= CURVE_MAX - 1e-9
+
+
+def midpoint_shift(a: float) -> float:
+    """How far the middle of the travel moves, in percentage points."""
+    return (0.5**a - 0.5) * 100
 
 
 # --- judging a run -----------------------------------------------------------
@@ -257,6 +291,18 @@ class RunRegistry:
 
     def is_measuring(self, shutter_id: str) -> bool:
         return shutter_id in self._active
+
+    def sweep(self, now_monotonic: float) -> list[ActiveRun]:
+        """Give up on runs nobody finished, and release their shutters.
+
+        Without this a run where the second press never comes stays open for
+        good, and the shutter it holds refuses every command — the app would
+        have made a window unusable by offering to measure it.
+        """
+        stale = [run for run in self._active.values() if run.is_abandoned(now_monotonic)]
+        for run in stale:
+            del self._active[run.shutter_id]
+        return stale
 
 
 # --- the one-tap confirmation ------------------------------------------------

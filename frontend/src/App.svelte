@@ -3,16 +3,24 @@
   import { ticker } from './lib/animate';
   import { shutters } from './lib/shutters.svelte';
   import ArrivalPrompt from './components/ArrivalPrompt.svelte';
+  import Automations from './routes/Automations.svelte';
+  import RuleForm from './routes/RuleForm.svelte';
   import Calibration from './routes/Calibration.svelte';
   import CalibrationRun from './routes/CalibrationRun.svelte';
   import Detail from './routes/Detail.svelte';
+  import GroupForm from './routes/GroupForm.svelte';
+  import Groups from './routes/Groups.svelte';
   import Overview from './routes/Overview.svelte';
 
   type View =
     | { name: 'overview' }
     | { name: 'detail'; id: string }
     | { name: 'calibration' }
-    | { name: 'calibrationRun'; id: string };
+    | { name: 'calibrationRun'; id: string }
+    | { name: 'automations' }
+    | { name: 'ruleForm'; id?: string }
+    | { name: 'groups' }
+    | { name: 'groupForm'; id?: string };
 
   let view = $state<View>({ name: 'overview' });
 
@@ -20,7 +28,7 @@
     shutters.connect();
     // One animation loop for the whole app. Svelte re-reads livePercent() on
     // each frame; nothing is fetched while a shutter travels.
-    const stop = ticker(() => shutters.settleArrived());
+    const stop = ticker(() => shutters.tick());
     return () => {
       stop();
       shutters.disconnect();
@@ -60,10 +68,28 @@
     />
   {:else if view.name === 'calibrationRun'}
     <CalibrationRun id={view.id} onback={() => (view = { name: 'calibration' })} />
+  {:else if view.name === 'automations'}
+    <Automations
+      onedit={(id) => (view = { name: 'ruleForm', id })}
+      onback={() => (view = { name: 'overview' })}
+    />
+  {:else if view.name === 'ruleForm'}
+    <RuleForm id={view.id} onback={() => (view = { name: 'automations' })} />
+  {:else if view.name === 'groups'}
+    <Groups
+      onedit={(id) => (view = { name: 'groupForm', id })}
+      onback={() => (view = { name: 'overview' })}
+    />
+  {:else if view.name === 'groupForm'}
+    {#key view.id}
+      <GroupForm id={view.id} onback={() => (view = { name: 'groups' })} />
+    {/key}
   {:else}
     <Overview
       onopen={(id) => (view = { name: 'detail', id })}
       oncalibration={() => (view = { name: 'calibration' })}
+      onautomations={() => (view = { name: 'automations' })}
+      ongroups={() => (view = { name: 'groups' })}
     />
   {/if}
 </main>

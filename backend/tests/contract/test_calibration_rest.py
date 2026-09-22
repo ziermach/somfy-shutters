@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-DIRECTION_KEYS = {"travel_seconds", "dead_seconds", "runs", "curve_k", "source", "updated_at"}
+DIRECTION_KEYS = {"travel_seconds", "dead_seconds", "runs", "curve_a", "source", "updated_at"}
 
 
 async def park(client, shutter_id: str, percent: int) -> None:
@@ -85,3 +85,43 @@ async def test_an_unknown_position_cannot_start_a_run(client) -> None:
     assert response.status_code == 409
     assert response.json()["error"] == "not_at_end_stop"
     assert response.json()["suggested_target"] == 100
+
+
+async def test_all_shutters_command_leaves_a_measurement_alone(client) -> None:
+    """FR-028, by the route that got past the guard.
+
+    The check sat on the single-shutter endpoint only, so "Alle zu" drove
+    straight through a running measurement — found by somebody pressing it while
+    a calibration was going.
+    """
+    await park(client, "kueche", 0)
+    assert (await client.post("/api/calibration/kueche/run")).status_code == 200
+
+    response = await client.post("/api/shutters/command", json={"action": "close"})
+    results = {r["id"]: r for r in response.json()["results"]}
+
+    assert results["kueche"]["accepted"] is False
+    assert results["kueche"]["error"] == "measurement_in_progress"
+    assert results["wohnzimmer"]["accepted"] is True, "the others still move"
+    assert response.status_code == 207
+
+    detail = (await client.get("/api/calibration/kueche")).json()
+    assert detail["active_run"] is not None, "the run survived the command"
+    await client.delete("/api/calibration/kueche/run")
+
+
+async def test_the_shutter_payload_says_a_measurement_is_running(client) -> None:
+    """The interface cannot grey out a button it has not been told about."""
+    await park(client, "kueche", 0)
+    before = (await client.get("/api/shutters/kueche")).json()
+    assert before["measuring"] is False
+
+    await client.post("/api/calibration/kueche/run")
+    during = (await client.get("/api/shutters/kueche")).json()
+    assert during["measuring"] is True
+
+    others = (await client.get("/api/shutters")).json()["shutters"]
+    assert [s["id"] for s in others if s["measuring"]] == ["kueche"]
+
+    await client.delete("/api/calibration/kueche/run")
+    assert (await client.get("/api/shutters/kueche")).json()["measuring"] is False

@@ -7,6 +7,15 @@ stale_after_hours = 12
 # Used for a shutter whose travel time has not been measured yet (FR-015).
 # It still animates; the interface marks it as not calibrated.
 default_travel_seconds = 20
+# The wall clock automations follow, as a zoneinfo name. Stated here rather than
+# taken from the operating system, so a reinstall cannot shift every rule.
+timezone = "Europe/Berlin"
+
+# Where the house is, for sunrise and sunset rules. Optional: it can be set in the
+# app instead, and once it has been, the app's value wins over this one.
+# [location]
+# latitude = 52.52
+# longitude = 13.40
 
 [bridge]
 # "sim" runs a simulated house and needs no broker — this is how the app is

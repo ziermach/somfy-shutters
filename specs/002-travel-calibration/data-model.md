@@ -32,18 +32,18 @@ file.
 travel_seconds = 18.12
 dead_seconds = 0.74
 runs = 3
-curve_k = 0.2
+curve_a = 1.15
 updated_at = "2026-09-21T19:14:02Z"
 
 [wohnzimmer.down]
 travel_seconds = 16.04
 dead_seconds = 0.69
 runs = 3
-curve_k = 0.2
+curve_a = 1.15
 updated_at = "2026-09-21T19:16:41Z"
 ```
 
-`curve_k` is the verification adjustment, bounded to ±0.8. Absent or 0 means the
+`curve_a` is the verification adjustment, bounded to 0.7–1.4. Absent or 1 means the
 linear behaviour of feature 001.
 
 ## Entity: MeasurementRun
@@ -80,7 +80,7 @@ Derived, never hand-maintained. One per shutter and direction.
 | `travel_seconds` | median of `total_seconds` over valid runs (FR-013) |
 | `dead_seconds` | median of `dead_seconds` over the same runs |
 | `runs` | how many valid runs support it |
-| `curve_k` | accumulated verification answers, ±0.8 |
+| `curve_a` | accumulated verification answers, 0.7 to 1.4 |
 | `updated_at` | when the derived value last changed (FR-022) |
 | `source` | `manual` \| `measured` \| `default` — which layer won |
 
@@ -105,19 +105,23 @@ arrival was never observed.
 | `answer` | `too_high` \| `about_right` \| `too_low` |
 | `recorded_at` | |
 
-Each answer moves `curve_k` by 0.1, bounded. Stored so FR-026 can undo them: dropping
-the answers returns `curve_k` to 0 and leaves the measurements untouched.
+Each answer moves `curve_a` by 0.05, bounded. Stored so FR-026 can undo them: dropping
+the answers returns `curve_a` to 1 and leaves the measurements untouched.
 
 ## The curve
 
 ```
-position(p) = p − curve_k · sin(2πp) / 2π
+position(p) = p ** curve_a
 ```
 
-`p` is elapsed over travel time. Verified: for every `k` in ±0.8 the curve passes
-through exactly 0 and 1 and stays monotonic, so end points cannot drift (FR-025) and
-the display never runs backwards. One answer shifts mid-travel by 1.6 points; the bound
-caps the whole control at 12.7.
+`p` is elapsed over travel time. Verified: across the whole band the curve passes
+through exactly 0 and 1 and stays monotonic, so end points cannot drift (FR-025) and the
+display never runs backwards. One answer shifts mid-travel by 1.7 points; the bounds cap
+the control at about 12 either way.
+
+The earlier `p − k·sin(2πp)/2π` was replaced because it is antisymmetric about the
+midpoint — it passed through exactly (0.5, 0.5) for every k, which is precisely where
+the check looks. See [research.md §3](./research.md).
 
 **A curve adjustment changes the shape of an estimate, not its confidence.** Position
 stays `estimated`, `certain_at` untouched — the rule feature 001 applies to bridge

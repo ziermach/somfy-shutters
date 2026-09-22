@@ -18,13 +18,30 @@ Source: Pi-Somfy's MQTT integration, configured in its `operateShutters.conf` un
 We publish only to addresses listed in our own `shutters.toml`; a `set_state` for an
 unknown address is logged once and dropped (FR-004).
 
+## Two translations, not one
+
+The payload is a **level**: how far through its travel time the bridge should run
+the motor. What the app and its users speak is a **percentage of the window**. The two
+coincide only when a shutter's travel curve is neutral, because a motor does not move at
+a constant rate.
+
+| | converts | lives in |
+|---|---|---|
+| direction | which end 0 means | this adapter, below |
+| travel curve | level ↔ percentage | `tracker.level_for` and `tracker.percent_from_level` |
+
+The curve is per shutter and comes from calibration (feature 002), which is why it
+cannot live down here: the adapter has no idea which shutter has been verified. Keeping
+them apart also keeps this file's promise intact — flipping the direction setting is
+still sufficient on its own to answer the open hardware question.
+
 ## The direction translation
 
 Our whole system uses **100 = fully open, 0 = fully closed** (data-model.md). Which
 direction Pi-Somfy expects is [open hardware question 1](../../../CLAUDE.md) and has not
 been measured.
 
-**This is the one place the translation happens.** A single setting:
+**This is the one place the *direction* is decided.** A single setting:
 
 ```toml
 [bridge]
@@ -38,7 +55,8 @@ subscribe: percent    = invert_level ? 100 - wire_value : wire_value
 
 Nothing else in the codebase may be aware of the question. Flipping the setting must be
 sufficient to correct the whole system — that is the acceptance criterion for this
-translation, and a unit test asserts both directions round-trip.
+translation, and a unit test asserts both directions round-trip. The travel curve above
+is a separate conversion with its own place; the two never appear in the same file.
 
 ## What `set_state` actually is
 

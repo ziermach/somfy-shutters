@@ -5,7 +5,7 @@
 // here computes a duration — a clock on a phone is not something a measurement
 // should depend on.
 
-export type DirectionValue = { travel_seconds: number; dead_seconds: number; runs: number; curve_k: number; source: 'manual' | 'measured' | 'default'; updated_at: string | null };
+export type DirectionValue = { travel_seconds: number; dead_seconds: number; runs: number; curve_a: number; source: 'manual' | 'measured' | 'default'; updated_at: string | null };
 
 export interface CalibrationShutter {
   id: string;
@@ -192,6 +192,13 @@ class CalibrationState {
       body: JSON.stringify({ answer: reply })
     });
     const body = await response.json();
+    // One drive, one answer: the buttons go away either way, because after an
+    // answer the shutter no longer stands at the midpoint being asked about.
+    this.checking = false;
+    if (!response.ok) {
+      this.message = body.message ?? 'Antwort nicht angenommen.';
+      return;
+    }
     this.atLimit = body.at_limit;
 
     if (reply === 'about_right') {
@@ -200,10 +207,9 @@ class CalibrationState {
     } else if (body.at_limit) {
       this.message = `Mitte um ${body.shift_pp.toFixed(1)} pp verschoben — weiter geht es nicht. Wenn es immer noch nicht passt, lieber neu messen.`;
     } else {
-      this.message = `Mitte um ${body.shift_pp.toFixed(1)} pp verschoben. Nochmal prüfen?`;
+      this.message = `Mitte um ${body.shift_pp.toFixed(1)} pp verschoben. Nochmal auf die Mitte fahren und prüfen?`;
     }
     await this.loadDetail(id);
-    this.checking = reply !== 'about_right' && !body.at_limit;
   }
 
   async undoCheck(id: string): Promise<void> {
@@ -241,4 +247,30 @@ export function timesLabel(shutter: CalibrationShutter): string {
   const fmt = (v: DirectionValue) =>
     v.source === 'default' ? '—' : `${v.travel_seconds.toFixed(1)} s`;
   return `${fmt(shutter.up)} auf · ${fmt(shutter.down)} zu`;
+}
+
+/** Which directions a person has overridden by hand, if any.
+ *
+ * Kept out of the template so it can be tested: "why did my measurement not
+ * take effect" is the question this answers, and getting it wrong looks like
+ * the app silently ignoring a measurement.
+ */
+export function overriddenDirections(shutter: CalibrationShutter): ('auf' | 'zu')[] {
+  const out: ('auf' | 'zu')[] = [];
+  if (shutter.up.source === 'manual') out.push('auf');
+  if (shutter.down.source === 'manual') out.push('zu');
+  return out;
+}
+
+export function overrideNotice(shutter: CalibrationShutter): string | null {
+  const directions = overriddenDirections(shutter);
+  if (directions.length === 0) return null;
+  const which = directions.length === 2 ? 'beide Richtungen' : `die Richtung „${directions[0]}"`;
+  const measured = shutter.up.runs + shutter.down.runs;
+  const kept =
+    measured > 0
+      ? ` Die ${measured} gemessenen Läufe bleiben gespeichert und gelten wieder, sobald du den Eintrag entfernst.`
+      : '';
+  return `Für ${which} steht eine Laufzeit in shutters.toml. Die gilt, auch wenn hier gemessen wird —` +
+    ` Messungen überschreiben nichts, was du selbst eingetragen hast.${kept}`;
 }

@@ -5,7 +5,10 @@
 // and no missed-message detection to get wrong.
 
 import { interpolate } from './animate';
-import type { Action, BridgeStatus, Frame, Movement, Shutter } from './types';
+import { automations } from './automations.svelte';
+import { groups } from './groups.svelte';
+import { commandText } from './groups';
+import type { Action, BridgeStatus, CommandResult, Frame, Movement, Shutter } from './types';
 
 const BACKOFF_START = 1000;
 const BACKOFF_MAX = 30000;
@@ -18,10 +21,21 @@ class ShutterState {
   easing = $state<Record<string, number>>({});
   /** A finished travel the app would like confirmed — one tap, feature 002. */
   confirmable = $state<{ id: string; name: string } | null>(null);
+  /**
+   * The animation clock. livePercent() reads it so that Svelte re-derives every
+   * frame; reading Date.now() directly is invisible to reactivity, and the
+   * graphic froze at the start of every travel until the final frame arrived.
+   */
+  now = $state(Date.now());
 
   #socket: WebSocket | null = null;
   #backoff = BACKOFF_START;
   #closing = false;
+
+  /** The shutter being calibrated right now, if any. */
+  get measuring(): Shutter | undefined {
+    return this.shutters.find((s) => s.measuring);
+  }
 
   byId(id: string): Shutter | undefined {
     return this.shutters.find((s) => s.id === id);
@@ -29,8 +43,36 @@ class ShutterState {
 
   /** Where a shutter is right now — interpolated locally while it travels. */
   livePercent(shutter: Shutter): number | null {
-    if (shutter.movement) return interpolate(shutter.movement);
+    if (shutter.movement) return interpolate(shutter.movement, this.now);
     return shutter.position.percent;
+  }
+
+  /** Where this shutter is headed or already stands, for disabling pointless buttons. */
+  #endsAt(shutter: Shutter): number | null {
+    if (shutter.movement) return shutter.movement.target_percent;
+    return shutter.position.percent;
+  }
+
+  /** "auf" does nothing for a shutter that is open or already opening. */
+  canOpen(shutter: Shutter): boolean {
+    return this.#endsAt(shutter) !== 100;
+  }
+
+  /** "zu" does nothing for a shutter that is closed or already closing. */
+  canClose(shutter: Shutter): boolean {
+    return this.#endsAt(shutter) !== 0;
+  }
+
+  /** "stop" only means something while a travel is under way. */
+  canStop(shutter: Shutter): boolean {
+    return shutter.movement !== null;
+  }
+
+  /** Advance the animation clock; called once per frame. */
+  tick(): void {
+    // Only while something travels, so an idle page does not re-render at 60 fps.
+    if (this.shutters.some((s) => s.movement)) this.now = Date.now();
+    this.settleArrived();
   }
 
   connect(): void {
@@ -46,6 +88,7 @@ class ShutterState {
     socket.onmessage = (event) => this.#apply(JSON.parse(event.data) as Frame);
     socket.onclose = () => {
       this.connected = false;
+      this.freeze();
       if (!this.#closing) this.#reconnect();
     };
     socket.onerror = () => socket.close();
@@ -70,6 +113,23 @@ class ShutterState {
         // same position as one that just opened the page.
         this.shutters = frame.data.shutters;
         this.bridge = frame.data.bridge;
+        if (frame.data.automations) automations.setState(frame.data.automations);
+        groups.set(frame.data.groups ?? []);
+        break;
+      case 'groups':
+        groups.set(frame.groups);
+        break;
+      case 'automations':
+        automations.setState({
+          paused: frame.paused,
+          until: frame.until,
+          clock_reliable: frame.clock_reliable,
+          clock_reason: frame.clock_reason
+        });
+        break;
+      case 'automation_fired':
+      case 'rules_changed':
+        automations.changed();
         break;
       case 'movement':
         this.#patch(frame.shutter_id, (s) => ({ ...s, movement: frame.movement }));
@@ -87,6 +147,9 @@ class ShutterState {
         break;
       case 'bridge':
         this.bridge = { connected: frame.connected, kind: frame.kind };
+        break;
+      case 'measuring':
+        this.#patch(frame.shutter_id, (s) => ({ ...s, measuring: frame.active }));
         break;
       case 'confirmable':
         this.confirmable = { id: frame.shutter_id, name: frame.name };
@@ -106,6 +169,24 @@ class ShutterState {
 
   #patch(id: string, change: (shutter: Shutter) => Shutter): void {
     this.shutters = this.shutters.map((s) => (s.id === id ? change(s) : s));
+  }
+
+  /**
+   * The connection is gone: stop every animation where it stands (contracts/websocket.md,
+   * FR-022). Without the server nobody knows whether the travel continued, stopped, or
+   * was overridden, so the graphic must not go on pretending. The position stays as an
+   * estimate; the snapshot on reconnect replaces it.
+   */
+  freeze(now: number = Date.now()): void {
+    this.shutters = this.shutters.map((s) =>
+      s.movement
+        ? {
+            ...s,
+            movement: null,
+            position: { ...s.position, percent: interpolate(s.movement, now), confidence: 'estimated', source: 'command' }
+          }
+        : s
+    );
   }
 
   /** Stop animating a shutter that has arrived, until the server confirms. */
@@ -134,14 +215,33 @@ class ShutterState {
     return null;
   }
 
+  /** Every configured shutter ("Alle auf/zu"). Null, or what to tell the person. */
   async commandAll(action: Action): Promise<string | null> {
-    const response = await fetch('/api/shutters/command', {
+    return this.#commandMany('/api/shutters/command', action);
+  }
+
+  /** Every member of a group (feature 004). Null, or who was not reached and why. */
+  async commandGroup(groupId: string, action: Action, targetPercent?: number): Promise<string | null> {
+    return this.#commandMany(`/api/groups/${groupId}/command`, action, targetPercent);
+  }
+
+  async #commandMany(url: string, action: Action, targetPercent?: number): Promise<string | null> {
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action })
+      body: JSON.stringify({ action, target_percent: targetPercent ?? null })
     });
-    if (response.status === 503) return 'Kein Rolladen konnte erreicht werden.';
-    return null;
+    const body = await response.json().catch(() => ({}));
+    const results: CommandResult[] | undefined = body.results;
+    if (!results) return body.message ?? 'Der Befehl ist fehlgeschlagen.';
+    // Each member animates from its own movement at once, as a single command does.
+    for (const result of results) {
+      if (result.movement) {
+        const movement = result.movement;
+        this.#patch(result.id, (s) => ({ ...s, movement }));
+      }
+    }
+    return commandText(results, (id) => this.byId(id)?.name ?? id);
   }
 
   async confirmArrival(): Promise<void> {

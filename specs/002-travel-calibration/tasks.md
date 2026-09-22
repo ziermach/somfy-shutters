@@ -33,13 +33,13 @@ or plain storage, which is why the tests below are cheap.
 
 - [X] T001 [P] Add `MeasurementRun`, `Calibration`, `ActiveRun` and `CheckAnswer` to `backend/src/somfy_shutters/models.py` per [data-model.md](./data-model.md), with `direction` one of `up`/`down`, `kind` one of `guided`/`confirmed`, and `rejected` holding a reason string or null
 - [X] T002 [P] Implement `backend/src/somfy_shutters/calibration.py`: median over valid runs (**FR-013: median, never mean**), the plausibility band (**reject outside 0.5× to 2× the established value**), and the rejection reasons `dead_after_arrival`, `too_short`, `implausible`, `disturbed`, `abandoned`
-- [X] T003 [P] Implement the curve in `backend/src/somfy_shutters/calibration.py`: `position(p) = p − k·sin(2πp)/2π` with `k` bounded to **±0.8**, and a step of **0.1 per check answer**
-- [X] T004 [P] Unit-test the curve invariants in `backend/tests/unit/test_curve.py`: for every `k` in the band, `f(0) == 0` and `f(1) == 1` **exactly**, the curve is monotonic, and one step moves mid-travel by 1.6 points — these are what make FR-025 safe by construction rather than by clamping
+- [X] T003 [P] Implement the curve in `backend/src/somfy_shutters/calibration.py`: `position(p) = p ** a` with `a` bounded to **0.7–1.4**, and a step of **0.05 per check answer** (the first attempt used a sine curve that was antisymmetric about the midpoint, where the check looks — see research.md §3)
+- [X] T004 [P] Unit-test the curve invariants in `backend/tests/unit/test_curve.py`: across the band `f(0) == 0` and `f(1) == 1` **exactly**, the curve is monotonic, and one step moves mid-travel by 1.7 points — these are what make FR-025 safe by construction rather than by clamping
 - [X] T005 [P] Unit-test medians and rejection in `backend/tests/unit/test_calibration_math.py`: three runs yield the middle one, a late outlier does not move the value, each rejection reason fires on its own rule
 - [X] T006 Implement `backend/src/somfy_shutters/calibration_store.py`: the `measurement_run` table in the existing SQLite file, and reading and writing `config/calibration.toml` in the shape from [data-model.md](./data-model.md)
 - [X] T007 Extend `backend/src/somfy_shutters/config.py` with the precedence chain **manual in `shutters.toml` > measured in `calibration.toml` > `default_travel_seconds`**, exposing which layer a value came from
 - [X] T008 [P] Unit-test precedence in `backend/tests/unit/test_calibration_precedence.py`: a manual value wins over a measurement and is never overwritten, a measurement wins over the default, and the reported `source` matches
-- [X] T009 Make `travel_seconds()` in `backend/src/somfy_shutters/tracker.py` use the precedence chain, and apply `curve_k` in the movement interpolation — **the two places this feature touches feature 001**
+- [X] T009 Make `travel_seconds()` in `backend/src/somfy_shutters/tracker.py` use the precedence chain, and apply `curve_a` in the movement interpolation — **the two places this feature touches feature 001**
 - [X] T010 Ensure a calibrated shutter's position stays `estimated` between end stops in `backend/src/somfy_shutters/tracker.py`, and assert it in `backend/tests/unit/test_calibration_confidence.py` — **calibration improves the estimate, never the confidence** (constitution III)
 
 **Checkpoint**: values flow through to the animation; nothing measures yet.
@@ -109,7 +109,7 @@ or plain storage, which is why the tests below are cheap.
 
 ### Tests for User Story 3
 
-- [X] T031 [P] [US3] Integration test `backend/tests/integration/test_verification.py`: answers move `curve_k` by a bounded step, `at_limit` is reported at the bound, undo returns `curve_k` to 0 with the measurements untouched (**FR-026**)
+- [X] T031 [P] [US3] Integration test `backend/tests/integration/test_verification.py`: answers move `curve_a` by a bounded step, `at_limit` is reported at the bound, undo returns `curve_a` to 0 with the measurements untouched (**FR-026**)
 - [X] T032 [P] [US3] Property test in `backend/tests/unit/test_curve.py`: after **any** sequence of answers, the displayed position at an end stop is exactly 0 or exactly 100 (**FR-025** — the invariant that makes this control safe)
 
 ### Implementation for User Story 3
@@ -124,11 +124,11 @@ or plain storage, which is why the tests below are cheap.
 
 ## Phase 5: Polish & Cross-Cutting Concerns
 
-- [ ] T036 Walk quickstart **C4.1** with your eyes: after full calibration a shutter at 50 % must still read as an estimate with its age. **The most likely way this feature does damage is by letting "calibrated" read as "known"**
-- [ ] T037 Walk quickstart **C4.2**: a manual value in `shutters.toml` overrides a measurement, the interface says so, and the measurement is not discarded
+- [X] T036 Walk quickstart **C4.1** with your eyes: after full calibration a shutter at 50 % must still read as an estimate with its age. **The most likely way this feature does damage is by letting "calibrated" read as "known"**
+- [X] T037 Walk quickstart **C4.2**: a manual value in `shutters.toml` overrides a measurement, the interface says so, and the measurement is not discarded
 - [X] T038 [P] Add `GET /api/sim/truth` in `backend/src/somfy_shutters/api/rest.py`, registered only for the simulator, so convergence can be checked by hand as the quickstart describes
 - [X] T039 [P] Document calibration in `backend/README.md` and add `config/calibration.example.toml`; add `config/calibration.toml` to `.gitignore`
-- [ ] T040 Run the whole of [quickstart.md](./quickstart.md) against the simulator and fix what it surfaces
+- [X] T040 Run the whole of [quickstart.md](./quickstart.md) against the simulator and fix what it surfaces
 - [X] T041 Update root `README.md` once the feature works: calibration moves from the "not yet" column to what works today
 
 ---

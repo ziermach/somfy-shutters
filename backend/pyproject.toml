@@ -8,6 +8,8 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "aiomqtt>=2.5,<3",
     "pydantic>=2.9",
+    "APScheduler>=3.11,<4",
+    "astral>=3.2,<4",
 ]
 
 [project.optional-dependencies]

@@ -10,6 +10,7 @@ SHUTTER_KEYS = {
     "travel_down_seconds",
     "position",
     "movement",
+    "measuring",
 }
 POSITION_KEYS = {"percent", "confidence", "certain_at", "age_seconds", "stale", "source"}
 MOVEMENT_KEYS = {
@@ -19,6 +20,7 @@ MOVEMENT_KEYS = {
     "started_at",
     "expected_arrival",
     "origin",
+    "curve_a",
 }
 
 
@@ -86,6 +88,15 @@ async def test_command_all_reports_per_shutter(client) -> None:
     results = response.json()["results"]
     assert {r["id"] for r in results} == {"wohnzimmer", "kueche", "schlafzimmer"}
     assert all(r["accepted"] for r in results)
+
+
+async def test_command_all_carries_movements_and_needs_a_target_for_position(client) -> None:
+    """Feature 004, T004: "Alle" now goes through apply_many."""
+    response = await client.post("/api/shutters/command", json={"action": "close"})
+    assert all(set(r["movement"]) == MOVEMENT_KEYS for r in response.json()["results"])
+    response = await client.post("/api/shutters/command", json={"action": "position"})
+    assert response.status_code == 422
+    assert response.json()["detail"]["error"] == "target_required"
 
 
 async def test_resync_says_which_end_stop(client) -> None:

@@ -38,7 +38,8 @@ next snapshot repairs everything anyway.
     "direction": "down",
     "started_at": "2026-09-21T18:03:11.412Z",
     "expected_arrival": "2026-09-21T18:03:27.512Z",
-    "origin": "local"
+    "origin": "local",
+    "curve_a": 1.0
   }
 }
 ```
@@ -90,6 +91,16 @@ FR-017. A report disagreed with the local estimate while idle, and the report wo
 the model; the easing is presentation only. A separate frame type rather than a plain
 `position` because the client renders it differently, and because it is worth being able
 to count corrections when judging whether the travel times are any good.
+
+### `measuring` — a calibration run started or ended
+
+```json
+{ "type": "measuring", "seq": 1046, "shutter_id": "wohnzimmer", "active": true, "direction": "up" }
+```
+
+Commands to a shutter under measurement are refused, so every open client has to
+stop offering them. Sent on both edges, and on the abandon timeout, which is the
+one that ends a run without anybody asking.
 
 ### `bridge` — the connection to Pi-Somfy changed
 

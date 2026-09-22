@@ -27,13 +27,59 @@ broker. Nothing in this path leaves the house.
 | | |
 |---|---|
 | Pi | Pi 3 or newer, Raspberry Pi OS Bookworm (64-bit). A Zero 2 W works but see [building the frontend](#4-build-the-frontend). |
-| Radio | CC1101 (E07-M1101D-SMA) wired to the SPI header, **3.3V only — Pi pin 1 or 17. 5V destroys the module.** |
+| Radio | CC1101 (E07-M1101D-SMA) wired to the SPI header — see [wiring the radio](#wiring-the-radio). **3.3V only.** |
 | Pi-Somfy | Installed, paired with every window, publishing to MQTT. This project does not install or configure it. |
 | Network | Ethernet, WiFi or a phone hotspot — see [network](#1-network). |
 
 Pi-Somfy owns the radio and the rolling-code counters. Never run a second transmitter
 against the same motors — resynchronising means walking to every window and
 re-pairing by hand.
+
+### Wiring the radio
+
+Fixed by the [constitution](../.specify/memory/constitution.md); module pin numbers are
+from Ebyte's [E07-M1101D-SMA manual](https://www.scribd.com/document/708471606/E07-M1101D-SMA-Usermanual-EN-v1-30).
+
+| Module pin | Signal | Pi physical pin | Pi GPIO |
+|---|---|---|---|
+| 1 | GND | 39 | GND |
+| 2 | VCC | **17** (or 1) | **3.3V** |
+| 3 | GDO0 | 37 | GPIO26 |
+| 4 | CSN | 36 | GPIO16 |
+| 5 | SCK | 40 | GPIO21 |
+| 6 | MOSI | 38 | GPIO20 |
+| 7 | MISO/GDO1 | 35 | GPIO19 |
+| 8 | GDO2 | — | not connected |
+
+**Interactive diagram:** [open in Cirkit Designer](https://app.cirkitdesigner.com/project/c0b9f439-d559-4c61-9f5f-2cd1cb531f8d?view=interactive_preview)
+— the table above is the source of truth; if the two ever disagree, the table wins.
+
+<!-- GitHub strips iframes; this renders only in viewers that allow them. The link above always works. -->
+<div style="position: relative; width: 100%; padding-top: calc(max(56.25%, 400px));">
+  <iframe src="https://app.cirkitdesigner.com/project/c0b9f439-d559-4c61-9f5f-2cd1cb531f8d?view=interactive_preview" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"></iframe>
+</div>
+
+Everything but VCC sits in the last three rows of the header, the end nearest the USB
+ports:
+
+```
+         inner  outer
+  35 MISO  ●     ●  36 CSN
+  37 GDO0  ●     ●  38 MOSI
+  39 GND   ●     ●  40 SCK
+```
+
+> **VCC to 3.3V — pin 17 or 1 — never 5V.** Pins 2 and 4 carry 5V and sit right next
+> to pin 1; the module's absolute maximum is about 3.6V and 5V destroys it. Wire with
+> the Pi unplugged and check VCC twice before powering on.
+>
+> **Screw the antenna on before anything transmits.** Transmitting into an open SMA
+> connector can damage the module.
+
+Pins 35, 38 and 40 are the Pi's *second* SPI bus (SPI1), not the one `raspi-config`
+switches on (SPI0). Which overlay is needed depends on how Pi-Somfy's CC1101 support
+drives the module — follow its installation instructions rather than assuming SPI is
+already set up. [pinout.xyz](https://pinout.xyz) shows every pin interactively.
 
 ## 1. Network
 

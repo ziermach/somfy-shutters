@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { percentText } from '../lib/confidence';
   import { shutters } from '../lib/shutters.svelte';
   import type { Shutter } from '../lib/types';
   import ConfidenceBadge from './ConfidenceBadge.svelte';
@@ -11,10 +12,12 @@
   let { shutter, onopen }: Props = $props();
 
   const live = $derived(shutters.livePercent(shutter));
-  const busy = $derived(!shutters.bridge.connected);
+  const busy = $derived(!shutters.bridge.connected || shutter.measuring);
 
   const state = $derived(
-    shutter.movement
+    shutter.measuring
+      ? 'wird gemessen …'
+      : shutter.movement
       ? shutter.movement.direction === 'up'
         ? 'fährt auf …'
         : 'fährt zu …'
@@ -28,7 +31,7 @@
   );
 </script>
 
-<div class="card" class:stale={shutter.position.stale}>
+<div class="card" class:stale={shutter.position.stale} class:measuring={shutter.measuring}>
   <div class="top">
     <WindowGraphic
       percent={live}
@@ -39,17 +42,19 @@
     <div class="meta">
       <button type="button" class="name" onclick={() => onopen(shutter.id)}>{shutter.name}</button>
       <span class="sub">{state}</span>
-      <ConfidenceBadge position={shutter.position} />
-      {#if !shutter.calibrated}
+      <ConfidenceBadge position={shutter.position} moving={shutter.movement !== null} />
+      {#if shutter.measuring}
+        <span class="measuring"><span class="pulse"></span>Messung läuft</span>
+      {:else if !shutter.calibrated}
         <span class="warn">Laufzeit nicht gemessen</span>
       {/if}
     </div>
-    <span class="pct">{live === null ? '?' : `${live} %`}</span>
+    <span class="pct">{percentText(live)}</span>
   </div>
   <div class="row">
-    <button type="button" class="btn" disabled={busy} onclick={() => shutters.command(shutter.id, 'open')}>auf</button>
-    <button type="button" class="btn" disabled={busy} onclick={() => shutters.command(shutter.id, 'stop')}>stop</button>
-    <button type="button" class="btn" disabled={busy} onclick={() => shutters.command(shutter.id, 'close')}>zu</button>
+    <button type="button" class="btn" disabled={busy || !shutters.canOpen(shutter)} onclick={() => shutters.command(shutter.id, 'open')}>auf</button>
+    <button type="button" class="btn" disabled={busy || !shutters.canStop(shutter)} onclick={() => shutters.command(shutter.id, 'stop')}>stop</button>
+    <button type="button" class="btn" disabled={busy || !shutters.canClose(shutter)} onclick={() => shutters.command(shutter.id, 'close')}>zu</button>
   </div>
 </div>
 
@@ -100,6 +105,32 @@
   .warn {
     font-size: 12px;
     color: var(--faint);
+  }
+  .card.measuring {
+    border-color: var(--amber-line);
+  }
+  .measuring {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--amber);
+  }
+  .pulse {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--amber);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.25;
+    }
   }
   .pct {
     font-family: var(--mono);

@@ -22,6 +22,36 @@ class GeneralConfig(BaseModel):
 
     stale_after_hours: float = Field(default=12, gt=0)
     default_travel_seconds: float = Field(default=20, ge=1, le=600)
+    timezone: str = "Europe/Berlin"
+    """The wall clock automations follow (feature 003). Named explicitly rather
+    than read from the OS, so a reinstall cannot move every rule by an hour."""
+
+    @field_validator("timezone")
+    @classmethod
+    def _known_timezone(cls, value: str) -> str:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"unknown timezone {value!r}") from exc
+        return value
+
+    @property
+    def tz(self):  # zoneinfo.ZoneInfo, imported lazily
+        from zoneinfo import ZoneInfo
+
+        return ZoneInfo(self.timezone)
+
+
+class LocationConfig(BaseModel):
+    """Where the house is, for sunrise and sunset. Seeds the app once; after that
+    the location set in the app wins."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
 
 
 class BridgeConfig(BaseModel):
@@ -65,6 +95,7 @@ class Settings(BaseModel):
 
     general: GeneralConfig = Field(default_factory=GeneralConfig)
     bridge: BridgeConfig = Field(default_factory=BridgeConfig)
+    location: LocationConfig | None = None
     shutter: list[ShutterConfig] = Field(min_length=1)
 
     @model_validator(mode="after")

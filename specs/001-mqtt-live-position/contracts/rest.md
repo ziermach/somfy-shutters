@@ -28,7 +28,8 @@ rather re-fetch than reconnect.
         "stale": false,
         "source": "command"
       },
-      "movement": null
+      "movement": null,
+      "measuring": false
     },
     {
       "id": "schlafzimmer",
@@ -44,7 +45,8 @@ rather re-fetch than reconnect.
         "stale": false,
         "source": "restored"
       },
-      "movement": null
+      "movement": null,
+      "measuring": false
     }
   ],
   "bridge": { "connected": true, "kind": "mqtt" }
@@ -60,11 +62,16 @@ While a shutter travels, `movement` is present:
   "direction": "down",
   "started_at": "2026-09-21T18:03:11.412Z",
   "expected_arrival": "2026-09-21T18:03:27.512Z",
-  "origin": "local"
+  "origin": "local",
+  "curve_a": 1.0
 }
 ```
 
-The client animates from `started_at` to `expected_arrival` on its own clock. It does
+The client animates from `started_at` to `expected_arrival` on its own clock.
+`curve_a` is the travel shape (feature 002; `1.0` is linear): the motor runs linearly
+in the bridge's level, `level = 100·(p/100)^(1/a)`, so the client interpolates there and
+converts back with `p = 100·(level/100)^a` — the same way the server does, so a stop
+mid-travel settles where the animation already is. It does
 **not** poll for intermediate positions — that is the whole point of FR-012.
 
 ## `POST /api/shutters/{id}/command`

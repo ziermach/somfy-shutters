@@ -1,7 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import RunTable from '../components/RunTable.svelte';
-  import { calibration, timesLabel, type DirectionValue } from '../lib/calibration.svelte';
+  import {
+    calibration,
+    overrideNotice,
+    timesLabel,
+    type DirectionValue
+  } from '../lib/calibration.svelte';
   import { shutters } from '../lib/shutters.svelte';
   import WindowGraphic from '../components/WindowGraphic.svelte';
 
@@ -117,11 +122,8 @@
           {/each}
         </tbody>
       </table>
-      {#if detail.up.source === 'manual' || detail.down.source === 'manual'}
-        <p class="override">
-          Für diesen Rolladen steht eine Laufzeit in <code>shutters.toml</code>. Die gilt, auch
-          wenn hier gemessen wird — Messungen überschreiben nichts, was du selbst eingetragen hast.
-        </p>
+      {#if overrideNotice(detail)}
+        <p class="override">{overrideNotice(detail)}</p>
       {/if}
     </div>
 
@@ -150,7 +152,7 @@
             Auf die Mitte fahren
           </button>
         {/if}
-        {#if detail.up.curve_k !== 0 || detail.down.curve_k !== 0}
+        {#if detail.up.curve_a !== 1 || detail.down.curve_a !== 1}
           <button type="button" class="btn wide undo" disabled={running} onclick={() => calibration.undoCheck(id)}>
             Prüfungen zurücknehmen
           </button>
@@ -334,9 +336,6 @@
     font-size: 12px;
     color: var(--amber);
     line-height: 1.5;
-  }
-  .override code {
-    font-family: var(--mono);
   }
   .note {
     margin: 0;

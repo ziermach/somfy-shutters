@@ -119,6 +119,18 @@ class Movement(BaseModel):
     started_at: datetime
     expected_arrival: datetime
     origin: Origin = Origin.LOCAL
+    curve_a: float = 1.0
+    """The travel shape this movement was planned with. Carried along so the
+    interpolation needs nothing but the movement itself."""
+    bridge_from: float | None = None
+    bridge_to: float | None = None
+    """The bridge's own level counter at the start and the level it was sent.
+    Pi-Somfy keeps one linear counter, so after a reversal mid-window it is
+    not what the curve of the new direction would make of the percentage."""
+    bridge_known: bool = True
+    """False when the travel started without any idea of the bridge's counter —
+    an unknown position. bridge_from is then an assumption, and nothing may be
+    derived from it until the travel completes."""
     # Monotonic clock, so a daylight-saving jump mid-travel cannot distort the
     # animation. The wall-clock fields above are what clients render.
     started_monotonic: float
@@ -129,14 +141,36 @@ class Movement(BaseModel):
             return 1.0
         return min(1.0, max(0.0, (now_monotonic - self.started_monotonic) / self.duration_seconds))
 
-    def position_at(self, now_monotonic: float, curve_k: float = 0.0) -> int:
-        span = self.target_percent - self.from_percent
-        progress = self.progress(now_monotonic)
-        if curve_k:
-            from .calibration import travel_curve
+    def level_at(self, now_monotonic: float) -> float:
+        """Where the bridge's own clock says the motor is, in its level coordinate.
 
-            progress = travel_curve(progress, curve_k)
-        return round(self.from_percent + span * progress)
+        The motor runs linearly in time, so this is a straight line. It is what a
+        halt has to be sent as: converting the displayed percentage back would
+        round twice and pick a curve by guessing the direction.
+        """
+        if self.bridge_from is not None and self.bridge_to is not None:
+            start_level, end_level = self.bridge_from, self.bridge_to
+        else:
+            from .calibration import to_level
+
+            start_level = to_level(self.from_percent, self.curve_a)
+            end_level = to_level(self.target_percent, self.curve_a)
+        return start_level + (end_level - start_level) * self.progress(now_monotonic)
+
+    def position_at(self, now_monotonic: float) -> int:
+        """Where the shutter is, in the percentages a person reads.
+
+        The motor moves linearly in the bridge's level coordinate, so the
+        interpolation happens there and is converted back. With a neutral curve
+        the two coordinates coincide and this is the straight line of feature 001.
+        """
+        if self.curve_a == 1.0:
+            span = self.target_percent - self.from_percent
+            return round(self.from_percent + span * self.progress(now_monotonic))
+
+        from .calibration import to_percent
+
+        return round(to_percent(self.level_at(now_monotonic), self.curve_a))
 
     def is_done(self, now_monotonic: float) -> bool:
         return self.progress(now_monotonic) >= 1.0
@@ -205,7 +239,8 @@ class Calibration(BaseModel):
     travel_seconds: float = Field(ge=1, le=600)
     dead_seconds: float = Field(default=0.0, ge=0)
     runs: int = Field(default=0, ge=0)
-    curve_k: float = Field(default=0.0, ge=-0.8, le=0.8)
+    curve_a: float = Field(default=1.0, ge=0.7, le=1.4)
+    """Shape of the travel: 1 is linear, above 1 shows less mid-travel."""
     updated_at: datetime | None = None
     source: Literal["manual", "measured", "default"] = "default"
 

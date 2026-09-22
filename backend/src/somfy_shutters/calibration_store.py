@@ -202,7 +202,7 @@ class CalibrationStore:
                 if not entry:
                     continue
                 lines.append(f"[{shutter_id}.{direction}]")
-                for key in ("travel_seconds", "dead_seconds", "runs", "curve_k"):
+                for key in ("travel_seconds", "dead_seconds", "runs", "curve_a"):
                     if key in entry:
                         lines.append(f"{key} = {entry[key]}")
                 if entry.get("updated_at"):
@@ -228,20 +228,31 @@ class CalibrationService:
         self._settings = settings
         self._store = store
         self._cache: dict[tuple[str, str], Calibration] = {}
+        # The travel shape is a property of the window, kept apart from the
+        # measurement. Holding it inside the measured entry meant an answer
+        # silently vanished whenever there was nothing measured yet, or a
+        # hand-written value was in force.
+        self._curves: dict[tuple[str, str], float] = {}
         self._load_measured()
 
     def _load_measured(self) -> None:
         raw = self._store.read_toml()
         for shutter_id, directions in raw.items():
             for name, entry in directions.items():
-                if not isinstance(entry, dict) or "travel_seconds" not in entry:
+                if not isinstance(entry, dict):
+                    continue
+                # A curve can exist without a measurement — an answer given
+                # against the default or a hand-written travel time. _flush
+                # writes such entries, so they have to be read back too.
+                self._curves[(shutter_id, name)] = float(entry.get("curve_a", 1.0))
+                if "travel_seconds" not in entry:
                     continue
                 updated = entry.get("updated_at")
                 self._cache[(shutter_id, name)] = Calibration(
                     travel_seconds=float(entry["travel_seconds"]),
                     dead_seconds=float(entry.get("dead_seconds", 0.0)),
                     runs=int(entry.get("runs", 0)),
-                    curve_k=float(entry.get("curve_k", 0.0)),
+                    curve_a=self._curves[(shutter_id, name)],
                     updated_at=datetime.fromisoformat(str(updated)) if updated else None,
                     source="measured",
                 )
@@ -252,6 +263,7 @@ class CalibrationService:
         name = direction.value if isinstance(direction, Direction) else direction
         manual = self._settings.manual_travel_seconds(shutter_id, name)
         measured = self._cache.get((shutter_id, name))
+        curve = self._curves.get((shutter_id, name), 1.0)
 
         if manual is not None:
             # A hand-written value wins, but the measurement is not thrown away:
@@ -260,21 +272,23 @@ class CalibrationService:
                 travel_seconds=manual,
                 dead_seconds=measured.dead_seconds if measured else 0.0,
                 runs=measured.runs if measured else 0,
-                curve_k=measured.curve_k if measured else 0.0,
+                curve_a=curve,
                 updated_at=measured.updated_at if measured else None,
                 source="manual",
             )
         if measured is not None:
-            return measured
+            return measured.model_copy(update={"curve_a": curve})
         return Calibration(
-            travel_seconds=self._settings.general.default_travel_seconds, source="default"
+            travel_seconds=self._settings.general.default_travel_seconds,
+            curve_a=curve,
+            source="default",
         )
 
     def travel_seconds(self, shutter_id: str, direction: Direction | str) -> float:
         return self.effective(shutter_id, direction).travel_seconds
 
-    def curve_k(self, shutter_id: str, direction: Direction | str) -> float:
-        return self.effective(shutter_id, direction).curve_k
+    def curve_a(self, shutter_id: str, direction: Direction | str) -> float:
+        return self.effective(shutter_id, direction).curve_a
 
     # --- recording -----------------------------------------------------------
 
@@ -303,7 +317,7 @@ class CalibrationService:
             travel_seconds=round(derived.travel_seconds, 2),
             dead_seconds=round(derived.dead_seconds, 2),
             runs=derived.runs,
-            curve_k=curve_from_answers(self._store.answers_for(shutter_id, direction)),
+            curve_a=self._curves.get((shutter_id, direction.value), 1.0),
             updated_at=derived.updated_at,
             source="measured",
         )
@@ -322,20 +336,22 @@ class CalibrationService:
                 recorded_at=now or utcnow(),
             )
         )
+        a = curve_from_answers(self._store.answers_for(shutter_id, direction))
+        self._curves[(shutter_id, direction.value)] = a
         current = self._cache.get((shutter_id, direction.value))
-        k = curve_from_answers(self._store.answers_for(shutter_id, direction))
         if current is not None:
-            self._cache[(shutter_id, direction.value)] = current.model_copy(update={"curve_k": k})
-            self._flush()
+            self._cache[(shutter_id, direction.value)] = current.model_copy(update={"curve_a": a})
+        self._flush()
         return self.effective(shutter_id, direction)
 
     def clear_checks(self, shutter_id: str) -> None:
         """FR-026: undo verification, leave the measurements alone."""
         self._store.clear_answers(shutter_id)
         for name in ("up", "down"):
+            self._curves.pop((shutter_id, name), None)
             current = self._cache.get((shutter_id, name))
             if current is not None:
-                self._cache[(shutter_id, name)] = current.model_copy(update={"curve_k": 0.0})
+                self._cache[(shutter_id, name)] = current.model_copy(update={"curve_a": 1.0})
         self._flush()
 
     def clear(self, shutter_id: str) -> None:
@@ -344,6 +360,7 @@ class CalibrationService:
         self._store.clear_answers(shutter_id)
         for name in ("up", "down"):
             self._cache.pop((shutter_id, name), None)
+            self._curves.pop((shutter_id, name), None)
         self._flush()
 
     def runs_for(self, shutter_id: str) -> list[MeasurementRun]:
@@ -351,12 +368,15 @@ class CalibrationService:
 
     def _flush(self) -> None:
         values: dict[str, dict[str, dict[str, object]]] = {}
+        for (shutter_id, name), curve in self._curves.items():
+            if (shutter_id, name) not in self._cache and curve != 1.0:
+                values.setdefault(shutter_id, {})[name] = {"curve_a": round(curve, 3)}
         for (shutter_id, name), value in self._cache.items():
             entry: dict[str, object] = {
                 "travel_seconds": value.travel_seconds,
                 "dead_seconds": value.dead_seconds,
                 "runs": value.runs,
-                "curve_k": round(value.curve_k, 3),
+                "curve_a": round(value.curve_a, 3),
             }
             if value.updated_at:
                 entry["updated_at"] = value.updated_at.isoformat()
