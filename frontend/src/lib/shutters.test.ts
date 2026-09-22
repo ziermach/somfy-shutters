@@ -45,6 +45,11 @@ describe('which buttons make sense', () => {
     expect(shutters.canClose(shutter(0, opening))).toBe(true);
   });
 
+  it('stop is on offer only while a travel is under way', () => {
+    expect(shutters.canStop(shutter(40))).toBe(false);
+    expect(shutters.canStop(shutter(0, opening))).toBe(true);
+  });
+
   it('an unknown position leaves both on offer — that is how it becomes known', () => {
     expect(shutters.canOpen(shutter(null))).toBe(true);
     expect(shutters.canClose(shutter(null))).toBe(true);

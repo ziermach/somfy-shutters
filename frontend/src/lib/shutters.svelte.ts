@@ -60,6 +60,11 @@ class ShutterState {
     return this.#endsAt(shutter) !== 0;
   }
 
+  /** "stop" only means something while a travel is under way. */
+  canStop(shutter: Shutter): boolean {
+    return shutter.movement !== null;
+  }
+
   /** Advance the animation clock; called once per frame. */
   tick(): void {
     // Only while something travels, so an idle page does not re-render at 60 fps.
