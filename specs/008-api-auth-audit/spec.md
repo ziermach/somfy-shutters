@@ -1,6 +1,6 @@
 # Feature Specification: API authentication and audit
 
-**Feature Branch**: `worktree-007-api-auth`
+**Feature Branch**: `main` (designed and built in a separate worktree, merged to `main` on 2026-09-22)
 
 **Created**: 2026-09-22
 

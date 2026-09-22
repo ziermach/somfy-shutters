@@ -1,6 +1,6 @@
 # Implementation Plan: API authentication and audit
 
-**Branch**: `worktree-007-api-auth` (designed in a separate worktree, merged to `main`) | **Date**: 2026-09-22 | **Spec**: [spec.md](./spec.md)
+**Branch**: `main` (designed and built in a separate worktree, merged to `main` on 2026-09-22) | **Date**: 2026-09-22 | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `specs/008-api-auth-audit/spec.md`
 
