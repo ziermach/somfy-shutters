@@ -66,6 +66,32 @@ class BridgeConfig(BaseModel):
     """Open hardware question 1. Flipping this must be sufficient on its own."""
 
 
+class AuthConfig(BaseModel):
+    """Who may talk to the backend (feature 007, specs/007-api-auth-audit/data-model.md).
+
+    `mode` left out means: open with the simulator, required with anything else. The
+    exemption is keyed to the one thing that makes it harmless — no radio — so it
+    cannot be left switched on in front of real windows.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["required", "open"] | None = None
+    failed_attempts: int = Field(default=10, ge=1)
+    failed_window_minutes: float = Field(default=5, gt=0)
+    lockout_minutes: float = Field(default=15, gt=0)
+    command_burst: int = Field(default=10, ge=1)
+    command_per_second: float = Field(default=1.0, gt=0)
+    pairing_minutes: float = Field(default=5, gt=0, le=60)
+    audit_retention_days: int = Field(default=180, ge=1)
+    trusted_proxy: str | None = None
+    """Only a request from this peer may name its client in X-Forwarded-For."""
+
+    @property
+    def required(self) -> bool:
+        return self.mode != "open"
+
+
 class ShutterConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -96,7 +122,17 @@ class Settings(BaseModel):
     general: GeneralConfig = Field(default_factory=GeneralConfig)
     bridge: BridgeConfig = Field(default_factory=BridgeConfig)
     location: LocationConfig | None = None
+    auth: AuthConfig = Field(default_factory=AuthConfig)
     shutter: list[ShutterConfig] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _auth_mode(self) -> Settings:
+        if self.auth.mode is None:
+            self.auth.mode = "open" if self.bridge.kind == "sim" else "required"
+        elif self.auth.mode == "open" and self.bridge.kind != "sim":
+            # FR-029: a real installation always asks for a credential.
+            raise ValueError('auth.mode = "open" ist nur mit dem Simulator erlaubt.')
+        return self
 
     @model_validator(mode="after")
     def _unique_ids_and_addresses(self) -> Settings:

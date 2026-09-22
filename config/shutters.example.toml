@@ -31,6 +31,21 @@ port = 1883
 # the bridge expects the opposite, flip this — and nothing else should need to change.
 invert_level = false
 
+# Who may talk to the app (feature 007). Every phone gets its own credential by
+# pairing; the first one comes from running `somfy-shutters auth recover` on the Pi.
+# Left out, `mode` is "open" with the simulator and "required" with a real bridge;
+# "open" with bridge.kind = "mqtt" refuses to start.
+[auth]
+# mode = "required"
+failed_attempts = 10          # failed logins from one address …
+failed_window_minutes = 5     # … within this window …
+lockout_minutes = 15          # … lock that address out for this long
+command_burst = 10            # commands one device may send in a burst …
+command_per_second = 1.0      # … refilled at this rate
+pairing_minutes = 5           # how long a pairing code lasts
+audit_retention_days = 180    # how long the record of who did what is kept
+# trusted_proxy = "127.0.0.1" # only then is X-Forwarded-For believed
+
 # One block per shutter. The address is the RTS address Pi-Somfy assigned, copied
 # by hand from its operateShutters.conf. We deliberately do not read that file:
 # see specs/001-mqtt-live-position/research.md, section 5.

@@ -20,6 +20,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import automation_routes, calibration_routes, group_routes, rest, ws
+from .auth.audit import AuditLog
+from .auth.store import AuthStore
 from .automation.clock import ClockGuard
 from .automation.engine import LOCATION_KEY, AutomationEngine
 from .automation.store import AutomationStore
@@ -98,6 +100,8 @@ def create_app(
 
     automation_store = AutomationStore(store.path)
     group_store = GroupStore(store.path)
+    auth_store = AuthStore(store.path)
+    audit = AuditLog(store.path)
     # The configuration only changes across a restart, so this is the one moment a
     # shutter can have left it (feature 004, FR-009).
     if group_store.prune(list(settings.shutters)):
@@ -285,6 +289,8 @@ def create_app(
             calibration_store.close()
             automation_store.close()
             group_store.close()
+            auth_store.close()
+            audit.close()
 
     app = FastAPI(title="somfy-shutters", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
@@ -302,6 +308,8 @@ def create_app(
     app.state.pending_checks = {}
     app.state.automation = engine
     app.state.groups = group_store
+    app.state.auth = auth_store
+    app.state.audit = audit
     app.state.clock_guard = guard
     engine.state = app.state
 
