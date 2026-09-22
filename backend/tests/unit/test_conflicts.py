@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from somfy_shutters.automation.conflicts import THIS, find_conflicts
+from somfy_shutters.automation.conflicts import THIS, conflicts_from_group_change, find_conflicts
 from somfy_shutters.automation.models import Rule, RuleDraft
 from somfy_shutters.automation.sun import sun_lookup
+from somfy_shutters.groups import Group
 
 BERLIN = ZoneInfo("Europe/Berlin")
 NOW = datetime(2026, 1, 5, 12, 0, tzinfo=BERLIN)
@@ -88,3 +89,77 @@ def test_two_rules_that_meet_only_in_summer_are_found() -> None:
     )
     [c] = find_conflicts(sunset, [evening], SHUTTERS, NOW, BERLIN, SUN)
     assert c.first_at.month in (5, 6, 7)
+
+
+# --- feature 004: groups ----------------------------------------------------------
+
+EG = Group(id="g_eg", name="Erdgeschoss", members=["wohnzimmer", "kueche"])
+ONLY_WZ = Group(id="g_eg", name="Erdgeschoss", members=["wohnzimmer"])
+
+
+def test_a_group_target_conflicts_with_a_direct_one_and_names_the_group() -> None:
+    old = existing(action={"kind": "close"}, targets=["kueche"], name="Alt")
+    [c] = find_conflicts(
+        draft(targets={"groups": ["g_eg"]}), [old], SHUTTERS, NOW, BERLIN, None, groups=[EG]
+    )
+    assert c.shutter_id == "kueche"
+    assert c.via == "Erdgeschoss"
+
+
+def test_a_direct_target_has_no_via() -> None:
+    old = existing(action={"kind": "close"}, targets={"groups": ["g_eg"]})
+    [c] = find_conflicts(draft(targets=["kueche"]), [old], SHUTTERS, NOW, BERLIN, None, groups=[EG])
+    assert c.via is None
+
+
+def test_no_conflict_once_the_shared_shutter_left_the_group() -> None:
+    old = existing(action={"kind": "close"}, targets=["kueche"])
+    got = find_conflicts(
+        draft(targets={"groups": ["g_eg"]}), [old], SHUTTERS, NOW, BERLIN, None, groups=[ONLY_WZ]
+    )
+    assert got == []
+
+
+def test_adding_a_member_reports_the_new_meeting_of_two_stored_rules() -> None:
+    """FR-028: neither rule was edited; the group was."""
+    morning = existing("r_a", action={"kind": "open"}, targets=["kueche"], name="A")
+    evening = existing(
+        "r_b",
+        created=NOW - timedelta(days=10),
+        action={"kind": "close"},
+        targets={"groups": ["g_eg"]},
+        name="B",
+    )
+    [c] = conflicts_from_group_change(
+        "g_eg", [ONLY_WZ], [EG], [morning, evening], SHUTTERS, NOW, BERLIN, None
+    )
+    assert {c.rule_id, c.other_rule_id} == {"r_a", "r_b"}
+    assert {c.rule_name, c.other_rule_name} == {"A", "B"}
+    assert c.shutter_id == "kueche" and c.via == "Erdgeschoss"
+    assert c.winner == "r_b"  # created later, carried out last
+
+
+def test_a_conflict_that_already_existed_is_not_news() -> None:
+    a = existing("r_a", action={"kind": "open"}, targets=["wohnzimmer"])
+    b = existing("r_b", action={"kind": "close"}, targets={"groups": ["g_eg"]})
+    assert (
+        conflicts_from_group_change("g_eg", [ONLY_WZ], [EG], [a, b], SHUTTERS, NOW, BERLIN, None)
+        == []
+    )
+
+
+def test_removing_a_member_creates_no_conflict() -> None:
+    a = existing("r_a", action={"kind": "open"}, targets=["kueche"])
+    b = existing("r_b", action={"kind": "close"}, targets={"groups": ["g_eg"]})
+    assert (
+        conflicts_from_group_change("g_eg", [EG], [ONLY_WZ], [a, b], SHUTTERS, NOW, BERLIN, None)
+        == []
+    )
+
+
+def test_two_rules_both_on_the_group_are_reported_once() -> None:
+    a = existing("r_a", action={"kind": "open"}, targets={"groups": ["g_eg"]})
+    b = existing("r_b", action={"kind": "close"}, targets={"groups": ["g_eg"]})
+    empty = Group(id="g_eg", name="Erdgeschoss", members=[])
+    got = conflicts_from_group_change("g_eg", [empty], [EG], [a, b], SHUTTERS, NOW, BERLIN, None)
+    assert len(got) == 1

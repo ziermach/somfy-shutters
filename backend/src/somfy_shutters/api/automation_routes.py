@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from ..automation.engine import AutomationEngine
-from ..automation.models import Firing, Rule, RuleDraft
+from ..automation.models import Firing, Rule, RuleDraft, targets_wire
 
 router = APIRouter(prefix="/api")
 
@@ -50,7 +50,7 @@ def rule_json(engine: AutomationEngine, rule: Rule, now: datetime | None = None)
         "enabled": rule.enabled,
         "days": rule.days,
         "trigger": rule.trigger.model_dump(),
-        "targets": rule.targets,
+        "targets": targets_wire(rule.targets),
         "action": rule.action.model_dump(),
         "skip_next": rule.skip_planned_at is not None and rule.skip_planned_at == nxt.at,
         "next": {"at": _local(engine, nxt.at), "reason": nxt.reason},
@@ -90,8 +90,8 @@ def parse_draft(engine: AutomationEngine, raw: Any) -> RuleDraft | JSONResponse:
             "Die Regel ist so nicht gültig.",
             {"field": where, "problem": first["msg"]},
         )
-    if isinstance(draft.targets, list):
-        unknown = [sid for sid in draft.targets if sid not in engine.settings.shutters]
+    if draft.targets != "all":
+        unknown = [sid for sid in draft.targets.shutters if sid not in engine.settings.shutters]
         if unknown:
             return error(
                 422,
@@ -99,6 +99,10 @@ def parse_draft(engine: AutomationEngine, raw: Any) -> RuleDraft | JSONResponse:
                 "Diesen Rolladen gibt es nicht.",
                 {"shutters": unknown},
             )
+        known = {g.id for g in engine.current_groups()}
+        missing = [gid for gid in draft.targets.groups if gid not in known]
+        if missing:
+            return error(422, "unknown_group", "Diese Gruppe gibt es nicht.", {"groups": missing})
     if draft.is_sun and engine.location() is None:
         return error(
             409,
@@ -284,10 +288,7 @@ async def preview(request: Request) -> Any:
 
     now = engine.clock()
     sun = engine.sun()
-    present = [
-        sid for sid in engine.settings.shutters if draft.targets == "all" or sid in draft.targets
-    ]
-    nxt = next_firing(draft, now, engine.tz, sun, has_targets=bool(present))
+    nxt = next_firing(draft, now, engine.tz, sun, has_targets=bool(engine.targets(draft).reached))
     today = today_at(draft, now, engine.tz, sun) if (not draft.is_sun or sun) else None
     return {
         "next": {"at": _local(engine, nxt.at), "reason": nxt.reason},
@@ -312,12 +313,14 @@ def conflicts_json(
         engine.sun(),
         editing=editing,
         created_at=existing.created_at if existing else None,
+        groups=engine.current_groups(),
     )
     return [
         {
             "rule_id": c.rule_id,
             "rule_name": c.rule_name,
             "shutter_id": c.shutter_id,
+            "via": c.via,
             "first_at": _local(engine, c.first_at),
             "winner": c.winner,
         }

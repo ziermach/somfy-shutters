@@ -72,6 +72,37 @@ class Action(BaseModel):
         return self.kind == other.kind and self.percent == other.percent
 
 
+class Targets(BaseModel):
+    """Individual shutters and groups (feature 004). Groups are resolved when the
+    rule fires, so a shutter added to a group is included without editing the rule."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    shutters: list[str] = Field(default_factory=list)
+    groups: list[str] = Field(default_factory=list)
+
+    @field_validator("shutters", "groups")
+    @classmethod
+    def _a_set(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("listed twice")
+        return value
+
+    @property
+    def empty(self) -> bool:
+        return not self.shutters and not self.groups
+
+    def wire(self) -> dict[str, list[str]]:
+        return {"shutters": list(self.shutters), "groups": list(self.groups)}
+
+
+RuleTargets = Literal["all"] | Targets
+
+
+def targets_wire(targets: RuleTargets) -> str | dict[str, list[str]]:
+    return targets if targets == "all" else targets.wire()  # type: ignore[union-attr]
+
+
 class RuleDraft(BaseModel):
     """What a person edits. Everything a rule is, minus identity and bookkeeping."""
 
@@ -82,7 +113,7 @@ class RuleDraft(BaseModel):
     days: list[bool] = Field(min_length=7, max_length=7)
     """Monday first. All false is allowed: the rule then never fires, and says so."""
     trigger: Trigger
-    targets: Literal["all"] | list[str]
+    targets: RuleTargets
     action: Action
 
     @field_validator("name")
@@ -93,15 +124,19 @@ class RuleDraft(BaseModel):
             raise ValueError("name must not be blank")
         return value
 
-    @field_validator("targets")
+    @field_validator("targets", mode="before")
     @classmethod
-    def _non_empty(cls, value: Literal["all"] | list[str]) -> Literal["all"] | list[str]:
+    def _plain_list_is_shutters(cls, value: object) -> object:
+        """Feature 003 wrote, and older clients still send, a plain list of shutters."""
         if isinstance(value, list):
-            if not value:
-                raise ValueError("choose at least one shutter, or all")
-            if len(set(value)) != len(value):
-                raise ValueError("a shutter is listed twice")
+            return {"shutters": value, "groups": []}
         return value
+
+    @model_validator(mode="after")
+    def _names_a_target(self) -> RuleDraft:
+        if self.targets != "all" and self.targets.empty:  # type: ignore[union-attr]
+            raise ValueError("choose at least one shutter or group, or all")
+        return self
 
     @property
     def is_sun(self) -> bool:
@@ -114,6 +149,13 @@ class Rule(RuleDraft):
     """UTC instant of the one firing to skip (FR-025)."""
     created_at: datetime
     updated_at: datetime
+
+    @model_validator(mode="after")
+    def _names_a_target(self) -> Rule:
+        """Replaces the draft's check of the same name. A stored rule may have lost
+        its last target to a deleted group (feature 004, FR-026); it then says
+        "no_targets" and does not fire, rather than failing to load."""
+        return self
 
 
 class FiringStatus(StrEnum):
@@ -133,6 +175,9 @@ class Outcome(BaseModel):
     shutter_id: str
     result: Literal["commanded", "skipped", "failed"]
     reason: Literal["measurement_in_progress", "removed", "bridge_unreachable"] | None = None
+    via: list[str] = Field(default_factory=list)
+    """Names of the groups this shutter was reached through, at firing time (feature
+    004, FR-027). Empty for a direct target or "all", and in rows from before 004."""
 
 
 class Firing(BaseModel):

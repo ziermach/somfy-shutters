@@ -106,6 +106,9 @@ def frame_for_event(event: dict[str, Any], tracker: Any) -> dict[str, Any] | Non
     if kind in ("automations", "automation_fired"):
         # Feature 003. Already in wire shape: the engine builds them.
         return {k: v for k, v in event.items()}
+    if kind == "groups":
+        # Feature 004. The full list, never a delta: a client replaces its copy.
+        return {"type": "groups", "groups": event["groups"]}
     if kind == "rules_changed":
         # No payload: a client showing the rules re-fetches them.
         return {"type": "rules_changed"}
@@ -126,6 +129,9 @@ async def websocket_endpoint(socket: WebSocket) -> None:
         # In the snapshot rather than a frame after it, so the overview's banner
         # is right from the first frame (feature 003, FR-026).
         snapshot["automations"] = engine.state_json()
+    groups = getattr(app.state, "groups", None)
+    if groups is not None:
+        snapshot["groups"] = [g.wire() for g in groups.groups()]  # feature 004
     await hub.join(socket, snapshot)
     try:
         while True:

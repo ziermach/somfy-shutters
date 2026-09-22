@@ -12,6 +12,7 @@ import logging
 from typing import Any
 
 from .api.serialize import movement_json
+from .bridge.base import BridgeUnreachable
 from .models import Action
 
 log = logging.getLogger(__name__)
@@ -60,3 +61,28 @@ async def apply(
     movement = await tracker.start_movement(shutter_id, target, level)
     log.info("command %s on %s -> %s%%", action, shutter_id, target)
     return {"accepted": True, "movement": movement_json(movement)}
+
+
+async def apply_many(
+    state: Any, shutter_ids: list[str], action: str, target_percent: int | None = None
+) -> list[dict[str, Any]]:
+    """Issue one command to several shutters, one after another, in the order given.
+
+    "Alle auf/zu", a group and an automation all come through here, so a partial
+    failure means the same thing to each of them (specs/004-shutter-groups/research.md
+    §3). Sequential on purpose: the radio sends one frame at a time anyway, and the
+    order decides whose animation starts first. A shutter that cannot be commanded
+    is reported and skipped; nothing is retried and nothing is queued.
+    """
+    results: list[dict[str, Any]] = []
+    for shutter_id in shutter_ids:
+        try:
+            done = await apply(state, shutter_id, action, target_percent)
+            results.append({"id": shutter_id, "accepted": True, "movement": done["movement"]})
+        except MeasurementInProgress:
+            results.append(
+                {"id": shutter_id, "accepted": False, "error": "measurement_in_progress"}
+            )
+        except BridgeUnreachable:
+            results.append({"id": shutter_id, "accepted": False, "error": "bridge_unreachable"})
+    return results

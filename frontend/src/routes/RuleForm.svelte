@@ -9,10 +9,12 @@
     WEEKEND,
     type RuleAction,
     type RuleDraft,
+    type RuleTargets,
     type Trigger,
     nextText
   } from '../lib/automations';
   import { automations, type Preview } from '../lib/automations.svelte';
+  import { groups } from '../lib/groups.svelte';
   import { shutters } from '../lib/shutters.svelte';
 
   interface Props {
@@ -26,7 +28,7 @@
   let name = $state('');
   let days = $state<boolean[]>([...WEEKDAYS]);
   let trigger = $state<Trigger>({ kind: 'time', time: '06:45' });
-  let targets = $state<'all' | string[]>('all');
+  let targets = $state<RuleTargets>('all');
   let action = $state<RuleAction>({ kind: 'open' });
   let enabled = $state(true);
   let message = $state<string | null>(null);
@@ -44,7 +46,7 @@
         offsetSign = rule.trigger.offset_minutes < 0 ? -1 : 1;
         showBounds = !!(rule.trigger.not_before || rule.trigger.not_after);
       }
-      targets = rule.targets === 'all' ? 'all' : [...rule.targets];
+      targets = rule.targets === 'all' ? 'all' : { shutters: [...rule.targets.shutters], groups: [...rule.targets.groups] };
       action = { ...rule.action } as RuleAction;
       enabled = rule.enabled;
     }
@@ -77,8 +79,8 @@
   let preview = $state<Preview | null>(null);
   let previewTimer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
-    const draft: RuleDraft = { name: name.trim() || 'Vorschau', enabled: true, days: [...days], trigger: cleanTrigger(trigger), targets: targets === 'all' ? 'all' : [...targets], action: { ...action } as RuleAction };
-    if (draft.targets !== 'all' && draft.targets.length === 0) return;
+    const draft: RuleDraft = { name: name.trim() || 'Vorschau', enabled: true, days: [...days], trigger: cleanTrigger(trigger), targets: copyTargets(targets), action: { ...action } as RuleAction };
+    if (noTargets(draft.targets)) return;
     clearTimeout(previewTimer);
     previewTimer = setTimeout(async () => (preview = await automations.preview(draft, id)), 250);
   });
@@ -93,12 +95,36 @@
 
   const toggleDay = (i: number) => (days = days.map((on, j) => (j === i ? !on : on)));
 
+  // --- targets: "Alle", groups, shutters (feature 004) --------------------------
+
+  const NONE = { shutters: [] as string[], groups: [] as string[] };
+  const copyTargets = (t: RuleTargets): RuleTargets => (t === 'all' ? 'all' : { shutters: [...t.shutters], groups: [...t.groups] });
+  const noTargets = (t: RuleTargets) => t !== 'all' && t.shutters.length === 0 && t.groups.length === 0;
+
   function toggleTarget(shutterId: string) {
-    const current = targets === 'all' ? shutters.shutters.map((s) => s.id) : targets;
-    const next = current.includes(shutterId) ? current.filter((x) => x !== shutterId) : [...current, shutterId];
-    targets = next.length === shutters.shutters.length ? 'all' : next;
+    const current = targets === 'all' ? { ...NONE, shutters: shutters.shutters.map((s) => s.id) } : targets;
+    const next = current.shutters.includes(shutterId)
+      ? current.shutters.filter((x) => x !== shutterId)
+      : [...current.shutters, shutterId];
+    // Every shutter by hand and no group is what "Alle" says, and "Alle" also
+    // includes shutters added later — so it becomes that.
+    targets = next.length === shutters.shutters.length && current.groups.length === 0 ? 'all' : { ...current, shutters: next };
   }
-  const isTarget = (shutterId: string) => targets === 'all' || targets.includes(shutterId);
+  function toggleGroup(groupId: string) {
+    const current = targets === 'all' ? NONE : targets;
+    const next = current.groups.includes(groupId) ? current.groups.filter((x) => x !== groupId) : [...current.groups, groupId];
+    targets = { ...current, groups: next };
+  }
+  const isTarget = (shutterId: string) => targets === 'all' || targets.shutters.includes(shutterId);
+  const isGroupTarget = (groupId: string) => targets !== 'all' && targets.groups.includes(groupId);
+
+  /** Who the rule would reach right now, so a group's meaning is visible (US4 scenario 5). */
+  const reaches = $derived.by(() => {
+    if (targets === 'all') return [];
+    const wanted = new Set(targets.shutters);
+    for (const gid of targets.groups) for (const m of groups.byId(gid)?.members ?? []) wanted.add(m);
+    return shutters.shutters.filter((s) => wanted.has(s.id)).map((s) => s.name);
+  });
 
   function setAction(kind: RuleAction['kind']) {
     action = kind === 'position' ? { kind, percent: action.kind === 'position' ? action.percent : 30 } : { kind };
@@ -107,8 +133,8 @@
   const incomplete = $derived(
     !name.trim()
       ? 'Bitte einen Namen eingeben.'
-      : targets !== 'all' && targets.length === 0
-        ? 'Mindestens einen Rolladen wählen.'
+      : noTargets(targets)
+        ? 'Mindestens einen Rolladen oder eine Gruppe wählen.'
         : null
   );
 
@@ -219,11 +245,23 @@
   <div class="field">
     <span class="label">Rolladen</span>
     <div class="chips">
-      <button type="button" class="chip" class:on={targets === 'all'} aria-pressed={targets === 'all'} onclick={() => (targets = targets === 'all' ? [] : 'all')}>Alle</button>
+      <button type="button" class="chip" class:on={targets === 'all'} aria-pressed={targets === 'all'} onclick={() => (targets = targets === 'all' ? { ...NONE } : 'all')}>Alle</button>
+    </div>
+    {#if groups.groups.length}
+      <div class="chips">
+        {#each groups.groups as group (group.id)}
+          <button type="button" class="chip group" class:on={isGroupTarget(group.id)} aria-pressed={isGroupTarget(group.id)} onclick={() => toggleGroup(group.id)}>{group.name}</button>
+        {/each}
+      </div>
+    {/if}
+    <div class="chips">
       {#each shutters.shutters as shutter (shutter.id)}
         <button type="button" class="chip" class:on={isTarget(shutter.id)} aria-pressed={isTarget(shutter.id)} onclick={() => toggleTarget(shutter.id)}>{shutter.name}</button>
       {/each}
     </div>
+    {#if targets !== 'all' && targets.groups.length}
+      <span class="note">Betrifft jetzt: {reaches.length ? reaches.join(', ') : 'keinen Rolladen'}. Gruppen gelten, wie sie beim Auslösen sind.</span>
+    {/if}
   </div>
 
   <div class="field">
@@ -248,7 +286,7 @@
 
   {#each preview?.conflicts ?? [] as conflict (conflict.rule_id)}
     <p class="conflict" role="status">
-      Gleiche Minute wie „{conflict.rule_name}“ für {shutters.byId(conflict.shutter_id)?.name ?? conflict.shutter_id},
+      Gleiche Minute wie „{conflict.rule_name}“ für {shutters.byId(conflict.shutter_id)?.name ?? conflict.shutter_id}{conflict.via ? ` (über ${conflict.via})` : ''},
       erstmals {nextText({ at: conflict.first_at, reason: null })}. Es gewinnt
       {conflict.winner === conflict.rule_id ? `„${conflict.rule_name}“` : 'diese Regel'} — sie wird zuletzt ausgeführt.
     </p>
@@ -345,6 +383,9 @@
     border: 1px solid var(--surface-2);
     background: transparent;
     color: var(--faint);
+  }
+  .chip.group {
+    border-style: dashed;
   }
   .chip.on {
     background: var(--amber-soft);

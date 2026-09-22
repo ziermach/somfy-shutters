@@ -19,7 +19,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import automation_routes, calibration_routes, rest, ws
+from .api import automation_routes, calibration_routes, group_routes, rest, ws
 from .automation.clock import ClockGuard
 from .automation.engine import LOCATION_KEY, AutomationEngine
 from .automation.store import AutomationStore
@@ -35,6 +35,7 @@ from .calibration import (
 from .calibration_store import CalibrationService, CalibrationStore
 from .config import Settings, load_settings
 from .events import EventBus
+from .groups import GroupStore
 from .models import utcnow
 from .store import Store
 from .tracker import Tracker
@@ -96,13 +97,20 @@ def create_app(
     calibration = CalibrationService(settings, calibration_store)
 
     automation_store = AutomationStore(store.path)
+    group_store = GroupStore(store.path)
+    # The configuration only changes across a restart, so this is the one moment a
+    # shutter can have left it (feature 004, FR-009).
+    if group_store.prune(list(settings.shutters)):
+        log.info("groups: dropped members no longer configured")
     if automation_store.setting(LOCATION_KEY) is None and settings.location is not None:
         # Seeds once. From then on the app is where the location is changed.
         automation_store.set_setting(LOCATION_KEY, settings.location.model_dump())
     guard = ClockGuard()
     # `state` is set to app.state below, once it exists: the engine commands
     # shutters through the same function a button press uses (commands.apply).
-    engine = AutomationEngine(automation_store, state=None, publish=bus.publish, guard=guard)
+    engine = AutomationEngine(
+        automation_store, state=None, publish=bus.publish, guard=guard, groups=group_store
+    )
     runs = RunRegistry()
 
     tracker = Tracker(settings, store, emit=emit, calibration=calibration)
@@ -276,6 +284,7 @@ def create_app(
             store.close()
             calibration_store.close()
             automation_store.close()
+            group_store.close()
 
     app = FastAPI(title="somfy-shutters", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
@@ -292,12 +301,14 @@ def create_app(
     # shutter id -> the direction its check drive went. One answer per drive.
     app.state.pending_checks = {}
     app.state.automation = engine
+    app.state.groups = group_store
     app.state.clock_guard = guard
     engine.state = app.state
 
     app.include_router(rest.router)
     app.include_router(calibration_routes.router)
     app.include_router(automation_routes.router)
+    app.include_router(group_routes.router)
     app.include_router(ws.router)
     if settings.bridge.kind == "sim":
         app.include_router(rest.sim_router)

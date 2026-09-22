@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from ..models import utcnow
-from .models import Firing, FiringStatus, Outcome, Rule, RuleDraft
+from .models import Firing, FiringStatus, Outcome, Rule, RuleDraft, Targets, targets_wire
 
 SCHEMA = """
 PRAGMA foreign_keys = ON;
@@ -130,7 +130,7 @@ class AutomationStore:
                     int(draft.enabled),
                     _days_to_mask(draft.days),
                     draft.trigger.model_dump_json(),
-                    json.dumps(draft.targets),
+                    json.dumps(targets_wire(draft.targets)),
                     draft.action.model_dump_json(),
                     now.isoformat(),
                     now.isoformat(),
@@ -155,7 +155,7 @@ class AutomationStore:
                     int(draft.enabled),
                     _days_to_mask(draft.days),
                     draft.trigger.model_dump_json(),
-                    json.dumps(draft.targets),
+                    json.dumps(targets_wire(draft.targets)),
                     draft.action.model_dump_json(),
                     now.isoformat(),
                     rule_id,
@@ -182,6 +182,28 @@ class AutomationStore:
         with self._lock:
             cursor = self._conn.execute("DELETE FROM automation_rule WHERE id = ?", (rule_id,))
         return bool(cursor.rowcount)
+
+    def drop_group(self, group_id: str) -> bool:
+        """Remove a deleted group from every rule's targets (feature 004, FR-026).
+
+        A rule whose last target it was keeps existing with none; it then says
+        "no_targets" and does not fire, as a rule whose shutters all left does.
+        """
+        changed = False
+        for rule in self.rules():
+            if rule.targets == "all" or group_id not in rule.targets.groups:  # type: ignore[union-attr]
+                continue
+            left = Targets(
+                shutters=rule.targets.shutters,  # type: ignore[union-attr]
+                groups=[g for g in rule.targets.groups if g != group_id],  # type: ignore[union-attr]
+            )
+            with self._lock:
+                self._conn.execute(
+                    "UPDATE automation_rule SET targets = ?, updated_at = ? WHERE id = ?",
+                    (json.dumps(left.wire()), utcnow().isoformat(), rule.id),
+                )
+            changed = True
+        return changed
 
     # --- firings -------------------------------------------------------------
 

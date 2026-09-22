@@ -5,7 +5,7 @@
 
 # 🚧 WORK IN PROGRESS 🚧
 
-> **It runs, but it has never moved a real shutter.** Features 001–003 are
+> **It runs, but it has never moved a real shutter.** Features 001–004 are
 > implemented and tested against a simulated house; no motor in this project has been
 > paired yet, so the MQTT path to Pi-Somfy is written and unit-tested but unproven on
 > hardware.
@@ -37,10 +37,11 @@ shutter stands, and automations that run on the house's own network.
 | ✅ | Automations on a clock time or at sunrise/sunset ± offset, with a "not before / not after" window |
 | ✅ | Every firing recorded per shutter; nothing queued; held while the Pi's clock cannot be trusted |
 | ✅ | Pause all automations, or skip one rule's next firing; deleting a rule asks first |
+| ✅ | Groups — rooms, floors, a side of the house — that overlap, move with one tap, and serve as rule targets |
 | ✅ | Installable as an app; opens without the backend and says positions are not current; updates reach every phone |
 | ⬜ | Anything confirmed on a real motor |
 
-459 backend and 42 frontend tests, against the real API surface, the tracker's rules,
+541 backend and 65 frontend tests, against the real API surface, the tracker's rules,
 the calibration arithmetic, and the simulated house end to end.
 
 ## The problem this project takes seriously
@@ -124,8 +125,9 @@ Point `bridge.kind` at `"mqtt"` and nothing else changes. Details in
 unit and backups, is [`deploy/README.md`](deploy/README.md); the validation scenarios, including the
 reconciliation cases, are in the quickstarts of
 [001](specs/001-mqtt-live-position/quickstart.md),
-[002](specs/002-travel-calibration/quickstart.md) and
-[003](specs/003-shutter-automations/quickstart.md) — most of them automated, and all of
+[002](specs/002-travel-calibration/quickstart.md),
+[003](specs/003-shutter-automations/quickstart.md) and
+[004](specs/004-shutter-groups/quickstart.md) — most of them automated, and all of
 001's walked once more in the browser against the simulator.
 
 The simulator is not a stub. It gives each window a soft-start dead time, a non-linear
@@ -201,6 +203,21 @@ down at, until the network corrects it. Rules do not fire while the kernel says 
 clock is not synchronised or the time has gone backwards; the overview says so, and
 the history records those firings as held.
 
+### Groups
+
+A group is the household's name for a set of shutters — "Wohnzimmer", "Obergeschoss",
+"Südseite" — and a shutter can be in several. Groups live in the app's database, not in
+`shutters.toml`, and are edited in the app. A group owns no state: its line on the
+overview only counts what its members say ("2 von 3 offen · 1 fährt"), never shows a
+percent, and is never surer than its least certain member.
+
+A group command is one command per member through the same function a button press
+uses, in configuration order. RTS's own group channels are not used; they would need
+pairing at every window and would hide which motors a frame reached. Rules can target
+groups; membership is read when the rule fires, so a shutter added to "Obergeschoss"
+is closed by the evening rule without editing it, and a shutter reached through two
+groups is commanded once.
+
 ## The mock
 
 [`mocks/rolladen-ui.html`](mocks/rolladen-ui.html) opens in any browser, no build step.
@@ -229,8 +246,8 @@ recalibration with no user involvement, and
 [CLAUDE.md](CLAUDE.md) for conventions and build commands.
 
 ```bash
-cd backend && .venv/bin/python -m pytest       # 459 tests
-cd frontend && npx vitest run                  # 42 tests
+cd backend && .venv/bin/python -m pytest       # 541 tests
+cd frontend && npx vitest run                  # 65 tests
 cd frontend && npx svelte-check --tsconfig ./tsconfig.json
 ```
 

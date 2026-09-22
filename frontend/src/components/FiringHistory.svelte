@@ -2,7 +2,7 @@
   // What a rule actually did, per shutter, with the reason for every one that did not
   // move. A firing sends commands; whether the shutter arrived nobody can report.
   import { onMount } from 'svelte';
-  import { nextText, outcomeText, statusText, wallTime, type Firing } from '../lib/automations';
+  import { nextText, outcomeText, statusText, viaText, wallTime, type Firing } from '../lib/automations';
   import { automations } from '../lib/automations.svelte';
 
   interface Props {
@@ -31,6 +31,9 @@
             {/if}
             <span class="status {firing.status}">{statusText(firing.status)}</span>
           </div>
+          {#if viaText(firing.outcomes)}
+            <div class="via">{viaText(firing.outcomes)}</div>
+          {/if}
           {#each firing.outcomes.filter((o) => o.result !== 'commanded') as outcome (outcome.shutter_id)}
             <div class="outcome">{names[outcome.shutter_id] ?? outcome.shutter_id}: {outcomeText(outcome)}</div>
           {/each}
@@ -41,6 +44,10 @@
 </div>
 
 <style>
+  .via {
+    font-size: 12px;
+    color: var(--faint);
+  }
   .history {
     border-top: 1px solid var(--surface-2);
     padding-top: 10px;
