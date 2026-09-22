@@ -34,3 +34,6 @@ config/calibration.toml
 
 # written by the app, holds measured travel times
 config/calibration.toml
+
+# git worktrees live here; they are checkouts, not content
+.claude/worktrees/
