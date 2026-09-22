@@ -1,38 +1,19 @@
 <script lang="ts">
   // Constitution III made visible: a position always says how much it can be
-  // trusted, and how old that trust is.
+  // trusted, and how old that trust is. The wording lives in lib/confidence.ts
+  // so it can be tested — see calibration, which must not change any of it.
+  import { confidenceLabel, tone } from '../lib/confidence';
   import type { PositionEstimate } from '../lib/types';
 
   interface Props {
     position: PositionEstimate;
   }
   let { position }: Props = $props();
-
-  function age(seconds: number | null): string {
-    if (seconds === null) return 'nie';
-    const minutes = Math.round(seconds / 60);
-    if (minutes < 60) return `${minutes} Min.`;
-    const hours = Math.round(minutes / 60);
-    if (hours < 48) return `${hours} Std.`;
-    return `${Math.round(hours / 24)} Tagen`;
-  }
-
-  const tone = $derived(
-    position.confidence === 'certain' ? 'sure' : position.stale || position.confidence === 'unknown' ? 'grey' : 'est'
-  );
-
-  const label = $derived(
-    position.confidence === 'certain'
-      ? 'Endlage · sicher'
-      : position.confidence === 'unknown'
-        ? 'Position unbekannt'
-        : `Schätzung · Sync vor ${age(position.age_seconds)}`
-  );
 </script>
 
 <span class="badge">
-  <span class="dot {tone}"></span>
-  <span>{label}</span>
+  <span class="dot {tone(position)}"></span>
+  <span>{confidenceLabel(position)}</span>
 </span>
 
 <style>
@@ -53,7 +34,10 @@
   .sure {
     background: var(--teal);
   }
-  .est {
+  .estimated {
     background: var(--amber);
+  }
+  .unsure {
+    background: var(--grey-dot);
   }
 </style>

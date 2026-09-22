@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { percentText } from '../lib/confidence';
   import { shutters } from '../lib/shutters.svelte';
   import type { Shutter } from '../lib/types';
   import ConfidenceBadge from './ConfidenceBadge.svelte';
@@ -44,7 +45,7 @@
         <span class="warn">Laufzeit nicht gemessen</span>
       {/if}
     </div>
-    <span class="pct">{live === null ? '?' : `${live} %`}</span>
+    <span class="pct">{percentText(live)}</span>
   </div>
   <div class="row">
     <button type="button" class="btn" disabled={busy} onclick={() => shutters.command(shutter.id, 'open')}>auf</button>

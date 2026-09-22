@@ -27,9 +27,7 @@ BASE = {
 
 WITH_OVERRIDE = {
     **BASE,
-    "shutter": [
-        {"id": "flink", "name": "Flink", "address": "0x279631", "travel_up_seconds": 25.0}
-    ],
+    "shutter": [{"id": "flink", "name": "Flink", "address": "0x279631", "travel_up_seconds": 25.0}],
 }
 
 
@@ -126,7 +124,9 @@ async def test_the_animation_uses_the_hand_written_value(measured) -> None:
         arrival = body["movement"]["expected_arrival"]
         from datetime import datetime
 
-        duration = (datetime.fromisoformat(arrival) - datetime.fromisoformat(started)).total_seconds()
+        duration = (
+            datetime.fromisoformat(arrival) - datetime.fromisoformat(started)
+        ).total_seconds()
         assert abs(duration - 25.0) < 0.1, "the measurement must not be what it travels on"
         return
     raise AssertionError("client never yielded")

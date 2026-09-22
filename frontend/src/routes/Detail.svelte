@@ -1,6 +1,7 @@
 <script lang="ts">
   import ConfidenceBadge from '../components/ConfidenceBadge.svelte';
   import WindowGraphic from '../components/WindowGraphic.svelte';
+  import { percentText } from '../lib/confidence';
   import { shutters } from '../lib/shutters.svelte';
 
   interface Props {
@@ -54,7 +55,7 @@
     </div>
 
     <div class="readout">
-      <span class="pct">{live === null ? '?' : `${live} %`}</span>
+      <span class="pct">{percentText(live)}</span>
       <ConfidenceBadge position={shutter.position} />
     </div>
 
