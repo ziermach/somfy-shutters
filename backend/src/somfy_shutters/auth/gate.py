@@ -183,6 +183,8 @@ class Gate:
                     {"Retry-After": str(int(wait) + 1)},
                 )
         request.state.caller = caller
+        request.state.ability = ability
+        request.state.shutter_id = shutter_id
         return caller
 
 
@@ -194,6 +196,31 @@ def require(ability: Ability) -> Callable[[Request], Caller]:
 
     guard.ability = ability  # type: ignore[attr-defined]
     return guard
+
+
+CHANGES = (
+    ("/api/automations/pause", "pause_changed"),
+    ("/api/automations", "rule_changed"),
+    ("/api/location", "location_changed"),
+    ("/api/groups", "group_changed"),
+    ("/api/calibration", "calibration"),
+)
+"""Which record entry a successful configuring or calibrating request becomes."""
+
+
+def change_of(request: Request, status: int) -> str | None:
+    """The record action for a request that changed configuration or measurements.
+
+    Written once, after the response, and only when it succeeded — so the record
+    says what was changed, not what was attempted (research §9, data-model.md).
+    """
+    ability = getattr(request.state, "ability", None)
+    if ability not in (Ability.CONFIGURE, Ability.CALIBRATE) or status >= 400:
+        return None
+    if request.method in SAFE_METHODS or request.url.path == "/api/automations/preview":
+        return None
+    path = request.url.path
+    return next((action for prefix, action in CHANGES if path.startswith(prefix)), None)
 
 
 def caller_of(request: Request) -> Caller:

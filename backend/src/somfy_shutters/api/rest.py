@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .. import commands
-from ..auth.gate import COMMAND, WATCH
+from ..auth.gate import COMMAND, WATCH, caller_of
 from ..auth.models import Ability
 from ..bridge.base import BridgeUnreachable
 from ..commands import MeasurementInProgress
@@ -44,7 +44,9 @@ def _tracker(request: Request) -> Tracker:
 
 async def _apply(request: Request, shutter_id: str, body: CommandBody) -> dict[str, Any]:
     """Issue one command through the shared path (commands.apply)."""
-    return await commands.apply(request.app.state, shutter_id, body.action, body.target_percent)
+    return await commands.apply(
+        request.app.state, shutter_id, body.action, body.target_percent, caller_of(request).actor
+    )
 
 
 @router.get("/shutters", dependencies=WATCH)
@@ -96,6 +98,7 @@ async def command_all(request: Request, body: CommandBody) -> JSONResponse:
         list(_tracker(request).settings.shutters),
         body.action,
         body.target_percent,
+        caller_of(request).actor,
     )
     return JSONResponse({"results": results}, status_code=many_status(results))
 
@@ -159,9 +162,23 @@ async def resync(request: Request, shutter_id: str) -> JSONResponse:
         await bridge.send_level(tracker.settings.shutters[shutter_id].address, level)
         movement = await tracker.start_movement(shutter_id, target, level)
     except BridgeUnreachable:
+        _note_resync(request, shutter_id, target, "failed")
         return JSONResponse({"accepted": False, **BRIDGE_UNREACHABLE}, status_code=503)
+    _note_resync(request, shutter_id, target, "accepted")
     return JSONResponse(
         {"accepted": True, "target_percent": target, "movement": movement_json(movement)}
+    )
+
+
+def _note_resync(request: Request, shutter_id: str, target: int, outcome: str) -> None:
+    """Feature 008: a resync moves a shutter too, so it is in the record."""
+    request.app.state.audit.record(
+        caller_of(request).actor,
+        "resync",
+        outcome,
+        shutter_id=shutter_id,
+        detail={"percent": target},
+        clock_ok=request.app.state.gate.clock_ok(),
     )
 
 

@@ -106,3 +106,80 @@ export function countdownText(expiresAt: string, now: number = Date.now()): stri
   if (seconds <= 0) return 'abgelaufen';
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
+
+export interface RecordEntry {
+  id: number;
+  at: string;
+  clock_ok: boolean;
+  actor: { kind: string; id: string | null; name: string | null; state?: string };
+  action: string;
+  shutter_id: string | null;
+  target: string | null;
+  outcome: string;
+  detail: Record<string, unknown>;
+}
+
+const DOING: Record<string, string> = { open: 'auf', close: 'zu', stop: 'stopp' };
+
+const OUTCOMES: Record<string, string> = {
+  accepted: 'ausgeführt',
+  refused_permission: 'abgelehnt — keine Berechtigung',
+  refused_throttle: 'abgelehnt — zu viele Befehle',
+  refused_auth: 'abgelehnt — nicht angemeldet',
+  skipped: 'übersprungen — Messung läuft',
+  failed: 'nicht gesendet — Funkbrücke antwortet nicht'
+};
+
+const ACTIONS: Record<string, string> = {
+  resync: 'Resync',
+  refused: 'Versuch',
+  throttled: 'Befehl',
+  rule_changed: 'Regel geändert',
+  pause_changed: 'Pause geändert',
+  group_changed: 'Gruppe geändert',
+  location_changed: 'Standort geändert',
+  calibration: 'Kalibrierung',
+  credential_issued: 'Zugang ausgegeben',
+  credential_revoked: 'Zugang widerrufen',
+  credential_expired: 'Zugang abgelaufen',
+  pairing_minted: 'Kopplungscode erzeugt',
+  pairing_redeemed: 'Gerät gekoppelt',
+  pairing_failed: 'Kopplung fehlgeschlagen',
+  pairing_cancelled: 'Kopplungscode verworfen',
+  pairing_expired: 'Kopplungscode abgelaufen',
+  recovery: 'Wiederherstellung am Pi',
+  auth_failed: 'Anmeldung fehlgeschlagen'
+};
+
+/** Who: the device's name as it was then, marked if it has since been revoked. */
+export function actorText(actor: RecordEntry['actor']): string {
+  if (actor.kind === 'automation') return `Regel „${actor.name ?? '?'}“`;
+  if (actor.kind === 'bridge') return 'bemerkt, nicht von der App';
+  if (actor.kind === 'anonymous') return 'unbekanntes Gerät';
+  if (actor.kind === 'system') return 'System';
+  const name = actor.name ?? actor.kind;
+  if (!actor.state || actor.state === 'active') return name;
+  return `${name} (${STATES[actor.state as CredentialView['state']] ?? actor.state})`;
+}
+
+/** What: "Wohnzimmer zu", "Wohnzimmer auf 30 %", "Gruppe geändert". */
+export function whatText(entry: RecordEntry, nameOf: (id: string) => string): string {
+  const shutter = entry.shutter_id ? nameOf(entry.shutter_id) : null;
+  if (entry.action === 'command' || entry.action === 'movement_observed') {
+    const asked = entry.detail.action;
+    const percent = entry.detail.percent;
+    const doing =
+      entry.action === 'command' && typeof asked === 'string' && asked in DOING
+        ? DOING[asked]
+        : typeof percent === 'number'
+          ? `auf ${percent} %`
+          : '';
+    return [shutter ?? 'Rolladen', doing].filter(Boolean).join(' ');
+  }
+  const label = ACTIONS[entry.action] ?? entry.action;
+  return shutter ? `${label} · ${shutter}` : label;
+}
+
+export function outcomeWord(outcome: string): string {
+  return OUTCOMES[outcome] ?? outcome;
+}

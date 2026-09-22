@@ -12,6 +12,7 @@ import logging
 from typing import Any
 
 from .api.serialize import movement_json
+from .auth.models import SYSTEM, Actor
 from .bridge.base import BridgeUnreachable
 from .models import Action
 
@@ -22,15 +23,59 @@ class MeasurementInProgress(RuntimeError):
     """A command was aimed at a shutter that is being measured (FR-028)."""
 
 
+def _record(
+    state: Any, actor: Actor, shutter_id: str, action: str, percent: int | None, outcome: str
+) -> None:
+    """Feature 008: who asked, written after the frame went out (research §9).
+
+    AuditLog.record never raises, so a ledger that cannot be written never stops a
+    shutter. Test states without a ledger simply record nothing.
+    """
+    audit = getattr(state, "audit", None)
+    if audit is None:
+        return
+    engine = getattr(state, "automation", None)
+    detail: dict[str, Any] = {"action": action}
+    if percent is not None:
+        detail["percent"] = percent
+    audit.record(
+        actor,
+        "command",
+        outcome,
+        shutter_id=shutter_id,
+        detail=detail,
+        clock_ok=engine.verdict.reliable if engine is not None else True,
+    )
+
+
 async def apply(
-    state: Any, shutter_id: str, action: str, target_percent: int | None = None
+    state: Any,
+    shutter_id: str,
+    action: str,
+    target_percent: int | None = None,
+    actor: Actor = SYSTEM,
 ) -> dict[str, Any]:
-    """Issue one command.
+    """Issue one command, and record who asked for it.
 
     Raises MeasurementInProgress, BridgeUnreachable (from the bridge) or
     UnknownShutter (from the tracker). Nothing is queued: a command that cannot be
     handed over now did not happen.
     """
+    try:
+        result = await _send(state, shutter_id, action, target_percent)
+    except MeasurementInProgress:
+        _record(state, actor, shutter_id, action, target_percent, "skipped")
+        raise
+    except BridgeUnreachable:
+        _record(state, actor, shutter_id, action, target_percent, "failed")
+        raise
+    _record(state, actor, shutter_id, action, target_percent, "accepted")
+    return result
+
+
+async def _send(
+    state: Any, shutter_id: str, action: str, target_percent: int | None
+) -> dict[str, Any]:
     # Checked here rather than on one route: "Alle zu" reached this function by
     # another path and drove straight through a running measurement.
     runs = getattr(state, "runs", None)
@@ -64,7 +109,11 @@ async def apply(
 
 
 async def apply_many(
-    state: Any, shutter_ids: list[str], action: str, target_percent: int | None = None
+    state: Any,
+    shutter_ids: list[str],
+    action: str,
+    target_percent: int | None = None,
+    actor: Actor = SYSTEM,
 ) -> list[dict[str, Any]]:
     """Issue one command to several shutters, one after another, in the order given.
 
@@ -77,7 +126,7 @@ async def apply_many(
     results: list[dict[str, Any]] = []
     for shutter_id in shutter_ids:
         try:
-            done = await apply(state, shutter_id, action, target_percent)
+            done = await apply(state, shutter_id, action, target_percent, actor)
             results.append({"id": shutter_id, "accepted": True, "movement": done["movement"]})
         except MeasurementInProgress:
             results.append(

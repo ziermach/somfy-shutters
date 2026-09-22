@@ -263,16 +263,37 @@ Check it:
 
 ```bash
 curl -s localhost:8000/api/health
-# {"status":"ok","bridge":{"connected":true,"kind":"sim"},"shutters":4}
+# {"status":"ok"}   — without a credential the health check says nothing about the house
 ```
 
-`status` is `ok` even when the bridge is down: the service is up and correctly
-reporting a broken dependency. Read `bridge.connected` for the broker.
+With a credential it adds `bridge` and `shutters`; `status` is `ok` even when the bridge
+is down, because the service is up and correctly reporting a broken dependency.
 
 Then open `http://<pi-ip>:8000` from a phone on the same network and install it as a
-PWA. There is no authentication — anyone on the LAN can move the shutters. Do not
-port-forward it; reach it from outside over a VPN (WireGuard, Tailscale) if you need
-to.
+PWA. Do not port-forward it; reach it from outside over a VPN (WireGuard, Tailscale) if
+you need to.
+
+### Pairing the first phone
+
+With the simulator the app runs open, so there is nothing to do yet. Once
+`bridge.kind = "mqtt"` (step 7) every device needs its own credential. The first one
+comes from the Pi itself:
+
+```bash
+sudo -u pi /home/pi/somfy-shutters/backend/.venv/bin/somfy-shutters auth recover
+# Kopplungscode: K7Q-9XM  (gültig bis 14:32)
+```
+
+Open the app on the phone, type the code and a name for the phone. From then on that
+phone pairs every further device under **Geräte → Gerät koppeln** — nobody types a long
+secret. On an iPhone, pair inside the installed home-screen app, not in Safari first:
+the two keep separate cookies.
+
+The same command is the way back in if every device is lost; it touches nothing but
+the credentials. `somfy-shutters auth list` shows which exist, without secrets.
+
+**Upgrading an installation from before feature 008:** nothing is migrated or lost, but
+after the restart the app shows the pairing screen. Run `auth recover` once, as above.
 
 ## 7. Switch to the real radio
 

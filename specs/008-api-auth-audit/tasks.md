@@ -144,16 +144,16 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ### Tests for User Story 5
 
-- [ ] T033 [P] [US5] `backend/tests/contract/test_audit_rest.py`: commands from two credentials appear newest first with names and `accepted`; filter by shutter and by actor; paging with `before`/`next_before`; a revoked credential's entries keep its name with `state: "revoked"`; an injected external movement (`POST /api/sim/report`) appears as actor `bridge`, action `movement_observed`; an automation firing appears as actor `automation` with the rule id; `GET /api/audit` needs `manage`
-- [ ] T034 [P] [US5] `backend/tests/unit/test_apply_records.py`: `commands.apply` records **after** `send_level` (a bridge stub asserts no entry exists at send time); a failing `record` still returns the movement; bridge unreachable → `failed`, measurement → `skipped`
+- [X] T033 [P] [US5] `backend/tests/contract/test_audit_rest.py`: commands from two credentials appear newest first with names and `accepted`; filter by shutter and by actor; paging with `before`/`next_before`; a revoked credential's entries keep its name with `state: "revoked"`; an injected external movement (`POST /api/sim/report`) appears as actor `bridge`, action `movement_observed`; an automation firing appears as actor `automation` with the rule id; `GET /api/audit` needs `manage`
+- [X] T034 [P] [US5] `backend/tests/unit/test_apply_records.py`: `commands.apply` records **after** `send_level` (a bridge stub asserts no entry exists at send time); a failing `record` still returns the movement; bridge unreachable → `failed`, measurement → `skipped`
 
 ### Implementation for User Story 5
 
-- [ ] T035 [US5] `backend/src/somfy_shutters/commands.py`: `apply(..., actor=Actor.SYSTEM)` and `apply_many(..., actor=...)`; record `command` with `detail.action`/`detail.percent` and outcome after the send, and `skipped`/`failed` on the two exceptions, with `clock_ok` from `state.automation.verdict`; pass the caller's actor from every command route (`api/rest.py`, `api/group_routes.py`), `Actor("automation", rule.id, rule.name)` from `backend/src/somfy_shutters/automation/engine.py`, and record `resync` in `rest.py`
-- [ ] T036 [US5] Record configuration and calibration changes (`rule_changed`, `group_changed`, `location_changed`, `pause_changed`, `calibration`) in `api/automation_routes.py`, `api/group_routes.py`, `api/calibration_routes.py`
-- [ ] T037 [US5] Bus listener in `backend/src/somfy_shutters/main.py`: `movement` events with **`origin == "external"`** → `movement_observed`, actor `bridge`; daily `audit.purge(now - audit_retention_days)` beside the firing purge
-- [ ] T038 [US5] `GET /api/audit` (`manage`) in `backend/src/somfy_shutters/api/audit_routes.py` per contract; register in `main.py`
-- [ ] T039 [US5] `frontend/src/routes/Record.svelte`: newest first, one line per entry ("11:02 · Küche · Wohnzimmer zu · ausgeführt"), filters by shutter and by device, *Ältere laden*, refused entries marked, observed movements worded as "bemerkt, nicht von der App"; a note under the filter that **one device entry can stand for several devices sharing a credential**; wording in `frontend/src/lib/auth.ts` with tests
+- [X] T035 [US5] `backend/src/somfy_shutters/commands.py`: `apply(..., actor=Actor.SYSTEM)` and `apply_many(..., actor=...)`; record `command` with `detail.action`/`detail.percent` and outcome after the send, and `skipped`/`failed` on the two exceptions, with `clock_ok` from `state.automation.verdict`; pass the caller's actor from every command route (`api/rest.py`, `api/group_routes.py`), `Actor("automation", rule.id, rule.name)` from `backend/src/somfy_shutters/automation/engine.py`, and record `resync` in `rest.py`
+- [X] T036 [US5] Record configuration and calibration changes (`rule_changed`, `group_changed`, `location_changed`, `pause_changed`, `calibration`) in `api/automation_routes.py`, `api/group_routes.py`, `api/calibration_routes.py`
+- [X] T037 [US5] Bus listener in `backend/src/somfy_shutters/main.py`: `movement` events with **`origin == "external"`** → `movement_observed`, actor `bridge`; daily `audit.purge(now - audit_retention_days)` beside the firing purge
+- [X] T038 [US5] `GET /api/audit` (`manage`) in `backend/src/somfy_shutters/api/audit_routes.py` per contract; register in `main.py`
+- [X] T039 [US5] `frontend/src/routes/Record.svelte`: newest first, one line per entry ("11:02 · Küche · Wohnzimmer zu · ausgeführt"), filters by shutter and by device, *Ältere laden*, refused entries marked, observed movements worded as "bemerkt, nicht von der App"; a note under the filter that **one device entry can stand for several devices sharing a credential**; wording in `frontend/src/lib/auth.ts` with tests
 
 **Checkpoint**: quickstart E passes.
 
@@ -167,12 +167,12 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ### Tests for User Story 6
 
-- [ ] T040 [P] [US6] Extend `backend/tests/unit/test_cli.py` and `test_auth_rest.py`: recovery records a `recovery` entry; revoking so that **no active `manage` credential without an expiry** remains → **`409 last_manager`** unless `{"confirm_lockout": true}` — including the case where the only other manager has an expiry; after revoking everything and recovering, shutters, calibration, rules, groups, firings and the record are unchanged (row counts before/after); `auth list` prints no secret
+- [X] T040 [P] [US6] Extend `backend/tests/unit/test_cli.py` and `test_auth_rest.py`: recovery records a `recovery` entry; revoking so that **no active `manage` credential without an expiry** remains → **`409 last_manager`** unless `{"confirm_lockout": true}` — including the case where the only other manager has an expiry; after revoking everything and recovering, shutters, calibration, rules, groups, firings and the record are unchanged (row counts before/after); `auth list` prints no secret
 
 ### Implementation for User Story 6
 
-- [ ] T041 [US6] Last-manager check in `DELETE /api/auth/credentials/{id}` — **at least one active `manage` credential with no expiry must remain** (research §13) (`backend/src/somfy_shutters/api/auth_routes.py`); `auth list` and the `recovery` entry in `backend/src/somfy_shutters/cli.py`
-- [ ] T042 [US6] Lockout warning in `frontend/src/routes/Devices.svelte`: on `409 last_manager` explain that only `somfy-shutters auth recover` on the Pi gets back in, and ask again; upgrade note and recovery in `deploy/README.md`
+- [X] T041 [US6] Last-manager check in `DELETE /api/auth/credentials/{id}` — **at least one active `manage` credential with no expiry must remain** (research §13) (`backend/src/somfy_shutters/api/auth_routes.py`); `auth list` and the `recovery` entry in `backend/src/somfy_shutters/cli.py`
+- [X] T042 [US6] Lockout warning in `frontend/src/routes/Devices.svelte`: on `409 last_manager` explain that only `somfy-shutters auth recover` on the Pi gets back in, and ask again; upgrade note and recovery in `deploy/README.md`
 
 **Checkpoint**: quickstart F passes.
 

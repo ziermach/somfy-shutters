@@ -209,3 +209,33 @@ async def test_invalid_credential_is_422(locked) -> None:  # noqa: F811
     ):
         response = await locked.post("/api/auth/credentials", json=body, headers=headers)
         assert response.status_code == 422 and response.json()["error"] == "invalid_credential"
+
+
+# --- US6: never lock the owner out without saying so -------------------------------------
+
+
+async def test_revoking_the_last_manager_needs_confirmation(locked) -> None:  # noqa: F811
+    owner, headers, _ = issue(locked)
+    url = f"/api/auth/credentials/{owner.id}"
+    refused = await locked.delete(url, headers=headers)
+    assert refused.status_code == 409 and refused.json()["error"] == "last_manager"
+    assert "auth recover" in refused.json()["message"]
+    assert (await locked.get("/api/shutters", headers=headers)).status_code == 200
+    done = await locked.request("DELETE", url, json={"confirm_lockout": True}, headers=headers)
+    assert done.status_code == 204
+    assert (await locked.get("/api/shutters", headers=headers)).status_code == 401
+
+
+async def test_a_manager_that_will_expire_does_not_count(locked) -> None:  # noqa: F811
+    owner, headers, _ = issue(locked)
+    issue(locked, "Befristet", expires_at=datetime.now(UTC) + timedelta(days=30))
+    refused = await locked.delete(f"/api/auth/credentials/{owner.id}", headers=headers)
+    assert refused.status_code == 409
+
+
+async def test_a_second_permanent_manager_makes_it_fine(locked) -> None:  # noqa: F811
+    owner, headers, _ = issue(locked)
+    issue(locked, "Zweiter")
+    assert (
+        await locked.delete(f"/api/auth/credentials/{owner.id}", headers=headers)
+    ).status_code == 204

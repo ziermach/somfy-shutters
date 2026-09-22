@@ -14,6 +14,7 @@
   import Groups from './routes/Groups.svelte';
   import Overview from './routes/Overview.svelte';
   import Pair from './routes/Pair.svelte';
+  import RecordScreen from './routes/Record.svelte';
 
   type View =
     | { name: 'overview' }
@@ -93,6 +94,8 @@
     <RuleForm id={view.id} onback={() => (view = { name: 'automations' })} />
   {:else if view.name === 'devices'}
     <Devices onback={() => (view = { name: 'overview' })} />
+  {:else if view.name === 'record'}
+    <RecordScreen onback={() => (view = { name: 'overview' })} />
   {:else if view.name === 'groups'}
     <Groups
       onedit={(id) => (view = { name: 'groupForm', id })}

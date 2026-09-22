@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .. import commands
+from ..auth.models import Actor
 from ..groups import Group, GroupStore
 from ..models import utcnow
 from .clock import ClockGuard, ClockVerdict
@@ -208,8 +209,9 @@ class AutomationEngine:
         outcomes = []
         # FR-010: not retried, not queued. A shutter that could not be commanded
         # was not commanded. Each is commanded once, however many targets reach it.
+        actor = Actor("automation", rule.id, rule.name)  # feature 008: the record says which rule
         for result in await commands.apply_many(
-            self.state, resolution.reached, rule.action.kind, rule.action.percent
+            self.state, resolution.reached, rule.action.kind, rule.action.percent, actor
         ):
             via = resolution.via.get(result["id"], [])
             if result["accepted"]:

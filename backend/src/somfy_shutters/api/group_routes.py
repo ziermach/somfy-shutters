@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from .. import commands
-from ..auth.gate import COMMAND, CONFIGURE, WATCH
+from ..auth.gate import COMMAND, CONFIGURE, WATCH, caller_of
 from ..automation.conflicts import conflicts_from_group_change
 from ..groups import Group, GroupDraft, GroupStore, NameTaken, NotAPermutation
 from .rest import TARGET_REQUIRED, CommandBody, many_status
@@ -175,6 +175,6 @@ async def command_group(request: Request, group_id: str, body: CommandBody) -> A
     # member order is how the group is shown, not how it is driven.
     ordered = [sid for sid in request.app.state.settings.shutters if sid in group.members]
     results = await commands.apply_many(
-        request.app.state, ordered, body.action, body.target_percent
+        request.app.state, ordered, body.action, body.target_percent, caller_of(request).actor
     )
     return JSONResponse({"results": results}, status_code=many_status(results))

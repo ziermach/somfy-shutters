@@ -12,7 +12,7 @@ import logging
 import os
 import time
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -20,10 +20,18 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import auth_routes, automation_routes, calibration_routes, group_routes, rest, ws
+from .api import (
+    audit_routes,
+    auth_routes,
+    automation_routes,
+    calibration_routes,
+    group_routes,
+    rest,
+    ws,
+)
 from .auth.audit import AuditLog
-from .auth.gate import Gate, Refused
-from .auth.models import SYSTEM, Actor
+from .auth.gate import Gate, Refused, caller_of, change_of
+from .auth.models import BRIDGE, SYSTEM, Actor
 from .auth.store import AuthStore
 from .automation.clock import ClockGuard
 from .automation.engine import LOCATION_KEY, AutomationEngine
@@ -188,6 +196,27 @@ def create_app(
             runs.note_report(shutter.id, percent)
         await tracker.handle_report(address, percent)
 
+    async def note_observed(event: dict[str, Any]) -> None:
+        """Feature 008, FR-016: what the app learned from the shutter layer instead of
+        asking for it — a report that moved its estimate (a physical remote, another
+        controller), or a movement started elsewhere. The bridge's echo of a movement
+        the app itself started is not recorded; it would drown everything else."""
+        kind = event.get("type")
+        if kind == "movement" and event["movement"].origin.value == "external":
+            detail = {"percent": event["movement"].target_percent, "kind": "movement"}
+        elif kind == "correction":
+            detail = {"percent": event["position"].percent, "kind": "report"}
+        else:
+            return
+        audit.record(
+            BRIDGE,
+            "movement_observed",
+            "accepted",
+            shutter_id=event["shutter_id"],
+            detail=detail,
+            clock_ok=engine.verdict.reliable,
+        )
+
     async def sweep_auth(since: datetime, now: datetime) -> None:
         for credential in auth_store.expired_between(since, now):
             audit.record(
@@ -209,6 +238,7 @@ def create_app(
 
         bus.subscribe(to_clients)
         bus.subscribe(note_confirmable)
+        bus.subscribe(note_observed)
 
         # A reference is kept: a task only referenced by the event loop can be
         # garbage-collected mid-flight.
@@ -272,6 +302,7 @@ def create_app(
                         # Sun times move every day; firings older than 90 days go.
                         engine.reschedule()
                         engine.purge()
+                        audit.purge(utcnow() - timedelta(days=settings.auth.audit_retention_days))
                         last_day = today
                 except Exception:
                     log.exception("automation loop")
@@ -361,9 +392,26 @@ def create_app(
     app.include_router(automation_routes.router)
     app.include_router(group_routes.router)
     app.include_router(auth_routes.router)
+    app.include_router(audit_routes.router)
     app.include_router(ws.router)
     if settings.bridge.kind == "sim":
         app.include_router(rest.sim_router)
+
+    @app.middleware("http")
+    async def record_changes(request: Any, call_next: Any) -> Any:
+        """Feature 008: rules, groups, location and calibration changes in the record."""
+        response = await call_next(request)
+        action = change_of(request, response.status_code)
+        if action is not None:
+            audit.record(
+                caller_of(request).actor,
+                action,
+                "accepted",
+                shutter_id=getattr(request.state, "shutter_id", None),
+                detail={"method": request.method, "path": request.url.path},
+                clock_ok=engine.verdict.reliable,
+            )
+        return response
 
     @app.exception_handler(Refused)
     async def refused(request: Any, exc: Refused) -> JSONResponse:
