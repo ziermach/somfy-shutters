@@ -67,6 +67,23 @@ def travel_curve(progress: float, a: float) -> float:
     return progress**a
 
 
+def to_level(percent: float, a: float) -> float:
+    """What to ask the bridge for, so the shutter physically lands on `percent`.
+
+    The bridge works in time, linearly: level 50 means half a travel time. The
+    window does not respond linearly, so the two coordinates differ and the
+    curve is the transform between them. Applying it only to the animation, as
+    the first version did, left "drive to 50 %" landing wherever the motor's
+    speed profile put it — the display moved and the shutter did not.
+    """
+    return 100 * (max(0.0, min(100.0, percent)) / 100) ** (1 / a)
+
+
+def to_percent(level: float, a: float) -> float:
+    """Where the shutter physically is, given what the bridge was asked for."""
+    return 100 * (max(0.0, min(100.0, level)) / 100) ** a
+
+
 def clamp_curve(a: float) -> float:
     return max(CURVE_MIN, min(CURVE_MAX, a))
 
@@ -74,16 +91,20 @@ def clamp_curve(a: float) -> float:
 def curve_from_answers(answers: list[CheckAnswer]) -> float:
     """Accumulate check answers into one shape parameter.
 
-    "Too high" means the shutter sits lower than the display says, so the
-    display has to show less at the same point in the travel: a grows, because
-    p**a is smaller than p for a > 1.
+    The answers describe **the shutter**, not the display, because that is what
+    the person is looking at. "Zu hoch" means it hangs higher — more open — than
+    the halfway mark the display claims, so the display has to show *more* at
+    the same point in the travel: `a` shrinks, since ``p**a > p`` below 1.
+
+    This was the other way round at first, which converged just as neatly while
+    meaning the opposite of what the buttons say.
     """
     a = CURVE_NEUTRAL
     for answer in answers:
         if answer.answer == "too_high":
-            a += CURVE_STEP
-        elif answer.answer == "too_low":
             a -= CURVE_STEP
+        elif answer.answer == "too_low":
+            a += CURVE_STEP
     return clamp_curve(a)
 
 

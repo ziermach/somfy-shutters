@@ -17,6 +17,7 @@ import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 
+from .calibration import to_level, to_percent
 from .config import Settings
 from .models import (
     Action,
@@ -74,6 +75,10 @@ class Tracker:
         }
         self._movements: dict[str, Movement] = {}
         self._last_report: dict[str, tuple[int, float]] = {}
+        # Which way a shutter last went. A report is in the bridge's level
+        # coordinate and needs a curve to become a percentage; the direction it
+        # last travelled is the one that put it where it is.
+        self._last_direction: dict[str, Direction] = {}
 
     # --- reading -------------------------------------------------------------
 
@@ -90,9 +95,8 @@ class Tracker:
         # it started. Clients animate themselves, this is for late joiners.
         # The curve bends the middle of the travel and leaves the ends exact,
         # so a verified shutter still arrives at 0 % and 100 % on the dot.
-        a = self._curve_a(shutter_id, movement.direction)
         return PositionEstimate(
-            percent=movement.position_at(self._monotonic(), curve_a=a),
+            percent=movement.position_at(self._monotonic()),
             confidence=Confidence.ESTIMATED,
             certain_at=self._positions[shutter_id].certain_at,
             source=Source.COMMAND,
@@ -148,7 +152,12 @@ class Tracker:
 
         direction = Direction.UP if target > from_percent else Direction.DOWN
         full_travel = self._travel_seconds(shutter_id, direction)
-        duration = full_travel * abs(target - from_percent) / 100.0
+        curve_a = self._curve_a(shutter_id, direction)
+        # The motor runs on time, which is the level coordinate — so that is
+        # where the distance has to be measured, not in percentages.
+        start_level = to_level(from_percent, curve_a)
+        end_level = to_level(target, curve_a)
+        duration = full_travel * abs(end_level - start_level) / 100.0
         started = self._clock()
         movement = Movement(
             shutter_id=shutter_id,
@@ -158,14 +167,35 @@ class Tracker:
             started_at=started,
             expected_arrival=started + timedelta(seconds=duration),
             origin=Origin.LOCAL,
+            curve_a=curve_a,
             started_monotonic=self._monotonic(),
             duration_seconds=duration,
         )
         self._movements[shutter_id] = movement
+        self._last_direction[shutter_id] = direction
         # Recorded now, so an interruption mid-travel is recoverable as unknown.
         self._store.save(shutter_id, self._positions[shutter_id], was_moving=True, now=started)
         await self._emit({"type": "movement", "shutter_id": shutter_id, "movement": movement})
         return movement
+
+    def level_for(self, shutter_id: str, target_percent: int) -> int:
+        """What to ask the bridge for, so the shutter lands on `target_percent`.
+
+        Everything the user and the API speak is a physical percentage. The
+        bridge speaks time. This is the one conversion between them.
+        """
+        self._require(shutter_id)
+        current = self.position(shutter_id).percent
+        if current is None:
+            direction = Direction.UP if target_percent == 100 else Direction.DOWN
+        else:
+            direction = Direction.UP if target_percent >= current else Direction.DOWN
+        return round(to_level(target_percent, self._curve_a(shutter_id, direction)))
+
+    def percent_from_level(self, shutter_id: str, level: int) -> int:
+        """A report arrives in the bridge's coordinate; this is what it means."""
+        direction = self._last_direction.get(shutter_id, Direction.UP)
+        return round(to_percent(level, self._curve_a(shutter_id, direction)))
 
     async def stop(self, shutter_id: str) -> PositionEstimate:
         """Halt where it is — not at the original target (FR-016)."""
@@ -231,11 +261,12 @@ class Tracker:
 
     # --- reports from the bridge (FR-017) ------------------------------------
 
-    async def handle_report(self, address: str, percent: int) -> None:
+    async def handle_report(self, address: str, level: int) -> None:
         shutter = self._settings.by_address(address)
         if shutter is None:
             return  # logged once by the adapter
         shutter_id = shutter.id
+        percent = self.percent_from_level(shutter_id, level)
 
         if shutter_id in self._movements:
             # We know exactly when we sent the command; the bridge's timer started

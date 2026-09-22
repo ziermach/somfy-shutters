@@ -185,7 +185,9 @@ async def start_run(request: Request, shutter_id: str) -> JSONResponse:
         return _conflict(exc)
 
     try:
-        await bridge.send_level(tracker.settings.shutters[shutter_id].address, target)
+        await bridge.send_level(
+            tracker.settings.shutters[shutter_id].address, tracker.level_for(shutter_id, target)
+        )
         await tracker.start_movement(shutter_id, target)
     except BridgeUnreachable:
         runs.finish(shutter_id)
@@ -211,7 +213,9 @@ async def home(request: Request, shutter_id: str) -> JSONResponse:
 
     target = nearest_end_stop(tracker.position(shutter_id).percent)
     try:
-        await bridge.send_level(tracker.settings.shutters[shutter_id].address, target)
+        await bridge.send_level(
+            tracker.settings.shutters[shutter_id].address, tracker.level_for(shutter_id, target)
+        )
         movement = await tracker.start_movement(shutter_id, target)
     except BridgeUnreachable:
         return JSONResponse(BRIDGE_UNREACHABLE, status_code=503)
@@ -289,8 +293,9 @@ async def abort_run(request: Request, shutter_id: str) -> JSONResponse:
     # The run is aborted either way; a bridge that cannot take the halt does not
     # change that.
     with contextlib.suppress(BridgeUnreachable):
+        halt_at = current if current is not None else 0
         await bridge.send_level(
-            tracker.settings.shutters[shutter_id].address, current if current is not None else 0
+            tracker.settings.shutters[shutter_id].address, tracker.level_for(shutter_id, halt_at)
         )
     await tracker.stop(shutter_id)
     return JSONResponse({"aborted": True})
@@ -380,7 +385,9 @@ async def start_check(request: Request, shutter_id: str) -> JSONResponse:
         )
 
     try:
-        await bridge.send_level(tracker.settings.shutters[shutter_id].address, 50)
+        await bridge.send_level(
+            tracker.settings.shutters[shutter_id].address, tracker.level_for(shutter_id, 50)
+        )
         movement = await tracker.start_movement(shutter_id, 50)
     except BridgeUnreachable:
         return JSONResponse(BRIDGE_UNREACHABLE, status_code=503)

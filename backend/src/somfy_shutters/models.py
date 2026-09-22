@@ -119,6 +119,9 @@ class Movement(BaseModel):
     started_at: datetime
     expected_arrival: datetime
     origin: Origin = Origin.LOCAL
+    curve_a: float = 1.0
+    """The travel shape this movement was planned with. Carried along so the
+    interpolation needs nothing but the movement itself."""
     # Monotonic clock, so a daylight-saving jump mid-travel cannot distort the
     # animation. The wall-clock fields above are what clients render.
     started_monotonic: float
@@ -129,14 +132,25 @@ class Movement(BaseModel):
             return 1.0
         return min(1.0, max(0.0, (now_monotonic - self.started_monotonic) / self.duration_seconds))
 
-    def position_at(self, now_monotonic: float, curve_a: float = 1.0) -> int:
-        span = self.target_percent - self.from_percent
-        progress = self.progress(now_monotonic)
-        if curve_a != 1.0:
-            from .calibration import travel_curve
+    def position_at(self, now_monotonic: float, curve_a: float | None = None) -> int:
+        """Where the shutter is, in the percentages a person reads.
 
-            progress = travel_curve(progress, curve_a)
-        return round(self.from_percent + span * progress)
+        The motor moves linearly in the bridge's level coordinate, so the
+        interpolation happens there and is converted back. With a neutral curve
+        the two coordinates coincide and this is the straight line of feature 001.
+        """
+        a = self.curve_a if curve_a is None else curve_a
+        progress = self.progress(now_monotonic)
+        if a == 1.0:
+            span = self.target_percent - self.from_percent
+            return round(self.from_percent + span * progress)
+
+        from .calibration import to_level, to_percent
+
+        start_level = to_level(self.from_percent, a)
+        end_level = to_level(self.target_percent, a)
+        level = start_level + (end_level - start_level) * progress
+        return round(to_percent(level, a))
 
     def is_done(self, now_monotonic: float) -> bool:
         return self.progress(now_monotonic) >= 1.0

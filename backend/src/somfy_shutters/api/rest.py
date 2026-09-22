@@ -51,13 +51,17 @@ async def _apply(request: Request, shutter_id: str, body: CommandBody) -> dict[s
         # hardware bring-up has to confirm the motor halts crisply.
         current = tracker.position(shutter_id)
         target = current.percent if current.percent is not None else 0
-        await bridge.send_level(tracker.settings.shutters[shutter_id].address, target)
+        await bridge.send_level(
+            tracker.settings.shutters[shutter_id].address, tracker.level_for(shutter_id, target)
+        )
         await tracker.stop(shutter_id)
         return {"accepted": True, "movement": None}
 
     target = tracker.plan(shutter_id, action, body.target_percent)
     assert target is not None
-    await bridge.send_level(tracker.settings.shutters[shutter_id].address, target)
+    await bridge.send_level(
+        tracker.settings.shutters[shutter_id].address, tracker.level_for(shutter_id, target)
+    )
     movement = await tracker.start_movement(shutter_id, target)
     log.info("command %s on %s -> %s%%", body.action, shutter_id, target)
     return {"accepted": True, "movement": movement_json(movement)}
@@ -161,7 +165,9 @@ async def resync(request: Request, shutter_id: str) -> JSONResponse:
     target = tracker.nearest_end_stop(shutter_id)
     bridge = request.app.state.bridge
     try:
-        await bridge.send_level(tracker.settings.shutters[shutter_id].address, target)
+        await bridge.send_level(
+            tracker.settings.shutters[shutter_id].address, tracker.level_for(shutter_id, target)
+        )
         movement = await tracker.start_movement(shutter_id, target)
     except BridgeUnreachable:
         return JSONResponse({"accepted": False, **BRIDGE_UNREACHABLE}, status_code=503)
@@ -193,6 +199,9 @@ sim_router = APIRouter(prefix="/api/sim")
 class ReportBody(BaseModel):
     shutter_id: str
     percent: int = Field(ge=0, le=100)
+    """The bridge's level, which is what a real report carries. Named percent
+    because that is what it is called on the wire; the two coincide only when
+    the travel curve is neutral."""
 
 
 @sim_router.post("/bridge/{state}")
@@ -243,4 +252,8 @@ async def sim_report(request: Request, body: ReportBody) -> dict[str, Any]:
     # the same entry point the bridge's reports use, so a report injected here
     # disturbs a measurement exactly as a real one would
     await request.app.state.on_report(address, body.percent)
-    return {"applied": True, "position": shutter_json(body.shutter_id, tracker)["position"]}
+    return {
+        "applied": True,
+        "as_percent": tracker.percent_from_level(body.shutter_id, body.percent),
+        "position": shutter_json(body.shutter_id, tracker)["position"],
+    }

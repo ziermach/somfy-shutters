@@ -218,8 +218,14 @@ end stops stay exactly right.
 
 - **FR-023**: Users MUST be able to run a check that drives a calibrated shutter to its
   displayed midpoint and asks whether it appears halfway.
-- **FR-024**: An answer of "too high" or "too low" MUST shift the mid-travel display
-  toward what was reported, by a bounded amount per answer.
+- **FR-024**: An answer of "too high" or "too low" MUST shift the mid-travel position
+  toward what was reported, by a bounded amount per answer — **both what is displayed
+  and where the shutter physically comes to rest**. Shifting only the display leaves
+  "drive to 50 %" landing wherever the motor's speed profile puts it, however many times
+  the user answers.
+- **FR-024a**: The answers MUST describe the shutter as the person sees it. "Too high"
+  means the shutter hangs higher than the mark the display claims, not that the displayed
+  number is too large.
 - **FR-025**: No number of checks may change where the display reaches 0 % or 100 %.
 - **FR-026**: Users MUST be able to undo the effect of checks, returning to the measured
   values alone.

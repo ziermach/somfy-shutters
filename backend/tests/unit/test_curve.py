@@ -79,22 +79,23 @@ def answers(*replies: CheckReply) -> list[CheckAnswer]:
     return [CheckAnswer(shutter_id="wohnzimmer", direction=Direction.UP, answer=r) for r in replies]
 
 
-def test_answers_move_the_display_the_way_the_person_reported() -> None:
-    """ "Too high" means the shutter sits lower than shown, so the display must show less."""
+def test_answers_describe_the_shutter_not_the_display() -> None:
+    """ "Zu hoch" means the shutter hangs higher than the halfway mark the display
+    claims, so the display has to show more at that point in the travel."""
     higher = curve_from_answers(answers(CheckReply.TOO_HIGH))
-    assert higher > CURVE_NEUTRAL
-    assert travel_curve(0.5, higher) < 0.5
+    assert higher < CURVE_NEUTRAL
+    assert travel_curve(0.5, higher) > 0.5, "the display has to catch up upwards"
 
     lower = curve_from_answers(answers(CheckReply.TOO_LOW))
-    assert lower < CURVE_NEUTRAL
-    assert travel_curve(0.5, lower) > 0.5
+    assert lower > CURVE_NEUTRAL
+    assert travel_curve(0.5, lower) < 0.5
 
     assert curve_from_answers(answers(CheckReply.ABOUT_RIGHT)) == CURVE_NEUTRAL
 
 
 def test_answers_cannot_escape_the_bounds() -> None:
     a = curve_from_answers(answers(*([CheckReply.TOO_HIGH] * 40)))
-    assert a == CURVE_MAX
+    assert a == CURVE_MIN
     assert travel_curve(0.0, a) == 0.0
     assert travel_curve(1.0, a) == 1.0
 
