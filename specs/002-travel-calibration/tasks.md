@@ -31,16 +31,16 @@ or plain storage, which is why the tests below are cheap.
 
 **⚠️ No story work before this phase is done.**
 
-- [ ] T001 [P] Add `MeasurementRun`, `Calibration`, `ActiveRun` and `CheckAnswer` to `backend/src/somfy_shutters/models.py` per [data-model.md](./data-model.md), with `direction` one of `up`/`down`, `kind` one of `guided`/`confirmed`, and `rejected` holding a reason string or null
-- [ ] T002 [P] Implement `backend/src/somfy_shutters/calibration.py`: median over valid runs (**FR-013: median, never mean**), the plausibility band (**reject outside 0.5× to 2× the established value**), and the rejection reasons `dead_after_arrival`, `too_short`, `implausible`, `disturbed`, `abandoned`
-- [ ] T003 [P] Implement the curve in `backend/src/somfy_shutters/calibration.py`: `position(p) = p − k·sin(2πp)/2π` with `k` bounded to **±0.8**, and a step of **0.1 per check answer**
-- [ ] T004 [P] Unit-test the curve invariants in `backend/tests/unit/test_curve.py`: for every `k` in the band, `f(0) == 0` and `f(1) == 1` **exactly**, the curve is monotonic, and one step moves mid-travel by 1.6 points — these are what make FR-025 safe by construction rather than by clamping
-- [ ] T005 [P] Unit-test medians and rejection in `backend/tests/unit/test_calibration_math.py`: three runs yield the middle one, a late outlier does not move the value, each rejection reason fires on its own rule
-- [ ] T006 Implement `backend/src/somfy_shutters/calibration_store.py`: the `measurement_run` table in the existing SQLite file, and reading and writing `config/calibration.toml` in the shape from [data-model.md](./data-model.md)
-- [ ] T007 Extend `backend/src/somfy_shutters/config.py` with the precedence chain **manual in `shutters.toml` > measured in `calibration.toml` > `default_travel_seconds`**, exposing which layer a value came from
-- [ ] T008 [P] Unit-test precedence in `backend/tests/unit/test_calibration_precedence.py`: a manual value wins over a measurement and is never overwritten, a measurement wins over the default, and the reported `source` matches
-- [ ] T009 Make `travel_seconds()` in `backend/src/somfy_shutters/tracker.py` use the precedence chain, and apply `curve_k` in the movement interpolation — **the two places this feature touches feature 001**
-- [ ] T010 Ensure a calibrated shutter's position stays `estimated` between end stops in `backend/src/somfy_shutters/tracker.py`, and assert it in `backend/tests/unit/test_calibration_confidence.py` — **calibration improves the estimate, never the confidence** (constitution III)
+- [X] T001 [P] Add `MeasurementRun`, `Calibration`, `ActiveRun` and `CheckAnswer` to `backend/src/somfy_shutters/models.py` per [data-model.md](./data-model.md), with `direction` one of `up`/`down`, `kind` one of `guided`/`confirmed`, and `rejected` holding a reason string or null
+- [X] T002 [P] Implement `backend/src/somfy_shutters/calibration.py`: median over valid runs (**FR-013: median, never mean**), the plausibility band (**reject outside 0.5× to 2× the established value**), and the rejection reasons `dead_after_arrival`, `too_short`, `implausible`, `disturbed`, `abandoned`
+- [X] T003 [P] Implement the curve in `backend/src/somfy_shutters/calibration.py`: `position(p) = p − k·sin(2πp)/2π` with `k` bounded to **±0.8**, and a step of **0.1 per check answer**
+- [X] T004 [P] Unit-test the curve invariants in `backend/tests/unit/test_curve.py`: for every `k` in the band, `f(0) == 0` and `f(1) == 1` **exactly**, the curve is monotonic, and one step moves mid-travel by 1.6 points — these are what make FR-025 safe by construction rather than by clamping
+- [X] T005 [P] Unit-test medians and rejection in `backend/tests/unit/test_calibration_math.py`: three runs yield the middle one, a late outlier does not move the value, each rejection reason fires on its own rule
+- [X] T006 Implement `backend/src/somfy_shutters/calibration_store.py`: the `measurement_run` table in the existing SQLite file, and reading and writing `config/calibration.toml` in the shape from [data-model.md](./data-model.md)
+- [X] T007 Extend `backend/src/somfy_shutters/config.py` with the precedence chain **manual in `shutters.toml` > measured in `calibration.toml` > `default_travel_seconds`**, exposing which layer a value came from
+- [X] T008 [P] Unit-test precedence in `backend/tests/unit/test_calibration_precedence.py`: a manual value wins over a measurement and is never overwritten, a measurement wins over the default, and the reported `source` matches
+- [X] T009 Make `travel_seconds()` in `backend/src/somfy_shutters/tracker.py` use the precedence chain, and apply `curve_k` in the movement interpolation — **the two places this feature touches feature 001**
+- [X] T010 Ensure a calibrated shutter's position stays `estimated` between end stops in `backend/src/somfy_shutters/tracker.py`, and assert it in `backend/tests/unit/test_calibration_confidence.py` — **calibration improves the estimate, never the confidence** (constitution III)
 
 **Checkpoint**: values flow through to the animation; nothing measures yet.
 

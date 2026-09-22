@@ -57,8 +57,12 @@ class Tracker:
         emit: Callable[[dict], Awaitable[None]],
         monotonic: Callable[[], float] = time.monotonic,
         clock: Callable[[], datetime] = utcnow,
+        calibration: object | None = None,
     ) -> None:
         self._settings = settings
+        # Feature 002. Absent, the tracker behaves exactly as feature 001 did:
+        # configured value or default, and a linear travel.
+        self._calibration = calibration
         self._store = store
         self._emit = emit
         self._monotonic = monotonic
@@ -84,8 +88,11 @@ class Tracker:
             return self._positions[shutter_id]
         # While travelling the live value is interpolated; the stored one is where
         # it started. Clients animate themselves, this is for late joiners.
+        # The curve bends the middle of the travel and leaves the ends exact,
+        # so a verified shutter still arrives at 0 % and 100 % on the dot.
+        k = self._curve_k(shutter_id, movement.direction)
         return PositionEstimate(
-            percent=movement.position_at(self._monotonic()),
+            percent=movement.position_at(self._monotonic(), curve_k=k),
             confidence=Confidence.ESTIMATED,
             certain_at=self._positions[shutter_id].certain_at,
             source=Source.COMMAND,
@@ -93,6 +100,18 @@ class Tracker:
 
     def movement(self, shutter_id: str) -> Movement | None:
         return self._movements.get(shutter_id)
+
+    def _travel_seconds(self, shutter_id: str, direction: Direction) -> float:
+        """Manual value, else measured, else the default (feature 002)."""
+        if self._calibration is not None:
+            return self._calibration.travel_seconds(shutter_id, direction)
+        return self._settings.travel_seconds(shutter_id, direction.value)
+
+    def _curve_k(self, shutter_id: str, direction: Direction) -> float:
+        """The verification shape. Zero means the linear travel of feature 001."""
+        if self._calibration is not None:
+            return self._calibration.curve_k(shutter_id, direction)
+        return 0.0
 
     def _require(self, shutter_id: str) -> None:
         if shutter_id not in self._settings.shutters:
@@ -128,7 +147,7 @@ class Tracker:
             return None
 
         direction = Direction.UP if target > from_percent else Direction.DOWN
-        full_travel = self._settings.travel_seconds(shutter_id, direction.value)
+        full_travel = self._travel_seconds(shutter_id, direction)
         duration = full_travel * abs(target - from_percent) / 100.0
         started = self._clock()
         movement = Movement(

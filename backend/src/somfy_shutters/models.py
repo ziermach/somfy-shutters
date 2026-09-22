@@ -129,9 +129,14 @@ class Movement(BaseModel):
             return 1.0
         return min(1.0, max(0.0, (now_monotonic - self.started_monotonic) / self.duration_seconds))
 
-    def position_at(self, now_monotonic: float) -> int:
+    def position_at(self, now_monotonic: float, curve_k: float = 0.0) -> int:
         span = self.target_percent - self.from_percent
-        return round(self.from_percent + span * self.progress(now_monotonic))
+        progress = self.progress(now_monotonic)
+        if curve_k:
+            from .calibration import travel_curve
+
+            progress = travel_curve(progress, curve_k)
+        return round(self.from_percent + span * progress)
 
     def is_done(self, now_monotonic: float) -> bool:
         return self.progress(now_monotonic) >= 1.0
@@ -156,3 +161,61 @@ class Command(BaseModel):
 class BridgeStatus(BaseModel):
     connected: bool
     kind: Literal["mqtt", "sim"]
+
+
+class RunKind(StrEnum):
+    GUIDED = "guided"
+    """Two presses in the calibration wizard."""
+
+    CONFIRMED = "confirmed"
+    """One tap after an ordinary travel — the cheapest observation that exists."""
+
+
+class CheckReply(StrEnum):
+    TOO_HIGH = "too_high"
+    ABOUT_RIGHT = "about_right"
+    TOO_LOW = "too_low"
+
+
+class MeasurementRun(BaseModel):
+    """One observed travel. Rejected runs are kept, not discarded: the user is
+    shown why a run did not count (FR-012)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    shutter_id: str
+    direction: Direction
+    dead_seconds: float = Field(ge=0)
+    total_seconds: float = Field(gt=0)
+    recorded_at: datetime = Field(default_factory=utcnow)
+    kind: RunKind = RunKind.GUIDED
+    rejected: str | None = None
+    id: int | None = None
+
+    @property
+    def counts(self) -> bool:
+        return self.rejected is None
+
+
+class Calibration(BaseModel):
+    """What the system currently believes about one shutter and direction."""
+
+    model_config = ConfigDict(frozen=True)
+
+    travel_seconds: float = Field(ge=1, le=600)
+    dead_seconds: float = Field(default=0.0, ge=0)
+    runs: int = Field(default=0, ge=0)
+    curve_k: float = Field(default=0.0, ge=-0.8, le=0.8)
+    updated_at: datetime | None = None
+    source: Literal["manual", "measured", "default"] = "default"
+
+
+class CheckAnswer(BaseModel):
+    """One verification response. Stored so the effect can be undone (FR-026)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    shutter_id: str
+    direction: Direction
+    answer: CheckReply
+    recorded_at: datetime = Field(default_factory=utcnow)

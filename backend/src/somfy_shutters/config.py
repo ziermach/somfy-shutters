@@ -88,11 +88,23 @@ class Settings(BaseModel):
         wanted = address.strip().lower()
         return next((s for s in self.shutter if s.address == wanted), None)
 
-    def travel_seconds(self, shutter_id: str, direction: str) -> float:
-        """Measured value where there is one, the stated default otherwise (FR-015)."""
+    def manual_travel_seconds(self, shutter_id: str, direction: str) -> float | None:
+        """What a person typed into shutters.toml, or None.
+
+        This is the top of the precedence chain: a hand-written value beats any
+        measurement, and the app never writes this file.
+        """
         shutter = self.shutters[shutter_id]
-        measured = shutter.travel_up_seconds if direction == "up" else shutter.travel_down_seconds
-        return measured if measured is not None else self.general.default_travel_seconds
+        return shutter.travel_up_seconds if direction == "up" else shutter.travel_down_seconds
+
+    def travel_seconds(self, shutter_id: str, direction: str) -> float:
+        """Hand-written value where there is one, the stated default otherwise.
+
+        Feature 002 layers measurements between the two; a tracker given a
+        calibration service consults that instead of calling this directly.
+        """
+        manual = self.manual_travel_seconds(shutter_id, direction)
+        return manual if manual is not None else self.general.default_travel_seconds
 
 
 class ConfigError(RuntimeError):
