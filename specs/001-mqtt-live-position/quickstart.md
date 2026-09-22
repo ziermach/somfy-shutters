@@ -148,8 +148,8 @@ snapshot, and is correct within 5 s. No reload.
 
 **S3.3 Lost radio command**
 
-Set `loss_rate = 0.5` in the simulator config. Roughly half the commands never reach the
-motor. The app animates anyway — it cannot know — and the discrepancy resolves at the
+`POST /api/sim/loss {"rate": 0.5}` (simulator only). Roughly half the commands never
+reach the motor. The app animates anyway — it cannot know — and the discrepancy resolves at the
 next end stop. This scenario exists to confirm the app does not pretend to detect it.
 
 **S3.4 Reconnect backoff (FR-023)**

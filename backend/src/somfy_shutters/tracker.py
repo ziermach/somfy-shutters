@@ -134,6 +134,20 @@ class Tracker:
             return self._calibration.travel_seconds(shutter_id, direction)
         return self._settings.travel_seconds(shutter_id, direction.value)
 
+    def is_calibrated(self, shutter_id: str) -> bool:
+        """Both directions have a real travel time — typed in or measured.
+
+        Feature 001 only knew typed-in values; a shutter measured with feature 002
+        read "Laufzeit nicht gemessen" on the overview while the calibration screen
+        said "gemessen, 6 Läufe".
+        """
+        if self._calibration is None:
+            return self._settings.shutters[shutter_id].calibrated
+        return all(
+            self._calibration.effective(shutter_id, d).source != "default"
+            for d in (Direction.UP, Direction.DOWN)
+        )
+
     def _curve_a(self, shutter_id: str, direction: Direction) -> float:
         """The verification shape. One means the linear travel of feature 001."""
         if self._calibration is not None:

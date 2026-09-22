@@ -196,6 +196,21 @@ async def sim_bridge(request: Request, state: Literal["offline", "online"]) -> d
     return {"connected": bridge.connected}
 
 
+class LossBody(BaseModel):
+    rate: float = Field(ge=0, le=1)
+
+
+@sim_router.post("/loss")
+async def sim_loss(request: Request, body: LossBody) -> dict[str, Any]:
+    """Drop this share of commands in the air, silently (quickstart S3.3).
+
+    One-way radio cannot tell a lost command from a delivered one; this is how to
+    watch the app not pretend otherwise.
+    """
+    request.app.state.bridge.loss_rate = body.rate
+    return {"loss_rate": body.rate}
+
+
 @sim_router.get("/truth")
 async def sim_truth(request: Request) -> dict[str, Any]:
     """What the simulated windows actually do.

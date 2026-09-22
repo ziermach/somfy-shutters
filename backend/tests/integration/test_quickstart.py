@@ -206,6 +206,9 @@ async def test_c3_2_end_points_are_untouchable(client) -> None:
 
     # The check drove down from the end of the guided run, so that is the
     # curve the answers bent — and the travel to test the end points on.
+    # The last check drive may still be travelling, and a report during our own
+    # travel is ignored by design; halt it first or "park" does nothing.
+    await client.app.state.tracker.stop("flink")
     await park(client, 100)
     await client.post("/api/shutters/flink/command", json={"action": "close"})
     tracker = client.app.state.tracker

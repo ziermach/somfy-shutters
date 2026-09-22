@@ -138,3 +138,10 @@ async def test_no_endpoint_ever_returns_a_percent_without_a_confidence(client) -
             position = shutter["position"]
             assert "confidence" in position
             assert position["confidence"] in {"certain", "estimated", "unknown"}
+
+
+async def test_a_measured_shutter_reads_as_calibrated_on_the_overview(client) -> None:
+    """The overview and the calibration screen must agree about "gemessen"."""
+    assert (await client.get("/api/shutters/flink")).json()["calibrated"] is True
+    client.app.state.calibration.clear("flink")
+    assert (await client.get("/api/shutters/flink")).json()["calibrated"] is False

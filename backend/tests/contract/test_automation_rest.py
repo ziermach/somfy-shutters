@@ -268,3 +268,9 @@ def test_sim_clock_forces_the_verdict_and_returns_to_the_real_check(client) -> N
     assert client.get("/api/automations").json()["clock"]["reliable"] is False
     back = client.post("/api/sim/clock", json={"reliable": None}).json()
     assert back["clock_reliable"] is True
+
+
+def test_sim_loss_rate_can_be_set_and_is_bounded(client) -> None:
+    assert client.post("/api/sim/loss", json={"rate": 0.5}).json() == {"loss_rate": 0.5}
+    assert client.app.state.bridge.loss_rate == 0.5
+    assert client.post("/api/sim/loss", json={"rate": 1.5}).status_code == 422

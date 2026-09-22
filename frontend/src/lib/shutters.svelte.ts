@@ -86,6 +86,7 @@ class ShutterState {
     socket.onmessage = (event) => this.#apply(JSON.parse(event.data) as Frame);
     socket.onclose = () => {
       this.connected = false;
+      this.freeze();
       if (!this.#closing) this.#reconnect();
     };
     socket.onerror = () => socket.close();
@@ -162,6 +163,24 @@ class ShutterState {
 
   #patch(id: string, change: (shutter: Shutter) => Shutter): void {
     this.shutters = this.shutters.map((s) => (s.id === id ? change(s) : s));
+  }
+
+  /**
+   * The connection is gone: stop every animation where it stands (contracts/websocket.md,
+   * FR-022). Without the server nobody knows whether the travel continued, stopped, or
+   * was overridden, so the graphic must not go on pretending. The position stays as an
+   * estimate; the snapshot on reconnect replaces it.
+   */
+  freeze(now: number = Date.now()): void {
+    this.shutters = this.shutters.map((s) =>
+      s.movement
+        ? {
+            ...s,
+            movement: null,
+            position: { ...s.position, percent: interpolate(s.movement, now), confidence: 'estimated', source: 'command' }
+          }
+        : s
+    );
   }
 
   /** Stop animating a shutter that has arrived, until the server confirms. */

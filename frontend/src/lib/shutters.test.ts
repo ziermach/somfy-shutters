@@ -64,3 +64,15 @@ describe('the animation clock', () => {
     expect(shutters.livePercent(shutter(0, opening))).toBe(80);
   });
 });
+
+describe('losing the connection', () => {
+  it('freezes a travelling shutter where it stands, as an estimate', () => {
+    shutters.shutters = [shutter(0, opening), shutter(100)];
+    shutters.freeze(Date.parse('2026-09-22T10:00:04.000Z'));
+    const [moving, resting] = shutters.shutters;
+    expect(moving.movement).toBeNull();
+    expect(moving.position.percent).toBe(40);
+    expect(moving.position.confidence).toBe('estimated');
+    expect(resting.position.confidence).toBe('certain');
+  });
+});

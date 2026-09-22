@@ -45,7 +45,7 @@ def shutter_json(shutter_id: str, tracker: Tracker, runs: Any = None) -> dict[st
     return {
         "id": config.id,
         "name": config.name,
-        "calibrated": config.calibrated,
+        "calibrated": tracker.is_calibrated(shutter_id),
         "travel_up_seconds": config.travel_up_seconds,
         "travel_down_seconds": config.travel_down_seconds,
         "position": position_json(tracker.position(shutter_id), tracker),
