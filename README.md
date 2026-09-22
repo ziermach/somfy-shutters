@@ -26,7 +26,7 @@ shutter stands, and automations that run on the house's own network.
 | ✅ | Open, close, stop and drive to a position, on one shutter or all of them |
 | ✅ | Animation at the shutter's real travel speed, starting the moment you tap |
 | ✅ | Every position states whether it is certain, estimated or unknown, and how old that is |
-| ✅ | Live updates to every open client; reconnect with backoff after any interruption |
+| ✅ | Live updates to every open client; reconnect with backoff after any interruption, and no animation carries on while disconnected |
 | ✅ | A simulated house with soft start and non-linear travel, so it develops without hardware |
 | ✅ | Guided travel-time calibration: two presses per trip, median over runs, per direction |
 | ✅ | One-tap confirmation after an ordinary trip, so the times stay true without a wizard |
@@ -40,7 +40,7 @@ shutter stands, and automations that run on the house's own network.
 | ✅ | Installable as an app; opens without the backend and says positions are not current; updates reach every phone |
 | ⬜ | Anything confirmed on a real motor |
 
-457 backend and 41 frontend tests, against the real API surface, the tracker's rules,
+459 backend and 42 frontend tests, against the real API surface, the tracker's rules,
 the calibration arithmetic, and the simulated house end to end.
 
 ## The problem this project takes seriously
@@ -125,7 +125,8 @@ unit and backups, is [`deploy/README.md`](deploy/README.md); the validation scen
 reconciliation cases, are in the quickstarts of
 [001](specs/001-mqtt-live-position/quickstart.md),
 [002](specs/002-travel-calibration/quickstart.md) and
-[003](specs/003-shutter-automations/quickstart.md) — most of them automated.
+[003](specs/003-shutter-automations/quickstart.md) — most of them automated, and all of
+001's walked once more in the browser against the simulator.
 
 The simulator is not a stub. It gives each window a soft-start dead time, a non-linear
 travel curve and different speeds up and down — none of it visible through the port the
@@ -228,8 +229,8 @@ recalibration with no user involvement, and
 [CLAUDE.md](CLAUDE.md) for conventions and build commands.
 
 ```bash
-cd backend && .venv/bin/python -m pytest       # 457 tests
-cd frontend && npx vitest run                  # 41 tests
+cd backend && .venv/bin/python -m pytest       # 459 tests
+cd frontend && npx vitest run                  # 42 tests
 cd frontend && npx svelte-check --tsconfig ./tsconfig.json
 ```
 
@@ -243,8 +244,8 @@ The software is built so that answering them changes configuration, not code:
 2. **Per-window travel times**, up and down separately. Read from `shutters.toml`; a
    shutter with none still animates, on a stated default, and is marked uncalibrated.
 3. **Radio range** to the furthest window, antenna attached. A command lost in the air
-   is indistinguishable from one delivered — the simulator can reproduce that with a
-   loss rate.
+   is indistinguishable from one delivered — the simulator reproduces that with
+   `POST /api/sim/loss {"rate": 0.5}`.
 4. Whether **CC1101 receive mode** gets enabled, which tracks physical remotes. Without
    it, drift from manual use is invisible and the age of the estimate is all the app can
    offer.
