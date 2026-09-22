@@ -109,6 +109,18 @@ async def command_one(request: Request, shutter_id: str, body: CommandBody) -> J
                 "detail": None,
             },
         )
+    # A command now would ruin the measurement in progress, and the user should
+    # be told so rather than have it silently swallowed (FR-028).
+    if getattr(request.app.state, "runs", None) and request.app.state.runs.is_measuring(shutter_id):
+        return JSONResponse(
+            {
+                "accepted": False,
+                "error": "measurement_in_progress",
+                "message": "Für diesen Rolladen läuft gerade eine Messung.",
+                "detail": None,
+            },
+            status_code=409,
+        )
     if body.action == "position" and body.target_percent is None:
         raise HTTPException(
             422,
@@ -201,5 +213,7 @@ async def sim_report(request: Request, body: ReportBody) -> dict[str, Any]:
             404, detail={"error": "unknown_shutter", "message": "unbekannt", "detail": None}
         )
     address = tracker.settings.shutters[body.shutter_id].address
-    await tracker.handle_report(address, body.percent)
+    # the same entry point the bridge's reports use, so a report injected here
+    # disturbs a measurement exactly as a real one would
+    await request.app.state.on_report(address, body.percent)
     return {"applied": True, "position": shutter_json(body.shutter_id, tracker)["position"]}

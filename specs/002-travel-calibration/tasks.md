@@ -54,18 +54,18 @@ or plain storage, which is why the tests below are cheap.
 
 ### Tests for User Story 1
 
-- [ ] T011 [P] [US1] Contract test `backend/tests/contract/test_calibration_rest.py`: shapes for `GET /api/calibration`, `POST /api/calibration/{id}/run`, `/mark`, `/home`, including **409 `not_at_end_stop` carrying `suggested_target`** and a rejected run returning **200 with a reason, not an error**
-- [ ] T012 [P] [US1] Integration test `backend/tests/integration/test_guided_run.py`: a full run recorded end to end, direction alternating on the next run, and the abandon timeout at twice the expected travel
-- [ ] T013 [P] [US1] Convergence test `backend/tests/integration/test_convergence.py`: simulate three runs per direction **with jittered reaction times, not perfect presses**, and assert the median lands within a second of the simulator's hidden travel time
+- [X] T011 [P] [US1] Contract test `backend/tests/contract/test_calibration_rest.py`: shapes for `GET /api/calibration`, `POST /api/calibration/{id}/run`, `/mark`, `/home`, including **409 `not_at_end_stop` carrying `suggested_target`** and a rejected run returning **200 with a reason, not an error**
+- [X] T012 [P] [US1] Integration test `backend/tests/integration/test_guided_run.py`: a full run recorded end to end, direction alternating on the next run, and the abandon timeout at twice the expected travel
+- [X] T013 [P] [US1] Convergence test `backend/tests/integration/test_convergence.py`: simulate three runs per direction **with jittered reaction times, not perfect presses**, and assert the median lands within a second of the simulator's hidden travel time
 
 ### Implementation for User Story 1
 
-- [ ] T014 [US1] Implement the run state machine in `backend/src/somfy_shutters/calibration.py`: start requires an end stop (**FR-002**), phases `waiting_for_movement` then `timing`, timestamps taken **server-side on a monotonic clock** so a client clock and a daylight-saving jump cannot corrupt a measurement
-- [ ] T015 [US1] Mark a run `disturbed` in `backend/src/somfy_shutters/calibration.py` when a command or report for that shutter arrives from elsewhere (**FR-029**; undetectable for a physical remote with receive off — the plausibility band catches those, see [research.md §4](./research.md))
-- [ ] T016 [US1] Implement `POST /api/calibration/{id}/run`, `/mark`, `/home` and `DELETE …/run` in `backend/src/somfy_shutters/api/rest.py` per [contracts/rest.md](./contracts/rest.md); the homing drive must **not** be recorded as a measurement (**FR-003**)
-- [ ] T017 [US1] Implement `GET /api/calibration` and `DELETE /api/calibration/{id}` in `backend/src/somfy_shutters/api/rest.py`, returning per-direction values, run counts, `source` and `updated_at`
-- [ ] T018 [US1] Block other commands to a shutter under measurement in `backend/src/somfy_shutters/api/rest.py`, with a stated reason rather than a silent refusal (**FR-028**)
-- [ ] T019 [US1] Broadcast the `calibration` frame from `backend/src/somfy_shutters/api/ws.py` when a stored value changes, so other clients stop animating on the old timing (**FR-017**)
+- [X] T014 [US1] Implement the run state machine in `backend/src/somfy_shutters/calibration.py`: start requires an end stop (**FR-002**), phases `waiting_for_movement` then `timing`, timestamps taken **server-side on a monotonic clock** so a client clock and a daylight-saving jump cannot corrupt a measurement
+- [X] T015 [US1] Mark a run `disturbed` in `backend/src/somfy_shutters/calibration.py` when a command or report for that shutter arrives from elsewhere (**FR-029**; undetectable for a physical remote with receive off — the plausibility band catches those, see [research.md §4](./research.md))
+- [X] T016 [US1] Implement `POST /api/calibration/{id}/run`, `/mark`, `/home` and `DELETE …/run` in `backend/src/somfy_shutters/api/rest.py` per [contracts/rest.md](./contracts/rest.md); the homing drive must **not** be recorded as a measurement (**FR-003**)
+- [X] T017 [US1] Implement `GET /api/calibration` and `DELETE /api/calibration/{id}` in `backend/src/somfy_shutters/api/rest.py`, returning per-direction values, run counts, `source` and `updated_at`
+- [X] T018 [US1] Block other commands to a shutter under measurement in `backend/src/somfy_shutters/api/rest.py`, with a stated reason rather than a silent refusal (**FR-028**)
+- [X] T019 [US1] Broadcast the `calibration` frame from `backend/src/somfy_shutters/api/ws.py` when a stored value changes, so other clients stop animating on the old timing (**FR-017**)
 - [ ] T020 [P] [US1] Implement the run state machine client-side in `frontend/src/lib/calibration.svelte.ts`: elapsed time, which press is expected next, and the two `mark` calls
 - [ ] T021 [P] [US1] Build `frontend/src/components/RunTable.svelte`: runs with dead time, total and verdict; **rejected runs struck through with their reason, not hidden** (**FR-012**)
 - [ ] T022 [US1] Build `frontend/src/routes/Calibration.svelte`: every shutter with its state — calibrated, partly measured, never measured, or manual — and when its value last changed (**FR-015**, **SC-006**)

@@ -18,10 +18,12 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import rest, ws
+from .api import calibration_routes, rest, ws
 from .bridge.base import ShutterBridge
 from .bridge.mqtt import MqttBridge
 from .bridge.sim import SimBridge
+from .calibration import RunRegistry
+from .calibration_store import CalibrationService, CalibrationStore
 from .config import Settings, load_settings
 from .events import EventBus
 from .store import Store
@@ -36,6 +38,7 @@ this only decides when the model catches up — not how smooth anything looks.""
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CONFIG = REPO_ROOT / "config" / "shutters.toml"
 DEFAULT_DB = REPO_ROOT / "config" / "state.db"
+DEFAULT_CALIBRATION = REPO_ROOT / "config" / "calibration.toml"
 FRONTEND_DIST = REPO_ROOT / "frontend" / "dist"
 
 
@@ -57,6 +60,7 @@ def create_app(
     *,
     store: Store | None = None,
     bridge: ShutterBridge | None = None,
+    calibration_store: CalibrationStore | None = None,
 ) -> FastAPI:
     settings = settings or load_settings(os.environ.get("SHUTTERS_CONFIG", DEFAULT_CONFIG))
     bridge = bridge or build_bridge(settings)
@@ -67,7 +71,32 @@ def create_app(
     async def emit(event: dict[str, Any]) -> None:
         await bus.publish(event)
 
-    tracker = Tracker(settings, store, emit=emit)
+    if calibration_store is None:
+        # Follow the store we were given. Defaulting to the configured path here
+        # would have tests writing into the real database beside the live one.
+        db_path = store.path
+        toml_path = (
+            Path(os.environ["SHUTTERS_CALIBRATION"])
+            if "SHUTTERS_CALIBRATION" in os.environ
+            else db_path.parent / "calibration.toml"
+        )
+        calibration_store = CalibrationStore(db_path, toml_path)
+    calibration = CalibrationService(settings, calibration_store)
+    runs = RunRegistry()
+
+    tracker = Tracker(settings, store, emit=emit, calibration=calibration)
+
+    async def on_report(address: str, percent: int) -> None:
+        """Every report goes through here, from the bridge or from the simulator.
+
+        A report for a shutter under measurement means somebody else is driving
+        it — a physical remote, most likely. The run cannot be trusted and is
+        marked rather than silently recorded (FR-029).
+        """
+        shutter = settings.by_address(address)
+        if shutter is not None and runs.is_measuring(shutter.id):
+            runs.disturb(shutter.id)
+        await tracker.handle_report(address, percent)
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -94,7 +123,7 @@ def create_app(
 
         async def pump_reports() -> None:
             async for report in bridge.reports():
-                await tracker.handle_report(report.address, report.percent)
+                await on_report(report.address, report.percent)
 
         async def pump_ticks() -> None:
             while True:
@@ -111,6 +140,7 @@ def create_app(
             await asyncio.gather(*tasks, return_exceptions=True)
             await bridge.stop()
             store.close()
+            calibration_store.close()
 
     app = FastAPI(title="somfy-shutters", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
@@ -119,8 +149,13 @@ def create_app(
     app.state.store = store
     app.state.bus = bus
     app.state.hub = hub
+    app.state.calibration = calibration
+    app.state.calibration_store = calibration_store
+    app.state.runs = runs
+    app.state.on_report = on_report
 
     app.include_router(rest.router)
+    app.include_router(calibration_routes.router)
     app.include_router(ws.router)
     if settings.bridge.kind == "sim":
         app.include_router(rest.sim_router)

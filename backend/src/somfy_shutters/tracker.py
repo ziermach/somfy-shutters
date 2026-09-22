@@ -176,6 +176,18 @@ class Tracker:
             await self._settle(shutter_id, percent, Source.COMMAND)
         return self._positions[shutter_id]
 
+    async def confirm_arrival(self, shutter_id: str, percent: int) -> PositionEstimate:
+        """A person said the shutter has arrived.
+
+        That is an observation, and a better one than our own timer: the timer
+        is running on the travel time we are in the middle of measuring. Drop
+        the movement and settle where they say it is.
+        """
+        self._require(shutter_id)
+        self._movements.pop(shutter_id, None)
+        await self._settle(shutter_id, percent, Source.COMMAND)
+        return self._positions[shutter_id]
+
     async def tick(self) -> None:
         """Settle any movement that has arrived. Called by the app loop."""
         now = self._monotonic()

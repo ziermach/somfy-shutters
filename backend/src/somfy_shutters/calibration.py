@@ -249,3 +249,40 @@ def may_ask_for_confirmation(
         return True
     hours = ((now or utcnow()) - last_asked).total_seconds() / 3600
     return hours >= CONFIRM_COOLDOWN_HOURS
+
+
+# --- the guided flow, composed ----------------------------------------------
+
+
+@dataclass
+class RunStart:
+    direction: Direction
+    from_percent: int
+    expected_total: float
+
+
+def plan_run(current_percent: int | None, established: dict[str, float]) -> RunStart:
+    """Which direction the next run goes, and how long it should take.
+
+    Runs alternate on their own because each starts from the end stop the last
+    one reached (FR-006). A shutter that is not at an end stop cannot start one
+    at all — the caller checks that first and offers the homing drive.
+    """
+    if current_percent not in (0, 100):
+        raise CalibrationError(
+            "not_at_end_stop",
+            "Die Messung muss an einer Endlage beginnen.",
+        )
+    direction = Direction.UP if current_percent == 0 else Direction.DOWN
+    return RunStart(
+        direction=direction,
+        from_percent=current_percent,
+        expected_total=established.get(direction.value, 0.0),
+    )
+
+
+def nearest_end_stop(current_percent: int | None) -> int:
+    """Where a homing drive goes. An unknown position has no nearest one — open."""
+    if current_percent is None:
+        return 100
+    return 100 if current_percent >= 50 else 0
