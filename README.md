@@ -36,7 +36,8 @@ shutter stands, and automations that run on the house's own network.
 | ✅ | Buttons that would do nothing are disabled: *auf* when open, *zu* when closed, *stop* when idle |
 | ✅ | Automations on a clock time or at sunrise/sunset ± offset, with a "not before / not after" window |
 | ✅ | Every firing recorded per shutter; nothing queued; held while the Pi's clock cannot be trusted |
-| ✅ | Pause all automations, or skip one rule's next firing |
+| ✅ | Pause all automations, or skip one rule's next firing; deleting a rule asks first |
+| ✅ | Installable as an app; opens without the backend and says positions are not current; updates reach every phone |
 | ⬜ | Anything confirmed on a real motor |
 
 457 backend and 41 frontend tests, against the real API surface, the tracker's rules,
@@ -114,6 +115,10 @@ uv venv --python 3.11 .venv && uv pip install -e ".[dev]"
 cd ../frontend && npm install && npm run dev     # proxies /api to the backend
 ```
 
+If the dev server shows code older than what is on disk, a service worker from an
+earlier production build on the same origin is answering: hard-reload once
+(Cmd/Ctrl+Shift+R) and the development build unregisters it.
+
 Point `bridge.kind` at `"mqtt"` and nothing else changes. Details in
 [`backend/README.md`](backend/README.md); putting it on the Pi, with broker, service
 unit and backups, is [`deploy/README.md`](deploy/README.md); the validation scenarios, including the
@@ -132,8 +137,9 @@ Most of the bugs fixed so far were found by running the live app against this si
 or against real reference data, not by unit tests written in advance: a simulator that landed every command exactly on target, a curve
 family with zero error at the one point the check asks about, a curve applied to the
 animation but not to commands, levels sent without regard to the bridge's own counter,
-the bridge's reports about *our* command taken as somebody else driving, and a sun
-calculation 2.6 minutes off that only a comparison with published times showed.
+the bridge's reports about *our* command taken as somebody else driving, a sun
+calculation 2.6 minutes off that only a comparison with published times showed, and a
+service worker that served every phone the first version it ever loaded, forever.
 
 ## How it works
 
