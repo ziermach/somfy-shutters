@@ -13,6 +13,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from ..auth.gate import CONFIGURE, WATCH
 from ..automation.engine import AutomationEngine
 from ..automation.models import Firing, Rule, RuleDraft, targets_wire
 
@@ -129,7 +130,7 @@ def _ordered(engine: AutomationEngine, rules: list[Rule], now: datetime) -> list
     return sorted(rules, key=key)
 
 
-@router.get("/automations")
+@router.get("/automations", dependencies=WATCH)
 async def list_automations(request: Request) -> dict[str, Any]:
     engine = _engine(request)
     now = engine.clock()
@@ -141,7 +142,7 @@ async def list_automations(request: Request) -> dict[str, Any]:
     }
 
 
-@router.post("/automations", status_code=201)
+@router.post("/automations", dependencies=CONFIGURE, status_code=201)
 async def create_rule(request: Request) -> Any:
     engine = _engine(request)
     draft = parse_draft(engine, await request.json())
@@ -158,7 +159,7 @@ async def create_rule(request: Request) -> Any:
 
 # Registered before /automations/{rule_id}: FastAPI matches in order, and "pause"
 # would otherwise be taken for a rule id.
-@router.put("/automations/pause")
+@router.put("/automations/pause", dependencies=CONFIGURE)
 async def pause(request: Request) -> Any:
     """Pause every rule until a time, or until resumed (FR-024)."""
     from ..automation.engine import PAUSE_KEY
@@ -182,7 +183,7 @@ async def pause(request: Request) -> Any:
     return _pause_json(engine)
 
 
-@router.delete("/automations/pause")
+@router.delete("/automations/pause", dependencies=CONFIGURE)
 async def resume(request: Request) -> Any:
     from ..automation.engine import PAUSE_KEY
 
@@ -193,7 +194,7 @@ async def resume(request: Request) -> Any:
     return _pause_json(engine)
 
 
-@router.put("/automations/{rule_id}")
+@router.put("/automations/{rule_id}", dependencies=CONFIGURE)
 async def replace_rule(request: Request, rule_id: str) -> Any:
     engine = _engine(request)
     if engine.store.rule(rule_id) is None:
@@ -214,7 +215,7 @@ async def replace_rule(request: Request, rule_id: str) -> Any:
     return {**rule_json(engine, rule), "conflicts": conflicts}
 
 
-@router.patch("/automations/{rule_id}")
+@router.patch("/automations/{rule_id}", dependencies=CONFIGURE)
 async def patch_rule(request: Request, rule_id: str) -> Any:
     engine = _engine(request)
     rule = engine.store.rule(rule_id)
@@ -237,7 +238,7 @@ async def patch_rule(request: Request, rule_id: str) -> Any:
     return rule_json(engine, rule)
 
 
-@router.get("/automations/{rule_id}/firings")
+@router.get("/automations/{rule_id}/firings", dependencies=WATCH)
 async def rule_firings(request: Request, rule_id: str, limit: int = 50) -> Any:
     engine = _engine(request)
     if engine.store.rule(rule_id) is None:
@@ -255,7 +256,7 @@ async def rule_firings(request: Request, rule_id: str, limit: int = 50) -> Any:
     }
 
 
-@router.delete("/automations/{rule_id}")
+@router.delete("/automations/{rule_id}", dependencies=CONFIGURE)
 async def delete_rule(request: Request, rule_id: str) -> Any:
     engine = _engine(request)
     if not engine.store.delete(rule_id):
@@ -264,7 +265,7 @@ async def delete_rule(request: Request, rule_id: str) -> Any:
     return Response(status_code=204)
 
 
-@router.post("/automations/preview")
+@router.post("/automations/preview", dependencies=CONFIGURE)
 async def preview(request: Request) -> Any:
     """The form's live line: next firing, what the trigger means today, conflicts.
 
@@ -328,13 +329,13 @@ def conflicts_json(
     ]
 
 
-@router.get("/location")
+@router.get("/location", dependencies=WATCH)
 async def get_location(request: Request) -> Any:
     engine = _engine(request)
     return _location_json(engine, engine.clock())
 
 
-@router.put("/location")
+@router.put("/location", dependencies=CONFIGURE)
 async def put_location(request: Request) -> Any:
     from ..config import LocationConfig
 

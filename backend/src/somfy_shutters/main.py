@@ -19,8 +19,9 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import automation_routes, calibration_routes, group_routes, rest, ws
+from .api import auth_routes, automation_routes, calibration_routes, group_routes, rest, ws
 from .auth.audit import AuditLog
+from .auth.gate import Gate, Refused
 from .auth.store import AuthStore
 from .automation.clock import ClockGuard
 from .automation.engine import LOCATION_KEY, AutomationEngine
@@ -310,6 +311,13 @@ def create_app(
     app.state.groups = group_store
     app.state.auth = auth_store
     app.state.audit = audit
+    app.state.gate = Gate(
+        settings.auth.required,
+        auth_store,
+        audit,
+        trusted_proxy=settings.auth.trusted_proxy,
+        clock_ok=lambda: engine.verdict.reliable,
+    )
     app.state.clock_guard = guard
     engine.state = app.state
 
@@ -317,9 +325,15 @@ def create_app(
     app.include_router(calibration_routes.router)
     app.include_router(automation_routes.router)
     app.include_router(group_routes.router)
+    app.include_router(auth_routes.router)
     app.include_router(ws.router)
     if settings.bridge.kind == "sim":
         app.include_router(rest.sim_router)
+
+    @app.exception_handler(Refused)
+    async def refused(request: Any, exc: Refused) -> JSONResponse:
+        # Feature 008: one shape for every refusal, top level like every other error.
+        return JSONResponse(exc.body, status_code=exc.status, headers=exc.headers)
 
     @app.exception_handler(404)
     async def not_found(request: Any, exc: Any) -> JSONResponse:

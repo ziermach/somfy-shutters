@@ -8,16 +8,22 @@ whole class of bug rather than solving it.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from ..auth.gate import Refused, forbidden
+from ..auth.models import Ability
 from .serialize import movement_json, position_json, snapshot_json
 
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+
+UNAUTHORIZED_CLOSE = 4401
+THROTTLED_CLOSE = 4429
 
 
 class Hub:
@@ -25,19 +31,38 @@ class Hub:
 
     def __init__(self) -> None:
         self._clients: set[WebSocket] = set()
+        self._owners: dict[WebSocket, str] = {}
+        """socket -> credential id, so a revocation can close its feed (feature 008)."""
         self._seq = 0
 
     def next_seq(self) -> int:
         self._seq += 1
         return self._seq
 
-    async def join(self, socket: WebSocket, snapshot: dict[str, Any]) -> None:
+    async def join(
+        self, socket: WebSocket, snapshot: dict[str, Any], owner: str | None = None
+    ) -> None:
         await socket.accept()
         self._clients.add(socket)
+        if owner is not None:
+            self._owners[socket] = owner
         await socket.send_json({"type": "snapshot", "seq": self.next_seq(), "data": snapshot})
 
     def leave(self, socket: WebSocket) -> None:
         self._clients.discard(socket)
+        self._owners.pop(socket, None)
+
+    def owners(self) -> set[str]:
+        return set(self._owners.values())
+
+    async def close_for(self, credential_id: str, code: int = UNAUTHORIZED_CLOSE) -> int:
+        """Close every feed opened with this credential (FR-005). Returns how many."""
+        doomed = [s for s, owner in self._owners.items() if owner == credential_id]
+        for socket in doomed:
+            self.leave(socket)
+            with contextlib.suppress(Exception):  # already gone
+                await socket.close(code=code, reason="unauthorized")
+        return len(doomed)
 
     async def broadcast(self, frame: dict[str, Any]) -> None:
         if not self._clients:
@@ -122,6 +147,19 @@ async def websocket_endpoint(socket: WebSocket) -> None:
     tracker = app.state.tracker
     bridge = app.state.bridge
 
+    # Feature 008: nothing is sent before the caller is known. Accepted and then
+    # closed, rather than refused, because a browser cannot see the status of a
+    # refused upgrade — and the app has to tell "not paired" from "backend down".
+    try:
+        caller = app.state.gate.caller(socket, unsafe=True)
+        if not caller.can(Ability.WATCH):
+            raise forbidden(Ability.WATCH)
+    except Refused as refused:
+        await socket.accept()
+        code = THROTTLED_CLOSE if refused.status == 429 else UNAUTHORIZED_CLOSE
+        await socket.close(code=code, reason=refused.body["error"])
+        return
+
     runs = getattr(app.state, "runs", None)
     snapshot = snapshot_json(tracker, bridge.kind, bridge.connected, runs)
     engine = getattr(app.state, "automation", None)
@@ -132,7 +170,7 @@ async def websocket_endpoint(socket: WebSocket) -> None:
     groups = getattr(app.state, "groups", None)
     if groups is not None:
         snapshot["groups"] = [g.wire() for g in groups.groups()]  # feature 004
-    await hub.join(socket, snapshot)
+    await hub.join(socket, snapshot, owner=caller.credential_id)
     try:
         while True:
             # Nothing is expected from the client; this keeps the socket open and

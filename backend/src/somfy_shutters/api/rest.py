@@ -15,6 +15,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .. import commands
+from ..auth.gate import COMMAND, WATCH
+from ..auth.models import Ability
 from ..bridge.base import BridgeUnreachable
 from ..commands import MeasurementInProgress
 from ..tracker import Tracker, UnknownShutter
@@ -45,7 +47,7 @@ async def _apply(request: Request, shutter_id: str, body: CommandBody) -> dict[s
     return await commands.apply(request.app.state, shutter_id, body.action, body.target_percent)
 
 
-@router.get("/shutters")
+@router.get("/shutters", dependencies=WATCH)
 async def list_shutters(request: Request) -> dict[str, Any]:
     bridge = request.app.state.bridge
     return snapshot_json(
@@ -55,6 +57,11 @@ async def list_shutters(request: Request) -> dict[str, Any]:
 
 @router.get("/health")
 async def health(request: Request) -> dict[str, Any]:
+    # Open to anyone, but it says nothing about the house to an anonymous caller,
+    # and a monitoring ping never counts towards a lockout (feature 008, research §4).
+    caller = request.app.state.gate.optional(request)
+    if caller is None or not caller.can(Ability.WATCH):
+        return {"status": "ok"}
     bridge = request.app.state.bridge
     tracker = _tracker(request)
     # 'ok' even when the bridge is down: the service is up and correctly
@@ -79,7 +86,7 @@ def many_status(results: list[dict[str, Any]]) -> int:
     return 200 if accepted == len(results) else 503 if accepted == 0 else 207
 
 
-@router.post("/shutters/command")
+@router.post("/shutters/command", dependencies=COMMAND)
 async def command_all(request: Request, body: CommandBody) -> JSONResponse:
     if body.action == "position" and body.target_percent is None:
         raise HTTPException(422, detail=TARGET_REQUIRED)
@@ -93,7 +100,7 @@ async def command_all(request: Request, body: CommandBody) -> JSONResponse:
     return JSONResponse({"results": results}, status_code=many_status(results))
 
 
-@router.post("/shutters/{shutter_id}/command")
+@router.post("/shutters/{shutter_id}/command", dependencies=COMMAND)
 async def command_one(request: Request, shutter_id: str, body: CommandBody) -> JSONResponse:
     tracker = _tracker(request)
     if shutter_id not in tracker.settings.shutters:
@@ -132,7 +139,7 @@ async def command_one(request: Request, shutter_id: str, body: CommandBody) -> J
         ) from None
 
 
-@router.post("/shutters/{shutter_id}/resync")
+@router.post("/shutters/{shutter_id}/resync", dependencies=COMMAND)
 async def resync(request: Request, shutter_id: str) -> JSONResponse:
     """Drive to an end stop for the sole purpose of making the position certain."""
     tracker = _tracker(request)
@@ -158,7 +165,7 @@ async def resync(request: Request, shutter_id: str) -> JSONResponse:
     )
 
 
-@router.get("/shutters/{shutter_id}")
+@router.get("/shutters/{shutter_id}", dependencies=WATCH)
 async def get_shutter(request: Request, shutter_id: str) -> dict[str, Any]:
     tracker = _tracker(request)
     if shutter_id not in tracker.settings.shutters:
@@ -186,7 +193,7 @@ class ReportBody(BaseModel):
     the travel curve is neutral."""
 
 
-@sim_router.post("/bridge/{state}")
+@sim_router.post("/bridge/{state}", dependencies=COMMAND)
 async def sim_bridge(request: Request, state: Literal["offline", "online"]) -> dict[str, Any]:
     bridge = request.app.state.bridge
     bridge.set_connected(state == "online")
@@ -200,7 +207,7 @@ class LossBody(BaseModel):
     rate: float = Field(ge=0, le=1)
 
 
-@sim_router.post("/loss")
+@sim_router.post("/loss", dependencies=COMMAND)
 async def sim_loss(request: Request, body: LossBody) -> dict[str, Any]:
     """Drop this share of commands in the air, silently (quickstart S3.3).
 
@@ -211,7 +218,7 @@ async def sim_loss(request: Request, body: LossBody) -> dict[str, Any]:
     return {"loss_rate": body.rate}
 
 
-@sim_router.get("/truth")
+@sim_router.get("/truth", dependencies=WATCH)
 async def sim_truth(request: Request) -> dict[str, Any]:
     """What the simulated windows actually do.
 
@@ -238,7 +245,7 @@ async def sim_truth(request: Request) -> dict[str, Any]:
     return out
 
 
-@sim_router.post("/report")
+@sim_router.post("/report", dependencies=COMMAND)
 async def sim_report(request: Request, body: ReportBody) -> dict[str, Any]:
     tracker = _tracker(request)
     if body.shutter_id not in tracker.settings.shutters:
@@ -257,7 +264,7 @@ async def sim_report(request: Request, body: ReportBody) -> dict[str, Any]:
     }
 
 
-@sim_router.post("/clock")
+@sim_router.post("/clock", dependencies=COMMAND)
 async def sim_clock(request: Request) -> dict[str, Any]:
     """Force the clock guard's verdict (feature 003, FR-013), or hand it back with null.
 

@@ -12,6 +12,9 @@ dependencies = [
     "astral>=3.2,<4",
 ]
 
+[project.scripts]
+somfy-shutters = "somfy_shutters.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",

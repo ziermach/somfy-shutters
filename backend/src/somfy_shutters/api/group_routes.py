@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from .. import commands
+from ..auth.gate import COMMAND, CONFIGURE, WATCH
 from ..automation.conflicts import conflicts_from_group_change
 from ..groups import Group, GroupDraft, GroupStore, NameTaken, NotAPermutation
 from .rest import TARGET_REQUIRED, CommandBody, many_status
@@ -92,12 +93,12 @@ def group_conflicts(request: Request, group_id: str, before: list[Group]) -> lis
     ]
 
 
-@router.get("/groups")
+@router.get("/groups", dependencies=WATCH)
 async def list_groups(request: Request) -> dict[str, Any]:
     return {"groups": listing(_groups(request))}
 
 
-@router.post("/groups", status_code=201)
+@router.post("/groups", dependencies=CONFIGURE, status_code=201)
 async def create_group(request: Request) -> Any:
     draft = parse_draft(request, await request.json())
     if isinstance(draft, JSONResponse):
@@ -113,7 +114,7 @@ async def create_group(request: Request) -> Any:
 
 # Registered before /groups/{group_id}: FastAPI matches in order, and "order" would
 # otherwise be taken for a group id.
-@router.put("/groups/order")
+@router.put("/groups/order", dependencies=CONFIGURE)
 async def reorder_groups(request: Request) -> Any:
     raw = await request.json()
     ids = raw.get("ids") if isinstance(raw, dict) else None
@@ -128,7 +129,7 @@ async def reorder_groups(request: Request) -> Any:
     return {"groups": listing(_groups(request))}
 
 
-@router.put("/groups/{group_id}")
+@router.put("/groups/{group_id}", dependencies=CONFIGURE)
 async def replace_group(request: Request, group_id: str) -> Any:
     store = _groups(request)
     if store.get(group_id) is None:
@@ -147,7 +148,7 @@ async def replace_group(request: Request, group_id: str) -> Any:
     return {**group.wire(), "conflicts": group_conflicts(request, group_id, before)}
 
 
-@router.delete("/groups/{group_id}")
+@router.delete("/groups/{group_id}", dependencies=CONFIGURE)
 async def delete_group(request: Request, group_id: str) -> Any:
     if not _groups(request).delete(group_id):
         return error(404, "unknown_group", UNKNOWN_GROUP)
@@ -161,7 +162,7 @@ async def delete_group(request: Request, group_id: str) -> Any:
     return Response(status_code=204)
 
 
-@router.post("/groups/{group_id}/command")
+@router.post("/groups/{group_id}/command", dependencies=COMMAND)
 async def command_group(request: Request, group_id: str, body: CommandBody) -> Any:
     group = _groups(request).get(group_id)
     if group is None:

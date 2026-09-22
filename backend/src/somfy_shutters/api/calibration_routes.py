@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from ..auth.gate import CALIBRATE, COMMAND, WATCH
 from ..bridge.base import BridgeUnreachable
 from ..calibration import (
     ActiveRun,
@@ -139,13 +140,13 @@ def _run_json(run: Any) -> dict[str, Any]:
 # --- reading -----------------------------------------------------------------
 
 
-@router.get("")
+@router.get("", dependencies=WATCH)
 async def list_calibration(request: Request) -> dict[str, Any]:
     tracker, service, _, _ = _parts(request)
     return {"shutters": [_shutter_json(tracker, service, sid) for sid in tracker.settings.shutters]}
 
 
-@router.get("/{shutter_id}")
+@router.get("/{shutter_id}", dependencies=WATCH)
 async def get_calibration(request: Request, shutter_id: str) -> dict[str, Any]:
     tracker, service, runs, _ = _parts(request)
     _require_shutter(tracker, shutter_id)
@@ -167,7 +168,7 @@ async def get_calibration(request: Request, shutter_id: str) -> dict[str, Any]:
 # --- the guided run ----------------------------------------------------------
 
 
-@router.post("/{shutter_id}/run")
+@router.post("/{shutter_id}/run", dependencies=CALIBRATE)
 async def start_run(request: Request, shutter_id: str) -> JSONResponse:
     tracker, service, runs, bridge = _parts(request)
     _require_shutter(tracker, shutter_id)
@@ -221,7 +222,7 @@ async def start_run(request: Request, shutter_id: str) -> JSONResponse:
     )
 
 
-@router.post("/{shutter_id}/home")
+@router.post("/{shutter_id}/home", dependencies=CALIBRATE)
 async def home(request: Request, shutter_id: str) -> JSONResponse:
     """The drive to an end stop that is explicitly not a measurement (FR-003)."""
     tracker, _, runs, bridge = _parts(request)
@@ -250,7 +251,7 @@ class MarkBody(BaseModel):
     mark: Literal["moving", "arrived"]
 
 
-@router.post("/{shutter_id}/mark")
+@router.post("/{shutter_id}/mark", dependencies=CALIBRATE)
 async def mark(request: Request, shutter_id: str, body: MarkBody) -> JSONResponse:
     tracker, service, runs, _ = _parts(request)
     _require_shutter(tracker, shutter_id)
@@ -296,7 +297,7 @@ async def mark(request: Request, shutter_id: str, body: MarkBody) -> JSONRespons
     )
 
 
-@router.delete("/{shutter_id}/run")
+@router.delete("/{shutter_id}/run", dependencies=CALIBRATE)
 async def abort_run(request: Request, shutter_id: str) -> JSONResponse:
     """Stop measuring. The shutter stays where it is, so its position stops being
     certain — feature 001's confidence handling takes it from there (FR-008)."""
@@ -318,7 +319,7 @@ async def abort_run(request: Request, shutter_id: str) -> JSONResponse:
     return JSONResponse({"aborted": True})
 
 
-@router.delete("/{shutter_id}")
+@router.delete("/{shutter_id}", dependencies=CALIBRATE)
 async def clear(request: Request, shutter_id: str) -> dict[str, Any]:
     """FR-016. shutters.toml is not touched — the app does not write that file."""
     tracker, service, _, _ = _parts(request)
@@ -327,7 +328,7 @@ async def clear(request: Request, shutter_id: str) -> dict[str, Any]:
     return _shutter_json(tracker, service, shutter_id)
 
 
-@router.post("/{shutter_id}/confirm")
+@router.post("/{shutter_id}/confirm", dependencies=CALIBRATE)
 async def confirm(request: Request, shutter_id: str) -> JSONResponse:
     """One tap: the shutter has arrived.
 
@@ -377,7 +378,7 @@ async def confirm(request: Request, shutter_id: str) -> JSONResponse:
     )
 
 
-@router.delete("/{shutter_id}/confirm")
+@router.delete("/{shutter_id}/confirm", dependencies=COMMAND)
 async def dismiss(request: Request, shutter_id: str) -> dict[str, Any]:
     """Ignored, or answered "not yet". Nothing is recorded and nothing inferred
     from the silence (FR-018a)."""
@@ -388,7 +389,7 @@ async def dismiss(request: Request, shutter_id: str) -> dict[str, Any]:
 # --- verification ------------------------------------------------------------
 
 
-@router.post("/{shutter_id}/check")
+@router.post("/{shutter_id}/check", dependencies=CALIBRATE)
 async def start_check(request: Request, shutter_id: str) -> JSONResponse:
     tracker, service, runs, bridge = _parts(request)
     _require_shutter(tracker, shutter_id)
@@ -429,7 +430,7 @@ class AnswerBody(BaseModel):
     answer: Literal["too_high", "about_right", "too_low"]
 
 
-@router.post("/{shutter_id}/check/answer")
+@router.post("/{shutter_id}/check/answer", dependencies=CALIBRATE)
 async def answer_check(request: Request, shutter_id: str, body: AnswerBody) -> Any:
     """One answer per drive to the midpoint.
 
@@ -456,7 +457,7 @@ async def answer_check(request: Request, shutter_id: str, body: AnswerBody) -> A
     }
 
 
-@router.delete("/{shutter_id}/check")
+@router.delete("/{shutter_id}/check", dependencies=CALIBRATE)
 async def clear_check(request: Request, shutter_id: str) -> dict[str, Any]:
     """FR-026: undo the verification, keep the measurements."""
     tracker, service, _, _ = _parts(request)

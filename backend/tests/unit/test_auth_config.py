@@ -48,3 +48,14 @@ def test_defaults() -> None:
 def test_the_example_config_loads() -> None:
     raw = tomllib.loads(EXAMPLE.read_text(encoding="utf-8"))
     assert Settings.model_validate(raw).auth.mode == "open"
+
+
+def test_loading_a_real_bridge_config_with_open_mode_fails_with_the_setting(tmp_path) -> None:
+    from somfy_shutters.config import ConfigError, load_settings
+
+    text = EXAMPLE.read_text(encoding="utf-8").replace('kind = "sim"', 'kind = "mqtt"')
+    text = text.replace('# mode = "required"', 'mode = "open"')
+    path = tmp_path / "shutters.toml"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError, match=r'auth\.mode = "open" ist nur mit dem Simulator'):
+        load_settings(path)

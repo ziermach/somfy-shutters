@@ -5,6 +5,7 @@
 // and no missed-message detection to get wrong.
 
 import { interpolate } from './animate';
+import { auth } from './auth.svelte';
 import { automations } from './automations.svelte';
 import { groups } from './groups.svelte';
 import { commandText } from './groups';
@@ -12,6 +13,8 @@ import type { Action, BridgeStatus, CommandResult, Frame, Movement, Shutter } fr
 
 const BACKOFF_START = 1000;
 const BACKOFF_MAX = 30000;
+/** The server's close code for an unknown, revoked or expired credential. */
+const UNAUTHORIZED_CLOSE = 4401;
 
 class ShutterState {
   shutters = $state<Shutter[]>([]);
@@ -86,9 +89,15 @@ class ShutterState {
       this.#backoff = BACKOFF_START;
     };
     socket.onmessage = (event) => this.#apply(JSON.parse(event.data) as Frame);
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       this.connected = false;
       this.freeze();
+      if (event.code === UNAUTHORIZED_CLOSE) {
+        // Not paired, or no longer (feature 008). Reconnecting cannot help; the
+        // pairing screen can. It connects again once a code has been redeemed.
+        auth.lost();
+        return;
+      }
       if (!this.#closing) this.#reconnect();
     };
     socket.onerror = () => socket.close();

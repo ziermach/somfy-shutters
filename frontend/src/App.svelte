@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { ticker } from './lib/animate';
+  import { auth } from './lib/auth.svelte';
   import { shutters } from './lib/shutters.svelte';
   import ArrivalPrompt from './components/ArrivalPrompt.svelte';
   import Automations from './routes/Automations.svelte';
@@ -11,6 +12,7 @@
   import GroupForm from './routes/GroupForm.svelte';
   import Groups from './routes/Groups.svelte';
   import Overview from './routes/Overview.svelte';
+  import Pair from './routes/Pair.svelte';
 
   type View =
     | { name: 'overview' }
@@ -25,6 +27,8 @@
   let view = $state<View>({ name: 'overview' });
 
   onMount(() => {
+    auth.install();
+    void auth.load();
     shutters.connect();
     // One animation loop for the whole app. Svelte re-reads livePercent() on
     // each frame; nothing is fetched while a shutter travels.
@@ -37,6 +41,15 @@
 </script>
 
 <main>
+  {#if auth.paired === false}
+    <!-- Feature 008: nothing of the house is shown to a device that is not paired. -->
+    <Pair
+      onpaired={() => {
+        view = { name: 'overview' };
+        shutters.connect();
+      }}
+    />
+  {:else}
   {#if !shutters.connected}
     <div class="banner offline" role="status">
       Keine Verbindung zum Haus. Die angezeigten Positionen sind nicht aktuell.
@@ -91,6 +104,7 @@
       onautomations={() => (view = { name: 'automations' })}
       ongroups={() => (view = { name: 'groups' })}
     />
+  {/if}
   {/if}
 </main>
 
