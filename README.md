@@ -33,6 +33,7 @@ shutter stands, and automations that run on the house's own network.
 | ✅ | A midpoint check per direction: one drive, one answer, and it never moves the end points |
 | ✅ | "Drive to 50 %" lands at 50 %: the travel curve converts commands, not just the animation |
 | ✅ | A shutter under measurement says so everywhere and refuses commands — "Alle zu" included |
+| ✅ | Buttons that would do nothing are disabled: *auf* when open, *zu* when closed, *stop* when idle |
 | ✅ | Automations on a clock time or at sunrise/sunset ± offset, with a "not before / not after" window |
 | ✅ | Every firing recorded per shutter; nothing queued; held while the Pi's clock cannot be trusted |
 | ✅ | Pause all automations, or skip one rule's next firing |
@@ -116,8 +117,10 @@ cd ../frontend && npm install && npm run dev     # proxies /api to the backend
 Point `bridge.kind` at `"mqtt"` and nothing else changes. Details in
 [`backend/README.md`](backend/README.md); putting it on the Pi, with broker, service
 unit and backups, is [`deploy/README.md`](deploy/README.md); the validation scenarios, including the
-reconciliation cases, are in
-[`specs/001-mqtt-live-position/quickstart.md`](specs/001-mqtt-live-position/quickstart.md).
+reconciliation cases, are in the quickstarts of
+[001](specs/001-mqtt-live-position/quickstart.md),
+[002](specs/002-travel-calibration/quickstart.md) and
+[003](specs/003-shutter-automations/quickstart.md) — most of them automated.
 
 The simulator is not a stub. It gives each window a soft-start dead time, a non-linear
 travel curve and different speeds up and down — none of it visible through the port the
@@ -125,22 +128,14 @@ app talks to. The motor runs on time, the way a bridge drives it, and the simula
 reports its own linear guess rather than the truth, as Pi-Somfy does. An app that could
 see the real position would prove nothing by passing.
 
-Most of the calibration bugs fixed so far were found by running this simulator against
-the live app, not by unit tests: a simulator that landed every command exactly on target,
-a curve family with zero error at the one point the check asks about, a curve applied to
-the animation but not to commands, and levels sent without regard to the bridge's own
-counter.
+Most of the bugs fixed so far were found by running the live app against this simulator
+or against real reference data, not by unit tests written in advance: a simulator that landed every command exactly on target, a curve
+family with zero error at the one point the check asks about, a curve applied to the
+animation but not to commands, levels sent without regard to the bridge's own counter,
+the bridge's reports about *our* command taken as somebody else driving, and a sun
+calculation 2.6 minutes off that only a comparison with published times showed.
 
-## The mock
-
-[`mocks/rolladen-ui.html`](mocks/rolladen-ui.html) opens in any browser, no build step.
-Four screens in German: overview, detail, automations, and calibration, including
-adding and removing a shutter and the power-cycle reset for when every remote is lost.
-
-It predates the real frontend and is **throwaway**. Where the two disagree, the code
-wins — calibration now exists for real, and the app is the reference for how it works.
-The mock still holds two flows the app does not: adding or removing a shutter, and the
-power-cycle reset.
+## How it works
 
 ### Calibration
 
@@ -199,6 +194,17 @@ down at, until the network corrects it. Rules do not fire while the kernel says 
 clock is not synchronised or the time has gone backwards; the overview says so, and
 the history records those firings as held.
 
+## The mock
+
+[`mocks/rolladen-ui.html`](mocks/rolladen-ui.html) opens in any browser, no build step.
+Four screens in German: overview, detail, automations, and calibration, including
+adding and removing a shutter and the power-cycle reset for when every remote is lost.
+
+It predates the real frontend and is **throwaway**. Where the two disagree, the code
+wins — calibration and automations now exist for real, and the app is the reference for
+how they work. The mock still holds two flows the app does not: adding or removing a
+shutter, and the power-cycle reset.
+
 ## Development
 
 Work is spec-driven with [GitHub Spec Kit](https://github.com/github/spec-kit):
@@ -207,7 +213,7 @@ Work is spec-driven with [GitHub Spec Kit](https://github.com/github/spec-kit):
 /speckit-constitution → /speckit-specify → /speckit-plan → /speckit-tasks → /speckit-implement
 ```
 
-Feature code is not written before its spec exists. Both features are specified,
+Feature code is not written before its spec exists. All three features are specified,
 planned, broken into tasks and implemented under
 [`specs/`](specs/) — each plan's `research.md` is where the non-obvious decisions are
 argued, including the one that killed a user story: feature 002 originally asked for
@@ -248,6 +254,11 @@ Two more, found by reading Pi-Somfy rather than by measuring:
   own. That rests on Pi-Somfy timing the motor linearly on one counter, the way the
   simulator does. If it behaves otherwise, the check will not converge — which is how
   the counter problem was found in the first place.
+
+And one for automations: whether the Pi's kernel reports the clock as unsynchronised
+after a cold boot without network, and synchronised once NTP answers. The engine holds
+every rule until then; a second check — time going backwards against the last
+heartbeat — does not depend on it.
 
 **The CC1101 runs on 3.3V only** (Pi pin 1 or 17). 5V destroys the module.
 
