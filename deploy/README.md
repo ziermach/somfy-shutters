@@ -269,7 +269,6 @@ host = "127.0.0.1"
 port = 1883
 user = "somfy"
 password = "…"
-invert_level = false  # open hardware question 1 — flip if 0 turns out to mean "open"
 ```
 
 Validation is strict and startup fails loudly with the offending line. Leave travel
@@ -317,9 +316,10 @@ journalctl -u somfy-shutters -f
 Expect `ready: N shutters, bridge=mqtt`. Move one shutter from the app and watch the
 window. Two things are worth knowing before you trust it:
 
-- **The direction may be inverted.** If "open" closes the shutter, set
-  `invert_level = true` and restart. That single setting is the only place the wire
-  direction is known.
+- **Pi-Somfy must be v3.1 or newer.** The app speaks its current topics
+  (`somfy/<id>/command`, `set_position`, `position`, `state`, `somfy/bridge/availability`);
+  older versions used `level/cmd` and are not supported. Direction needs no setting — the
+  bridge declares 100 = open.
 - **A lost command looks exactly like a delivered one.** RTS is one-way. If the
   furthest window misses commands, that is radio range, not software — check the
   antenna before changing anything here.
@@ -376,8 +376,8 @@ sudo systemctl start somfy-shutters
 | Service will not start | `journalctl -u somfy-shutters -n 50`. A config error prints the offending field and exits. |
 | `no configuration at …` | `config/shutters.toml` is missing, or the unit's `SHUTTERS_CONFIG` points elsewhere. |
 | `Permission denied` on anything in `config/` | A file there was created by you or root instead of `somfy`. `sudo chown -R somfy:somfy /opt/somfy-shutters/config`. |
-| `bridge.connected` stays `false` | Broker down, wrong credentials, or the app is not on the Pi and Mosquitto is bound to loopback. Reconnect backs off 1 → 30s and logs each attempt. |
-| App works, shutters do not move | Prove the broker path outside the app: `mosquitto_pub -h 127.0.0.1 -u somfy -P '…' -t 'somfy/0x279621/level/cmd' -m 50`. If that moves nothing, it is Pi-Somfy or the radio, not this app. |
+| `bridge.connected` stays `false` | Broker down, wrong credentials, the app is not on the Pi and Mosquitto is bound to loopback — or Pi-Somfy is not running: the app counts the bridge reachable only once it announces `online` on `somfy/bridge/availability`. Check with `mosquitto_sub -h 127.0.0.1 -u somfy -P '…' -t somfy/bridge/availability -v`. |
+| App works, shutters do not move | Prove the broker path outside the app: `mosquitto_pub -h 127.0.0.1 -u somfy -P '…' -t 'somfy/0x279621/command' -m CLOSE`. If that moves nothing, it is Pi-Somfy or the radio, not this app. |
 | Positions never become "sicher" | Expected until a shutter reaches an end stop. Only the end stops are certain. |
 | Unknown address warnings | An address in `shutters.toml` does not match `operateShutters.conf`. Copy it again. |
 | Commands land seconds late, live view keeps reconnecting | WiFi power saving is on. `iw dev wlan0 get power_save` — see [WiFi](#wifi-turn-off-power-saving). |

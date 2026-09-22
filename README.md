@@ -39,6 +39,7 @@ shutter stands, and automations that run on the house's own network.
 | ✅ | Pause all automations, or skip one rule's next firing; deleting a rule asks first |
 | ✅ | Groups — rooms, floors, a side of the house — that overlap, move with one tap, and serve as rule targets |
 | ✅ | Installable as an app; opens without the backend and says positions are not current; updates reach every phone |
+| ✅ | Speaks Pi-Somfy's current MQTT interface (v3.1+): explicit stop, the bridge's own availability, retained reports treated as old news |
 | ⬜ | Anything confirmed on a real motor |
 
 541 backend and 65 frontend tests, against the real API surface, the tracker's rules,
@@ -73,8 +74,9 @@ flowchart LR
 ```
 
 Pi-Somfy stays the only process that holds rolling-code counters and transmits. This
-project never touches the radio — it publishes to `somfy/<address>/level/cmd` and
-subscribes to `somfy/<address>/level/set_state`, nothing else. That keeps the
+project never touches the radio — it publishes to `somfy/<id>/command` (OPEN/CLOSE/STOP)
+and `somfy/<id>/set_position`, and listens to `somfy/<id>/position`, `somfy/<id>/state` and
+`somfy/bridge/availability`, nothing else — Pi-Somfy's interface since v3.1. That keeps the
 transmitter swappable: moving to ESPSomfy-RTS would change an endpoint, not the app.
 
 | Layer | Choice |
@@ -142,7 +144,8 @@ family with zero error at the one point the check asks about, a curve applied to
 animation but not to commands, levels sent without regard to the bridge's own counter,
 the bridge's reports about *our* command taken as somebody else driving, a sun
 calculation 2.6 minutes off that only a comparison with published times showed, and a
-service worker that served every phone the first version it ever loaded, forever.
+service worker that served every phone the first version it ever loaded, forever — and the
+discovery that Pi-Somfy had replaced the MQTT topics the whole app was built on.
 
 ## How it works
 
@@ -256,8 +259,8 @@ cd frontend && npx svelte-check --tsconfig ./tsconfig.json
 None of these has been answered yet, which is why nothing here is proven on a motor.
 The software is built so that answering them changes configuration, not code:
 
-1. **Direction of `level/cmd`** — is 0 fully open or fully closed? One setting,
-   `invert_level`, applied in a single file; a test asserts nothing else knows about it.
+1. ~~**Direction**~~ — answered by Pi-Somfy itself, which declares 100 = open. The old
+   `invert_level` setting is accepted and ignored.
 2. **Per-window travel times**, up and down separately. Read from `shutters.toml`; a
    shutter with none still animates, on a stated default, and is marked uncalibrated.
 3. **Radio range** to the furthest window, antenna attached. A command lost in the air
@@ -271,9 +274,9 @@ The software is built so that answering them changes configuration, not code:
 
 Two more, found by reading Pi-Somfy rather than by measuring:
 
-- `stop` is sent as a level command at the current position, because `level/cmd` is the
-  only topic this project speaks. Whether a motor halts crisply that way is unverified;
-  if not, the button-press topic is the fix and the MQTT contract changes.
+- `stop` is Pi-Somfy's explicit STOP command. The earlier way — asking for the current
+  position — would do nothing on current Pi-Somfy and let the shutter run on. That it halts
+  crisply on a real motor is still to be seen.
 - Commands are sent relative to Pi-Somfy's level counter, which the app tracks on its
   own. That rests on Pi-Somfy timing the motor linearly on one counter, the way the
   simulator does. If it behaves otherwise, the check will not converge — which is how
