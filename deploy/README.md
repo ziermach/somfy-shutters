@@ -47,49 +47,56 @@ re-pairing by hand.
 
 ### Wiring the radio
 
-Fixed by the [constitution](../.specify/memory/constitution.md); module pin numbers are
-from Ebyte's [E07-M1101D-SMA manual](https://www.scribd.com/document/708471606/E07-M1101D-SMA-Usermanual-EN-v1-30).
+Fixed by the [constitution](../.specify/memory/constitution.md) (v1.2.0); module pin
+numbers are from Ebyte's [E07-M1101D-SMA manual](https://www.scribd.com/document/708471606/E07-M1101D-SMA-Usermanual-EN-v1-30).
+This is the wiring Pi-Somfy's CC1101 transmitter (`RFBackend = cc1101`) expects by
+default: the Pi's hardware SPI0, with the RTS waveform on GDO0 driven from `TXGPIO = 4`.
 
 | Module pin | Signal | Pi physical pin | Pi GPIO |
 |---|---|---|---|
-| 1 | GND | 39 | GND |
-| 2 | VCC | **17** (or 1) | **3.3V** |
-| 3 | GDO0 | 37 | GPIO26 |
-| 4 | CSN | 36 | GPIO16 |
-| 5 | SCK | 40 | GPIO21 |
-| 6 | MOSI | 38 | GPIO20 |
-| 7 | MISO/GDO1 | 35 | GPIO19 |
+| 1 | GND | 25 | GND |
+| 2 | VCC | **17** | **3.3V** |
+| 3 | GDO0 | 7 | GPIO4 |
+| 4 | CSN | 24 | GPIO8 (SPI0 CE0) |
+| 5 | SCK | 23 | GPIO11 (SPI0 SCLK) |
+| 6 | MOSI | 19 | GPIO10 (SPI0 MOSI) |
+| 7 | MISO/GDO1 | 21 | GPIO9 (SPI0 MISO) |
 | 8 | GDO2 | — | not connected |
 
-**Interactive diagram:** [open in Cirkit Designer](https://app.cirkitdesigner.com/project/c0b9f439-d559-4c61-9f5f-2cd1cb531f8d?view=interactive_preview)
-— the table above is the source of truth; if the two ever disagree, the table wins.
-
-<!-- GitHub strips iframes; this renders only in viewers that allow them. The link above always works. -->
-<div style="position: relative; width: 100%; padding-top: calc(max(56.25%, 400px));">
-  <iframe src="https://app.cirkitdesigner.com/project/c0b9f439-d559-4c61-9f5f-2cd1cb531f8d?view=interactive_preview" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"></iframe>
-</div>
-
-Everything but VCC sits in the last three rows of the header, the end nearest the USB
-ports:
+Six of the seven wires land in one block in the middle of the header; GDO0 goes to pin 7,
+near the pin-1 end:
 
 ```
-         inner  outer
-  35 MISO  ●     ●  36 CSN
-  37 GDO0  ●     ●  38 MOSI
-  39 GND   ●     ●  40 SCK
+          inner   outer
+   7 GDO0   ●       ●   8
+   …
+  17 VCC    ●       ●  18
+  19 MOSI   ●       ●  20
+  21 MISO   ●       ●  22
+  23 SCK    ●       ●  24 CSN
+  25 GND    ●       ●  26
 ```
 
-> **VCC to 3.3V — pin 17 or 1 — never 5V.** Pins 2 and 4 carry 5V and sit right next
-> to pin 1; the module's absolute maximum is about 3.6V and 5V destroys it. Wire with
-> the Pi unplugged and check VCC twice before powering on.
+Pin 1 is the corner farthest from the USB ports; odd pins are the inner row, even pins
+the row along the board edge.
+
+> **VCC to 3.3V — pin 17 — never 5V.** Pins 2 and 4 carry 5V; the module's absolute
+> maximum is about 3.6V and 5V destroys it. Wire with the Pi unplugged and check VCC
+> twice before powering on.
 >
 > **Screw the antenna on before anything transmits.** Transmitting into an open SMA
 > connector can damage the module.
 
-Pins 35, 38 and 40 are the Pi's *second* SPI bus (SPI1), not the one `raspi-config`
-switches on (SPI0). Which overlay is needed depends on how Pi-Somfy's CC1101 support
-drives the module — follow its installation instructions rather than assuming SPI is
-already set up. [pinout.xyz](https://pinout.xyz) shows every pin interactively.
+SPI0 is the bus `raspi-config` switches on:
+
+```bash
+sudo raspi-config nonint do_spi 0       # adds dtparam=spi=on; takes effect after a reboot
+ls /dev/spidev0.0                       # present once it is on
+```
+
+Pins 35–40 (GPIO 19/20/21/16/26) stay free on purpose: they are where Pi-Somfy wants an
+optional *second* CC1101 that listens to physical remotes (open hardware question 4).
+[pinout.xyz](https://pinout.xyz) shows every pin interactively.
 
 ## 1. Network
 
