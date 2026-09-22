@@ -242,3 +242,29 @@ export function timesLabel(shutter: CalibrationShutter): string {
     v.source === 'default' ? '—' : `${v.travel_seconds.toFixed(1)} s`;
   return `${fmt(shutter.up)} auf · ${fmt(shutter.down)} zu`;
 }
+
+/** Which directions a person has overridden by hand, if any.
+ *
+ * Kept out of the template so it can be tested: "why did my measurement not
+ * take effect" is the question this answers, and getting it wrong looks like
+ * the app silently ignoring a measurement.
+ */
+export function overriddenDirections(shutter: CalibrationShutter): ('auf' | 'zu')[] {
+  const out: ('auf' | 'zu')[] = [];
+  if (shutter.up.source === 'manual') out.push('auf');
+  if (shutter.down.source === 'manual') out.push('zu');
+  return out;
+}
+
+export function overrideNotice(shutter: CalibrationShutter): string | null {
+  const directions = overriddenDirections(shutter);
+  if (directions.length === 0) return null;
+  const which = directions.length === 2 ? 'beide Richtungen' : `die Richtung „${directions[0]}"`;
+  const measured = shutter.up.runs + shutter.down.runs;
+  const kept =
+    measured > 0
+      ? ` Die ${measured} gemessenen Läufe bleiben gespeichert und gelten wieder, sobald du den Eintrag entfernst.`
+      : '';
+  return `Für ${which} steht eine Laufzeit in shutters.toml. Die gilt, auch wenn hier gemessen wird —` +
+    ` Messungen überschreiben nichts, was du selbst eingetragen hast.${kept}`;
+}

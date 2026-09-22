@@ -80,12 +80,18 @@ def _direction_state(service: Any, shutter_id: str, direction: Direction) -> dic
 
 
 def _state_word(up: dict[str, Any], down: dict[str, Any]) -> str:
+    """One word for the list. A hand-written value outranks everything else.
+
+    Not because it is the most precise state to report, but because it is the
+    one that answers "why did my measurement not take effect". Which directions
+    are measured is visible in the rows underneath.
+    """
     sources = {up["source"], down["source"]}
-    if sources == {"manual"} or (sources == {"manual", "measured"}):
+    if "manual" in sources:
         return "manual"
     if sources == {"measured"}:
         return "calibrated"
-    if "measured" in sources or "manual" in sources:
+    if "measured" in sources:
         return "partial"
     return "uncalibrated"
 
