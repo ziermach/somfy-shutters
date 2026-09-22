@@ -80,8 +80,8 @@ under "Ohne Gruppe", and moving a shared shutter animates in every place it is s
 3. **Given** a shutter in two groups, **When** it moves, **Then** both places show
    the same animation and the same position estimate at the same moment.
 4. **Given** a group whose members are at different positions, **When** it is shown,
-   **Then** its summary states how many members are open, closed, in between or
-   moving, and never shows a single position as if the group were one shutter.
+   **Then** its summary states how many members are open, closed, in between,
+   moving or of unknown position, and never shows a single position as if the group were one shutter.
 5. **Given** any member's position is an estimate of reduced confidence, **When** the
    group summary is shown, **Then** the summary says so too — it is never more
    confident than its least confident member.
@@ -183,6 +183,10 @@ moves too. Delete the group and confirm the rule says it has no shutters left.
   Nothing is retried or queued.
 - **Two people edit groups at the same time from different phones.** The last save
   wins; every client shows the saved result within a moment.
+- **A group change creates a new conflict.** Adding a shutter to a group can make two
+  enabled rules command it in the same minute, differently, although neither rule was
+  edited. Saving the group then shows the same warning as saving a rule would, naming
+  both rules and which wins. It is a warning, not a refusal: the group is saved.
 - **A group with one member.** Allowed; it behaves exactly like that shutter.
 - **The same shutter added to a group twice.** Impossible — membership is a set.
 
@@ -216,7 +220,8 @@ moves too. Delete the group and confirm the rule says it has no shutters left.
 - **FR-011**: A shutter shown in several places MUST show the same state, animation and
   confidence in each at the same moment.
 - **FR-012**: Each group MUST show a summary of its members: counts of open, closed,
-  in-between and moving members, or a single word when all agree ("open", "closed").
+  in-between, moving and unknown-position members, in that order, or a single word
+  when all agree ("open", "closed", "moving", "position unknown").
 - **FR-013**: A group summary MUST NOT present a combined position as confirmed, and
   MUST indicate reduced confidence when any member's estimate has reduced confidence.
 - **FR-014**: Users MUST be able to switch between the grouped view and a flat list of
@@ -255,6 +260,9 @@ moves too. Delete the group and confirm the rule says it has no shutters left.
   no targets MUST behave as feature 003 prescribes for a rule with no shutters left.
 - **FR-027**: The firing record MUST list outcomes per shutter, as in feature 003, and
   MUST show which group each shutter was reached through.
+- **FR-028**: Saving a group MUST warn, without refusing, when the new membership creates
+  a same-minute conflict between enabled rules that did not exist before, in the terms
+  of FR-025.
 
 ### Key Entities
 
@@ -275,12 +283,12 @@ moves too. Delete the group and confirm the rule says it has no shutters left.
   phone, without reading any help.
 - **SC-002**: Closing every shutter on one floor takes one tap instead of one per
   shutter.
-- **SC-003**: For a group of up to 12 shutters, every member has been commanded within
-  5 seconds of the tap, on the simulator.
+- **SC-003**: FR-021's 5-second budget holds on the simulator, measured from the tap to
+  the last member's command.
 - **SC-004**: After a shutter is added to a group, the next firing of every rule that
   targets that group includes it, in 100 % of cases, with no rule edited.
-- **SC-005**: Across a test month on the simulator, no shutter is ever commanded twice
-  by one firing because it was reached through two targets.
+- **SC-005**: Across a simulated month of firings with overlapping group targets, no
+  shutter is ever commanded twice by one firing.
 - **SC-006**: Nobody using the app ever sees a group's state presented as more certain
   than its least certain member.
 - **SC-007**: With 20 shutters in 6 groups, a person finds a named shutter in the

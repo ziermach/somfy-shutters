@@ -19,8 +19,8 @@ Body: `{"name": "Obergeschoss", "members": ["schlafzimmer", "bad"]}`
 
 | Status | When |
 |---|---|
-| `201` | created; body is the Group, appended at the end of the order |
-| `409 name_taken` | another group has the same name ignoring case and whitespace; `detail.group_id` |
+| `201` | created; body is the Group plus `conflicts` (below), appended at the end of the order |
+| `409 name_taken` | another group has the same name ignoring case and whitespace; message "Diesen Namen gibt es schon."; `detail.group_id` |
 | `422 invalid_group` | name empty/too long, no members, duplicate member; `detail.field`, `detail.problem` |
 | `422 unknown_shutter` | a member is not configured; `detail.shutters` |
 
@@ -29,7 +29,21 @@ Publishes `groups` (see websocket.md).
 ## `PUT /api/groups/{id}`
 
 Same body and errors as `POST`, plus `404 unknown_group`. Replaces name and members
-(members in the given order). `200` → Group. Publishes `groups`.
+(members in the given order). `200` → Group plus `conflicts`. Publishes `groups`.
+
+### Conflicts on group save (FR-028)
+
+`POST` and `PUT` responses carry `"conflicts": [...]`: same-minute conflicts between
+enabled rules that exist with the new membership but did not with the old one (for
+`POST`, the old membership is empty). Each entry is a rule-pair conflict as for rules,
+with both rules named:
+
+```json
+{ "rule_id": "r_3", "rule_name": "Morgens auf", "other_rule_id": "r_9", "other_rule_name": "Abends zu",
+  "shutter_id": "kueche", "via": "Südseite", "first_at": "2026-09-23T20:00:00+02:00", "winner": "r_9" }
+```
+
+The group is saved regardless; the list is for the warning only.
 
 ## `DELETE /api/groups/{id}`
 

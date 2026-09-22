@@ -25,7 +25,7 @@ API shapes: [contracts/rest.md](./contracts/rest.md),
 wohnzimmer, schlafzimmer. → Both exist; wohnzimmer is in both. The second window shows
 both groups without reloading.
 
-**A2. Name taken.** Create *  südseite *. → Refused: "Name ist schon vergeben".
+**A2. Name taken.** Create *  südseite *. → Refused: "Diesen Namen gibt es schon."
 
 **A3. Survives restart.** Restart the backend. → Both groups, members and order unchanged.
 
@@ -45,15 +45,15 @@ Put `buero` back, restart. → It appears under *Ohne Gruppe*, not in its old gr
 card under *Südseite* animates identically, same percent at every moment.
 
 **B3. Honest summary.** kueche open, wohnzimmer closed. → *Erdgeschoss* reads
-"1 von 2 offen · 1 zu", never "50 %". Make wohnzimmer's estimate stale
-(`POST /api/sim/report` then wait past `stale_after_hours`, or restart with a restored
-position) → the summary shows the reduced-confidence tone.
+"1 von 2 offen · 1 zu", never "50 %". Restart the backend with
+`stale_after_hours = 0` in `[general]`, so every estimate is stale at once → the
+summary shows the reduced-confidence tone.
 
 **B4. Flat list, remembered.** Switch to *Liste*, reload. → Still the flat list. In a
 private window → grouped (default), and the page still works.
 
 **B5. No groups.** Delete all groups. → The overview looks as before feature 004, with a
-hint "Rollläden zu Gruppen zusammenfassen".
+hint "Rolladen zu Gruppen zusammenfassen".
 
 ## C — Group commands (User Story 3)
 
@@ -91,7 +91,11 @@ says it has no shutters left and will not fire.
 **D5. Conflict through a group.** Rule A: 20:00, kueche, *auf*. Save rule B: 20:00,
 *Erdgeschoss*, *zu*. → Warning names A, kueche via *Erdgeschoss*, and which wins.
 
-**D6. Old rules untouched.** A rule saved by feature 003 with a list of shutters still
+**D6. Conflict through a group change.** Rule A: 20:00, kueche, *auf*; rule B: 20:00,
+*Südseite*, *zu*. Add kueche to *Südseite* and save. → The group is saved, with a
+warning naming A and B, kueche, and which wins.
+
+**D7. Old rules untouched.** A rule saved by feature 003 with a list of shutters still
 lists them and fires them unchanged.
 
 ## E — Hardware (pending, with feature 001's bring-up)

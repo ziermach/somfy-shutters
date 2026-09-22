@@ -120,7 +120,8 @@ same live percent the cards show, and returns a phrase plus the **lowest** tone 
 member (`sure` < `estimated` < `unsure`, from `lib/confidence.ts`).
 
 - All in one bucket → one word: "offen", "zu", "fährt", "Position unbekannt".
-- Otherwise counts, most informative first: "2 von 3 offen · 1 fährt".
+- Otherwise counts in a fixed order — offen, zu, dazwischen, fährt, unbekannt — leaving
+  out empty buckets: "2 von 3 offen · 1 fährt".
 - Never an average percent (FR-013): an average of 0 and 100 is 50, which no window is.
 
 **Rationale**: Constitution III — the summary is derived, so it can be no more confident

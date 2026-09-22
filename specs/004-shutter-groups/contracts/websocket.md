@@ -14,9 +14,9 @@ frames. Clients never speak MQTT; this is the only push channel.
 
 ## `groups` (new)
 
-Sent after any create, update, delete or reorder, and after startup pruning changed
-anything. Carries the full list — at most a few kB — so a client replaces its copy and
-never merges.
+Sent after any create, update, delete or reorder. Carries the full list — at most a
+few kB — so a client replaces its copy and never merges. Startup pruning needs no
+frame: no client is connected yet, and the first snapshot carries the pruned list.
 
 ```json
 { "type": "groups", "seq": 42, "groups": [ { "id": "...", "name": "...", "members": ["..."] } ] }

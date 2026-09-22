@@ -85,6 +85,7 @@ backend/src/somfy_shutters/
 │   ├── group_routes.py      # NEW — contracts/rest.md §groups
 │   ├── rest.py              # command_all → apply_many; position needs target_percent
 │   ├── automation_routes.py # targets validation (unknown_group), conflict via, preview
+│   │                        #   (group_routes also calls conflicts for FR-028)
 │   ├── serialize.py         # snapshot gains groups
 │   └── ws.py                # "groups" frame passthrough
 ├── automation/
@@ -136,6 +137,10 @@ cooperating parts like the automation engine had.
   `(resolved: list[(shutter_id, via_names)], removed: list[shutter_id])`. Conflicts use
   the same function with the draft, so the warning and the firing can never disagree
   about who is reached.
+- **Conflicts on group save (FR-028).** For each enabled rule that targets the group,
+  run `find_conflicts(rule, others, editing=rule.id)` with the old and the new
+  membership; report pairs present only with the new one, deduplicated by rule pair
+  and shutter. Same function as for rules, so the wording and the winner agree.
 - **Group delete** → `group_store.delete(id)` → `automation_store.drop_group(id)` →
   `engine.reschedule()` → publish `groups`, then `rules_changed` if any rule changed.
 - **Frontend state.** `groups.svelte.ts` holds `groups = $state<Group[]>`; the shutters
