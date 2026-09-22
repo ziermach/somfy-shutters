@@ -15,7 +15,6 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .. import commands
-from ..bridge.base import BridgeUnreachable
 from ..models import utcnow
 from .clock import ClockGuard, ClockVerdict
 from .models import Firing, FiringStatus, Outcome, Rule, status_from
@@ -197,20 +196,20 @@ class AutomationEngine:
     async def _command(self, rule: Rule) -> list[Outcome]:
         present, removed = self.targets(rule)
         outcomes = []
-        for shutter_id in present:
-            try:
-                await commands.apply(self.state, shutter_id, rule.action.kind, rule.action.percent)
-                outcomes.append(Outcome(shutter_id=shutter_id, result="commanded"))
-            except commands.MeasurementInProgress:
+        # FR-010: not retried, not queued. A shutter that could not be commanded
+        # was not commanded.
+        for result in await commands.apply_many(
+            self.state, present, rule.action.kind, rule.action.percent
+        ):
+            if result["accepted"]:
+                outcomes.append(Outcome(shutter_id=result["id"], result="commanded"))
+            elif result["error"] == "measurement_in_progress":
                 outcomes.append(
-                    Outcome(
-                        shutter_id=shutter_id, result="skipped", reason="measurement_in_progress"
-                    )
+                    Outcome(shutter_id=result["id"], result="skipped", reason=result["error"])
                 )
-            except BridgeUnreachable:
-                # FR-010: not retried, not queued. It did not happen.
+            else:
                 outcomes.append(
-                    Outcome(shutter_id=shutter_id, result="failed", reason="bridge_unreachable")
+                    Outcome(shutter_id=result["id"], result="failed", reason=result["error"])
                 )
         outcomes.extend(
             Outcome(shutter_id=sid, result="skipped", reason="removed") for sid in removed

@@ -66,24 +66,31 @@ async def health(request: Request) -> dict[str, Any]:
     }
 
 
+TARGET_REQUIRED = {
+    "error": "target_required",
+    "message": "Für 'position' fehlt target_percent.",
+    "detail": None,
+}
+
+
+def many_status(results: list[dict[str, Any]]) -> int:
+    """200 when every shutter took the command, 503 when none did, 207 in between."""
+    accepted = sum(1 for r in results if r["accepted"])
+    return 200 if accepted == len(results) else 503 if accepted == 0 else 207
+
+
 @router.post("/shutters/command")
 async def command_all(request: Request, body: CommandBody) -> JSONResponse:
-    tracker = _tracker(request)
-    results: list[dict[str, Any]] = []
-    for shutter_id in tracker.settings.shutters:
-        try:
-            await _apply(request, shutter_id, body)
-            results.append({"id": shutter_id, "accepted": True})
-        except MeasurementInProgress:
-            # The others still move; this one is left alone and the reason is said.
-            results.append(
-                {"id": shutter_id, "accepted": False, "error": "measurement_in_progress"}
-            )
-        except BridgeUnreachable:
-            results.append({"id": shutter_id, "accepted": False, "error": "bridge_unreachable"})
-    accepted = sum(1 for r in results if r["accepted"])
-    status = 200 if accepted == len(results) else 503 if accepted == 0 else 207
-    return JSONResponse({"results": results}, status_code=status)
+    if body.action == "position" and body.target_percent is None:
+        raise HTTPException(422, detail=TARGET_REQUIRED)
+    # The others still move when one cannot; that one is reported with its reason.
+    results = await commands.apply_many(
+        request.app.state,
+        list(_tracker(request).settings.shutters),
+        body.action,
+        body.target_percent,
+    )
+    return JSONResponse({"results": results}, status_code=many_status(results))
 
 
 @router.post("/shutters/{shutter_id}/command")
@@ -99,14 +106,7 @@ async def command_one(request: Request, shutter_id: str, body: CommandBody) -> J
             },
         )
     if body.action == "position" and body.target_percent is None:
-        raise HTTPException(
-            422,
-            detail={
-                "error": "target_required",
-                "message": "Für 'position' fehlt target_percent.",
-                "detail": None,
-            },
-        )
+        raise HTTPException(422, detail=TARGET_REQUIRED)
     try:
         return JSONResponse(await _apply(request, shutter_id, body))
     except MeasurementInProgress:

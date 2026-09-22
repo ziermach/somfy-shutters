@@ -6,6 +6,7 @@
 
 import { interpolate } from './animate';
 import { automations } from './automations.svelte';
+import { groups } from './groups.svelte';
 import type { Action, BridgeStatus, Frame, Movement, Shutter } from './types';
 
 const BACKOFF_START = 1000;
@@ -111,6 +112,10 @@ class ShutterState {
         this.shutters = frame.data.shutters;
         this.bridge = frame.data.bridge;
         if (frame.data.automations) automations.setState(frame.data.automations);
+        groups.set(frame.data.groups ?? []);
+        break;
+      case 'groups':
+        groups.set(frame.groups);
         break;
       case 'automations':
         automations.setState({
