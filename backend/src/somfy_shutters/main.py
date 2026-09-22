@@ -19,7 +19,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import automation_routes, calibration_routes, group_routes, rest, ws
+from .api import automation_routes, calibration_routes, group_routes, rest, roster_routes, ws
 from .automation.clock import ClockGuard
 from .automation.engine import LOCATION_KEY, AutomationEngine
 from .automation.store import AutomationStore
@@ -37,6 +37,8 @@ from .config import Settings, load_settings
 from .events import EventBus
 from .groups import GroupStore
 from .models import utcnow
+from .roster import Roster
+from .roster_store import RosterStore
 from .store import Store
 from .tracker import Tracker
 
@@ -62,9 +64,14 @@ def configure_logging() -> None:
     )
 
 
-def build_bridge(settings: Settings) -> ShutterBridge:
+def build_bridge(settings: Settings, roster_rows: RosterStore | None = None) -> ShutterBridge:
     if settings.bridge.kind == "sim":
-        return SimBridge(addresses=[s.address for s in settings.shutter])
+        # The simulated bridge knows what the real one would: every shutter of the
+        # household, and those a person set aside, which it still announces.
+        known = {s.address: s.name for s in settings.shutter}
+        for row in roster_rows.all() if roster_rows else []:
+            known.setdefault(row.address, row.name)
+        return SimBridge(addresses=list(known), names=known)
     return MqttBridge(settings.bridge)
 
 
@@ -76,15 +83,19 @@ def create_app(
     calibration_store: CalibrationStore | None = None,
 ) -> FastAPI:
     settings = settings or load_settings(os.environ.get("SHUTTERS_CONFIG", DEFAULT_CONFIG))
-    bridge = bridge or build_bridge(settings)
+    store = store or Store(os.environ.get("SHUTTERS_DB", DEFAULT_DB))
+    bus = EventBus()
+    hub = ws.Hub()
+    # Before anything reads settings.shutter: the household is shutters.toml plus the
+    # shutters confirmed from the bridge's announcements (feature 005).
+    roster_rows = RosterStore(store.path)
+    roster = Roster(settings, roster_rows, publish=bus.publish)
+    bridge = bridge or build_bridge(settings, roster_rows)
     if settings.bridge.invert_level:
         log.warning(
             "bridge.invert_level is set but ignored: current Pi-Somfy declares 100 = open, "
             "0 = closed, which is what this app uses. Remove it from shutters.toml."
         )
-    store = store or Store(os.environ.get("SHUTTERS_DB", DEFAULT_DB))
-    bus = EventBus()
-    hub = ws.Hub()
 
     async def emit(event: dict[str, Any]) -> None:
         await bus.publish(event)
@@ -119,6 +130,7 @@ def create_app(
     runs = RunRegistry()
 
     tracker = Tracker(settings, store, emit=emit, calibration=calibration)
+    tracker.roster = roster
     if isinstance(bridge, SimBridge):
         # A real house does not move while the server restarts. A simulated one
         # that snapped back to its defaults instead made every restart look like
@@ -189,11 +201,18 @@ def create_app(
             and report.percent is not None
         ):
             runs.note_report(shutter.id, report.percent)
+        if report.kind == "announcement":
+            await roster.handle(report)
+            return
         await tracker.handle(report)
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         async def to_clients(event: dict[str, Any]) -> None:
+            if event.get("type") == "roster" and event.get("household"):
+                # The shape every client renders changed. Clients already replace
+                # everything on a snapshot, so the overview needs nothing new.
+                await hub.broadcast({"type": "snapshot", "data": ws.snapshot_for(app.state)})
             frame = ws.frame_for_event(event, tracker)
             if frame is not None:
                 await hub.broadcast(frame)
@@ -297,6 +316,7 @@ def create_app(
             calibration_store.close()
             automation_store.close()
             group_store.close()
+            roster_rows.close()
 
     app = FastAPI(title="somfy-shutters", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
@@ -315,12 +335,15 @@ def create_app(
     app.state.automation = engine
     app.state.groups = group_store
     app.state.clock_guard = guard
+    app.state.roster = roster
     engine.state = app.state
+    roster.state = app.state
 
     app.include_router(rest.router)
     app.include_router(calibration_routes.router)
     app.include_router(automation_routes.router)
     app.include_router(group_routes.router)
+    app.include_router(roster_routes.router)
     app.include_router(ws.router)
     if settings.bridge.kind == "sim":
         app.include_router(rest.sim_router)

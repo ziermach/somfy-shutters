@@ -5,6 +5,7 @@
   import ShutterCard from '../components/ShutterCard.svelte';
   import { loadView, saveView, sections, type View } from '../lib/groups';
   import { groups } from '../lib/groups.svelte';
+  import { roster } from '../lib/roster.svelte';
   import { shutters } from '../lib/shutters.svelte';
 
   interface Props {
@@ -12,8 +13,9 @@
     oncalibration: () => void;
     onautomations: () => void;
     ongroups: () => void;
+    onshutters: () => void;
   }
-  let { onopen, oncalibration, onautomations, ongroups }: Props = $props();
+  let { onopen, oncalibration, onautomations, ongroups, onshutters }: Props = $props();
 
   // Per device (FR-014): grouped or flat, and which groups are folded away.
   let view = $state<View>(loadView());
@@ -42,6 +44,14 @@
   </header>
 
   <AutomationBanner />
+
+  {#if roster.counts.new > 0}
+    <!-- Feature 005: announced by the bridge, not in the household until named (FR-002). -->
+    <button type="button" class="found" onclick={onshutters}>
+      <strong>{roster.counts.new === 1 ? 'Neuer Rolladen gefunden' : `${roster.counts.new} neue Rolladen gefunden`}</strong>
+      <span>Die Funkbrücke kennt {roster.counts.new === 1 ? 'ihn' : 'sie'}. Namen geben →</span>
+    </button>
+  {/if}
 
   {#if shutters.measuring}
     <MeasuringBanner name={shutters.measuring.name} />
@@ -94,7 +104,12 @@
     {/if}
   {/if}
 
+  {#if shutters.shutters.length === 0}
+    <button type="button" class="hint" onclick={onshutters}>Noch kein Rolladen im Haus. Rolladen hinzufügen →</button>
+  {/if}
+
   <div class="row">
+    <button type="button" class="btn ghost" onclick={onshutters}>Rolladen</button>
     <button type="button" class="btn ghost" onclick={ongroups}>Gruppen</button>
     <button type="button" class="btn ghost" onclick={onautomations}>Automationen</button>
     <button type="button" class="btn ghost" onclick={oncalibration}>Kalibrierung</button>
@@ -190,6 +205,22 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+  .found {
+    all: unset;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--amber-soft);
+    border: 1px solid var(--amber-line);
+    color: var(--amber);
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+  .found strong {
+    font-size: 14px;
   }
   .footnote {
     margin: 8px 0 0;

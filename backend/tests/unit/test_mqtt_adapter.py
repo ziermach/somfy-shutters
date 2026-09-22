@@ -155,6 +155,7 @@ def test_only_the_current_topics_are_subscribed() -> None:
         "somfy/+/position",
         "somfy/+/state",
         "somfy/bridge/availability",
+        "homeassistant/cover/+/config",  # feature 005
     )
 
 
@@ -191,3 +192,89 @@ def test_availability_is_not_a_report() -> None:
     b, _ = bridge()
     b._handle("somfy/bridge/availability", b"offline", False)
     assert drain(b) == []
+
+
+# --- feature 005: the bridge's announcements -------------------------------------
+
+DISCOVERY = "homeassistant/cover/pisomfy_0x279630/config"
+ANNOUNCEMENT = (
+    b'{"name":"Bad","unique_id":"pisomfy_0x279630","command_topic":"somfy/0X279630/command",'
+    b'"device":{"configuration_url":"http://pi-somfy.local/"}}'
+)
+
+
+def test_subscribes_to_discovery() -> None:
+    assert "homeassistant/cover/+/config" in MqttBridge.SUBSCRIPTIONS
+
+
+@pytest.mark.parametrize("retain", [True, False])
+def test_announcement_becomes_a_report(retain: bool) -> None:
+    b, _ = bridge()
+    b._handle(DISCOVERY, ANNOUNCEMENT, retain)
+    assert drain(b) == [
+        Report(
+            "0x279630",
+            kind="announcement",
+            name="Bad",
+            web_url="http://pi-somfy.local/",
+            retained=retain,
+        )
+    ]
+
+
+def test_address_comes_from_command_topic_not_the_discovery_topic() -> None:
+    b, _ = bridge()
+    b._handle(
+        "homeassistant/cover/whatever_else/config",
+        b'{"name":"Bad","command_topic":"somfy/0x279631/command"}',
+        False,
+    )
+    [report] = drain(b)
+    assert report.address == "0x279631"
+    assert report.web_url is None
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"not json",
+        b"[1, 2]",
+        b'{"name":"Lampe"}',
+        b'{"name":"Lampe","command_topic":"zigbee/lampe/set"}',
+        b'{"name":"Bad","command_topic":"somfy/0x279630/set_position"}',
+        b'{"name":"Bad","command_topic":"somfy/not-an-address/command"}',
+    ],
+)
+def test_foreign_or_broken_announcements_are_ignored(payload: bytes) -> None:
+    b, _ = bridge()
+    b._handle("homeassistant/cover/other/config", payload, True)
+    assert drain(b) == []
+
+
+def test_empty_payload_withdraws_a_known_announcement() -> None:
+    b, _ = bridge()
+    b._handle(DISCOVERY, ANNOUNCEMENT, True)
+    drain(b)
+    b._handle(DISCOVERY, b"", False)
+    assert drain(b) == [Report("0x279630", kind="announcement", name=None, retained=False)]
+
+
+def test_empty_payload_on_an_unknown_topic_is_nothing() -> None:
+    b, _ = bridge()
+    b._handle(DISCOVERY, b"", True)
+    assert drain(b) == []
+
+
+async def test_announced_spelling_is_used_for_commands() -> None:
+    b, client = bridge()
+    b._handle(DISCOVERY, ANNOUNCEMENT, True)
+    await b.send_level("0x279630", 100)
+    assert client.published[-1][0] == "somfy/0X279630/command"
+
+
+async def test_nothing_is_ever_published_under_homeassistant() -> None:
+    b, client = bridge()
+    b._handle(DISCOVERY, ANNOUNCEMENT, True)
+    await b.send_level("0x279630", 40)
+    await b.send_stop("0x279630")
+    assert all(not topic.startswith("homeassistant/") for topic, *_ in client.published)

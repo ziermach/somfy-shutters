@@ -19,7 +19,9 @@ const shutter = (percent: number | null, movement: Movement | null = null): Shut
   travel_down_seconds: 10,
   position: position(percent),
   movement,
-  measuring: false
+  measuring: false,
+  origin: 'config',
+  forgotten: false
 });
 
 const opening: Movement = {

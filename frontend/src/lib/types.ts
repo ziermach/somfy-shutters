@@ -33,6 +33,10 @@ export interface Shutter {
   movement: Movement | null;
   /** A calibration run is under way; the server refuses commands for it. */
   measuring: boolean;
+  /** Feature 005: from config/shutters.toml, or confirmed from the bridge's announcements. */
+  origin: 'config' | 'bridge';
+  /** The bridge no longer announces it after its last restart; commands are refused. */
+  forgotten: boolean;
 }
 
 export interface BridgeStatus {
@@ -53,7 +57,7 @@ export interface CommandResult {
   id: string;
   accepted: boolean;
   movement?: Movement | null;
-  error?: 'measurement_in_progress' | 'bridge_unreachable';
+  error?: 'measurement_in_progress' | 'bridge_unreachable' | 'forgotten';
 }
 
 /** A rule conflict a group change created (FR-028): two rules now meet on a shutter. */
@@ -68,12 +72,58 @@ export interface GroupConflict {
   winner: string;
 }
 
+/** Feature 005: GET /api/roster (contracts/rest.md). */
+export interface RosterEntry {
+  id: string;
+  name: string;
+  address: string;
+  origin: 'config' | 'bridge';
+  forgotten: boolean;
+  removable: boolean;
+}
+
+export interface NewShutter {
+  address: string;
+  bridge_name: string;
+  /** The bridge's name made unique among the household ("Küche 2"). */
+  suggested_name: string;
+}
+
+export interface SetAsideShutter {
+  address: string;
+  name: string;
+}
+
+export interface Roster {
+  active: RosterEntry[];
+  new: NewShutter[];
+  set_aside: SetAsideShutter[];
+  bridge: { announcements_seen: boolean; web_url: string | null };
+}
+
+export interface RosterCounts {
+  new: number;
+  forgotten: string[];
+}
+
+/** GET /api/shutters/{id}/removal: what removing would take with it. */
+export interface RemovalPreview {
+  removable: boolean;
+  groups: { id: string; name: string }[];
+  rules: { id: string; name: string; left_without_target: boolean }[];
+  calibrated: boolean;
+  still_announced: boolean;
+  reason: 'configured_by_hand' | 'measurement_in_progress' | null;
+}
+
 export interface Snapshot {
   shutters: Shutter[];
   bridge: BridgeStatus;
   groups?: Group[];
   /** Feature 003: pause and clock state, so the overview banner is right at once. */
   automations?: import('./automations').AutomationState;
+  /** Feature 005: how many new shutters wait for a name, and which are forgotten. */
+  roster?: RosterCounts;
 }
 
 export type Frame =
@@ -87,6 +137,7 @@ export type Frame =
   | { type: 'automation_fired'; seq: number; rule_id: string; rule_name: string; planned_at: string; status: string; commanded: number; total: number }
   | { type: 'rules_changed'; seq: number }
   | { type: 'groups'; seq: number; groups: Group[] }
+  | ({ type: 'roster'; seq: number } & RosterCounts)
   | { type: 'confirmable'; seq: number; shutter_id: string; direction: 'up' | 'down'; name: string }
   | {
       type: 'calibration';

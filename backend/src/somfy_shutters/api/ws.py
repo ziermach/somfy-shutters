@@ -109,30 +109,40 @@ def frame_for_event(event: dict[str, Any], tracker: Any) -> dict[str, Any] | Non
     if kind == "groups":
         # Feature 004. The full list, never a delta: a client replaces its copy.
         return {"type": "groups", "groups": event["groups"]}
+    if kind == "roster":
+        # Feature 005. Counts only; the management screen re-fetches GET /api/roster.
+        return {"type": "roster", "new": event["new"], "forgotten": event["forgotten"]}
     if kind == "rules_changed":
         # No payload: a client showing the rules re-fetches them.
         return {"type": "rules_changed"}
     return None
 
 
-@router.websocket("/api/ws")
-async def websocket_endpoint(socket: WebSocket) -> None:
-    app = socket.app
-    hub: Hub = app.state.hub
-    tracker = app.state.tracker
-    bridge = app.state.bridge
-
-    runs = getattr(app.state, "runs", None)
-    snapshot = snapshot_json(tracker, bridge.kind, bridge.connected, runs)
-    engine = getattr(app.state, "automation", None)
+def snapshot_for(state: Any) -> dict[str, Any]:
+    """Everything a client needs to render, on connect and after the household changed."""
+    bridge = state.bridge
+    runs = getattr(state, "runs", None)
+    snapshot = snapshot_json(state.tracker, bridge.kind, bridge.connected, runs)
+    engine = getattr(state, "automation", None)
     if engine is not None:
         # In the snapshot rather than a frame after it, so the overview's banner
         # is right from the first frame (feature 003, FR-026).
         snapshot["automations"] = engine.state_json()
-    groups = getattr(app.state, "groups", None)
+    groups = getattr(state, "groups", None)
     if groups is not None:
         snapshot["groups"] = [g.wire() for g in groups.groups()]  # feature 004
-    await hub.join(socket, snapshot)
+    roster = getattr(state, "roster", None)
+    if roster is not None:
+        # Feature 005: the overview's "Neuer Rolladen gefunden" from the first frame.
+        snapshot["roster"] = {"new": len(roster.new()), "forgotten": sorted(roster.forgotten)}
+    return snapshot
+
+
+@router.websocket("/api/ws")
+async def websocket_endpoint(socket: WebSocket) -> None:
+    app = socket.app
+    hub: Hub = app.state.hub
+    await hub.join(socket, snapshot_for(app.state))
     try:
         while True:
             # Nothing is expected from the client; this keeps the socket open and

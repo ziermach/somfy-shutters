@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from .. import commands
 from ..bridge.base import BridgeUnreachable, Report
 from ..commands import MeasurementInProgress
+from ..roster import ConfiguredByHand, NameTaken
 from ..tracker import Tracker, UnknownShutter
 from .serialize import movement_json, shutter_json, snapshot_json
 
@@ -65,6 +66,12 @@ async def health(request: Request) -> dict[str, Any]:
         "shutters": len(tracker.settings.shutters),
     }
 
+
+CONFIGURED_BY_HAND = {
+    "error": "configured_by_hand",
+    "message": "Dieser Rolladen ist in config/shutters.toml eingetragen und wird dort geändert.",
+    "detail": None,
+}
 
 TARGET_REQUIRED = {
     "error": "target_required",
@@ -158,6 +165,45 @@ async def resync(request: Request, shutter_id: str) -> JSONResponse:
     )
 
 
+class RenameBody(BaseModel):
+    name: str
+
+
+@router.patch("/shutters/{shutter_id}")
+async def rename_shutter(request: Request, shutter_id: str, body: RenameBody) -> JSONResponse:
+    """Feature 005. The id never changes; groups, rules and history key on it."""
+    try:
+        await request.app.state.roster.rename(shutter_id, body.name)
+    except KeyError:
+        raise HTTPException(
+            404,
+            detail={
+                "error": "unknown_shutter",
+                "message": f"Kein Rolladen {shutter_id!r}.",
+                "detail": None,
+            },
+        ) from None
+    except ConfiguredByHand:
+        return JSONResponse(CONFIGURED_BY_HAND, status_code=409)
+    except NameTaken:
+        return JSONResponse(
+            {"error": "name_taken", "message": "Diesen Namen gibt es schon.", "detail": None},
+            status_code=409,
+        )
+    except ValueError:
+        return JSONResponse(
+            {
+                "error": "invalid_name",
+                "message": "Der Name muss 1 bis 40 Zeichen lang sein.",
+                "detail": None,
+            },
+            status_code=422,
+        )
+    return JSONResponse(
+        shutter_json(shutter_id, _tracker(request), getattr(request.app.state, "runs", None))
+    )
+
+
 @router.get("/shutters/{shutter_id}")
 async def get_shutter(request: Request, shutter_id: str) -> dict[str, Any]:
     tracker = _tracker(request)
@@ -184,6 +230,43 @@ class ReportBody(BaseModel):
     """The bridge's level, which is what a real report carries. Named percent
     because that is what it is called on the wire; the two coincide only when
     the travel curve is neutral."""
+
+
+class BridgeShutterBody(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+
+
+@sim_router.post("/bridge/shutters", status_code=201)
+async def sim_bridge_add(request: Request, body: BridgeShutterBody) -> dict[str, Any]:
+    """A person adds a shutter in the bridge's interface (feature 005). The bridge
+    announces it — and accepts commands for it — only after a restart."""
+    address = request.app.state.bridge.bridge_add(body.name.strip())
+    return {"address": address, "name": body.name.strip(), "announced": False}
+
+
+@sim_router.get("/bridge/shutters")
+async def sim_bridge_list(request: Request) -> dict[str, Any]:
+    return {"shutters": request.app.state.bridge.bridge_shutters()}
+
+
+@sim_router.delete("/bridge/shutters/{address}", status_code=204)
+async def sim_bridge_delete(request: Request, address: str) -> None:
+    """A person deletes a shutter in the bridge. Its retained announcement stays."""
+    if not request.app.state.bridge.bridge_delete(address.strip().lower()):
+        raise HTTPException(
+            404, detail={"error": "unknown_address", "message": "unbekannt", "detail": None}
+        )
+
+
+@sim_router.post("/bridge/restart")
+async def sim_bridge_restart(request: Request) -> dict[str, Any]:
+    """The bridge restarts: offline, online, every current shutter announced live."""
+    bridge = request.app.state.bridge
+    bridge.bridge_restart()
+    await request.app.state.bus.publish(
+        {"type": "bridge", "connected": bridge.connected, "kind": bridge.kind}
+    )
+    return {"connected": bridge.connected}
 
 
 @sim_router.post("/bridge/{state}")

@@ -8,6 +8,7 @@ import { interpolate } from './animate';
 import { automations } from './automations.svelte';
 import { groups } from './groups.svelte';
 import { commandText } from './groups';
+import { roster } from './roster.svelte';
 import type { Action, BridgeStatus, CommandResult, Frame, Movement, Shutter } from './types';
 
 const BACKOFF_START = 1000;
@@ -115,6 +116,11 @@ class ShutterState {
         this.bridge = frame.data.bridge;
         if (frame.data.automations) automations.setState(frame.data.automations);
         groups.set(frame.data.groups ?? []);
+        // A snapshot now also arrives when the household changed (feature 005).
+        if (frame.data.roster) roster.setCounts(frame.data.roster);
+        break;
+      case 'roster':
+        roster.setCounts({ new: frame.new, forgotten: frame.forgotten });
         break;
       case 'groups':
         groups.set(frame.groups);

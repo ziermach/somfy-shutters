@@ -33,7 +33,7 @@ def test_first_frame_is_always_a_full_snapshot(test_client) -> None:
         frame = socket.receive_json()
     assert frame["type"] == "snapshot"
     assert frame["seq"] == 1
-    assert set(frame["data"]) == {"shutters", "bridge", "automations", "groups"}
+    assert set(frame["data"]) == {"shutters", "bridge", "automations", "groups", "roster"}
     assert frame["data"]["automations"]["paused"] is False
     assert frame["data"]["groups"] == []
     assert len(frame["data"]["shutters"]) == 3

@@ -19,7 +19,9 @@ const make = (id: string, percent: number | null, opts: { confidence?: Conf; sta
     source: 'command'
   },
   movement: opts.moving ? (moving as Movement) : null,
-  measuring: false
+  measuring: false,
+  origin: 'config',
+  forgotten: false
 });
 
 const moving: Movement = {

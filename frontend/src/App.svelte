@@ -11,6 +11,7 @@
   import GroupForm from './routes/GroupForm.svelte';
   import Groups from './routes/Groups.svelte';
   import Overview from './routes/Overview.svelte';
+  import Shutters from './routes/Shutters.svelte';
 
   type View =
     | { name: 'overview' }
@@ -20,7 +21,8 @@
     | { name: 'automations' }
     | { name: 'ruleForm'; id?: string }
     | { name: 'groups' }
-    | { name: 'groupForm'; id?: string };
+    | { name: 'groupForm'; id?: string }
+    | { name: 'shutters' };
 
   let view = $state<View>({ name: 'overview' });
 
@@ -84,12 +86,19 @@
     {#key view.id}
       <GroupForm id={view.id} onback={() => (view = { name: 'groups' })} />
     {/key}
+  {:else if view.name === 'shutters'}
+    <Shutters
+      onback={() => (view = { name: 'overview' })}
+      onadd={() => (view = { name: 'shutters' })}
+      onopen={(id) => (view = { name: 'detail', id })}
+    />
   {:else}
     <Overview
       onopen={(id) => (view = { name: 'detail', id })}
       oncalibration={() => (view = { name: 'calibration' })}
       onautomations={() => (view = { name: 'automations' })}
       ongroups={() => (view = { name: 'groups' })}
+      onshutters={() => (view = { name: 'shutters' })}
     />
   {/if}
 </main>
