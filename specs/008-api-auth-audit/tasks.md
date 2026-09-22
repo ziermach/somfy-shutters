@@ -1,11 +1,11 @@
 ---
 
-description: "Task list for feature 007, API authentication and audit"
+description: "Task list for feature 008, API authentication and audit"
 ---
 
 # Tasks: API authentication and audit
 
-**Input**: Design documents from `/specs/007-api-auth-audit/`
+**Input**: Design documents from `/specs/008-api-auth-audit/`
 
 **Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/rest.md](./contracts/rest.md), [contracts/websocket.md](./contracts/websocket.md), [contracts/cli.md](./contracts/cli.md)
 

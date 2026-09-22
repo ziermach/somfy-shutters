@@ -1,6 +1,6 @@
 # Research: API authentication and audit
 
-Decisions taken while planning feature 007, each with what was weighed against it.
+Decisions taken while planning feature 008, each with what was weighed against it.
 The spec was written before features 003 (automations) and 004 (groups) landed; this
 plan covers the routes they added, and the ones specs 005 and 006 will add.
 

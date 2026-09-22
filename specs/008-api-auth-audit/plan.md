@@ -2,7 +2,7 @@
 
 **Branch**: `worktree-007-api-auth` (designed in a separate worktree, merged to `main`) | **Date**: 2026-09-22 | **Spec**: [spec.md](./spec.md)
 
-**Input**: Feature specification from `specs/007-api-auth-audit/spec.md`
+**Input**: Feature specification from `specs/008-api-auth-audit/spec.md`
 
 ## Summary
 
@@ -71,7 +71,7 @@ real bridge; no per-request SD-card writes (last-used throttled, throttle state 
 ### Documentation (this feature)
 
 ```text
-specs/007-api-auth-audit/
+specs/008-api-auth-audit/
 ├── plan.md              # this file
 ├── research.md          # Phase 0 — decisions and why
 ├── data-model.md        # Phase 1 — tables, abilities, actions, config
