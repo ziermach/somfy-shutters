@@ -5,7 +5,7 @@
 
 # 🚧 WORK IN PROGRESS 🚧
 
-> **It runs, but it has never moved a real shutter.** Features 001–004 and 006 are
+> **It runs, but it has never moved a real shutter.** Features 001–006 are
 > implemented and tested against a simulated house; the MQTT path speaks Pi-Somfy's
 > current interface and has been walked against a real Mosquitto broker impersonating
 > Pi-Somfy — but no motor in this project has been paired yet, so it is unproven on
@@ -279,13 +279,13 @@ Work is spec-driven with [GitHub Spec Kit](https://github.com/github/spec-kit):
 /speckit-constitution → /speckit-specify → /speckit-plan → /speckit-tasks → /speckit-implement
 ```
 
-Feature code is not written before its spec exists. Features 001–004 and 006 are specified,
-planned, broken into tasks and implemented under
-[`specs/`](specs/); feature 005 — adding and removing shutters, learned from Pi-Somfy's own
-announcements instead of hand-copied addresses — is specified and next. Each plan's `research.md` is where the non-obvious decisions are
-argued, including the one that killed a user story: feature 002 originally asked for
-recalibration with no user involvement, and
-[that is not possible here](specs/002-travel-calibration/research.md). See
+Feature code is not written before its spec exists. Features 001–006 are specified,
+planned, broken into tasks and implemented under [`specs/`](specs/). Each plan's
+`research.md` is where the non-obvious decisions are argued, including the one that
+killed a user story: feature 002 originally asked for recalibration with no user
+involvement, and [that is not possible here](specs/002-travel-calibration/research.md).
+Feature 005's is where reading Pi-Somfy's code showed that a new shutter is announced
+only after a restart — which put the restart into the guide. See
 [CLAUDE.md](CLAUDE.md) for conventions and build commands.
 
 ```bash
