@@ -43,6 +43,8 @@ export interface BridgeStatus {
 export interface Snapshot {
   shutters: Shutter[];
   bridge: BridgeStatus;
+  /** Feature 003: pause and clock state, so the overview banner is right at once. */
+  automations?: import('./automations').AutomationState;
 }
 
 export type Frame =
@@ -52,6 +54,9 @@ export type Frame =
   | { type: 'correction'; seq: number; shutter_id: string; position: PositionEstimate; ease_ms: number }
   | { type: 'bridge'; seq: number; connected: boolean; kind: 'mqtt' | 'sim' }
   | { type: 'measuring'; seq: number; shutter_id: string; active: boolean; direction: 'up' | 'down' | null }
+  | ({ type: 'automations'; seq: number } & import('./automations').AutomationState)
+  | { type: 'automation_fired'; seq: number; rule_id: string; rule_name: string; planned_at: string; status: string; commanded: number; total: number }
+  | { type: 'rules_changed'; seq: number }
   | { type: 'confirmable'; seq: number; shutter_id: string; direction: 'up' | 'down'; name: string }
   | {
       type: 'calibration';

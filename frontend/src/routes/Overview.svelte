@@ -6,8 +6,9 @@
   interface Props {
     onopen: (id: string) => void;
     oncalibration: () => void;
+    onautomations: () => void;
   }
-  let { onopen, oncalibration }: Props = $props();
+  let { onopen, oncalibration, onautomations }: Props = $props();
 </script>
 
 <section class="screen">
@@ -35,7 +36,10 @@
     {/each}
   </div>
 
-  <button type="button" class="btn ghost wide" onclick={oncalibration}>Kalibrierung</button>
+  <div class="row">
+    <button type="button" class="btn ghost" onclick={onautomations}>Automationen</button>
+    <button type="button" class="btn ghost" onclick={oncalibration}>Kalibrierung</button>
+  </div>
 
   <p class="footnote">
     Position ist eine Zeitschätzung, kein Rückmeldewert. Nur die Endlagen sind sicher.
@@ -77,10 +81,6 @@
   .btn:disabled {
     opacity: 0.4;
     cursor: default;
-  }
-  .wide {
-    flex: none;
-    width: 100%;
   }
   .cards {
     display: flex;

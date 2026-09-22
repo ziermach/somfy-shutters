@@ -63,18 +63,18 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ### Tests for User Story 1
 
-- [ ] T016 [P] [US1] Contract test `backend/tests/contract/test_automation_rest.py`: `GET /api/automations` shape (`rules`, `pause`, `clock`, `location`), `POST` **201** with the stored rule, **422** for unknown shutter / empty targets / `position` without percent / offset on a time trigger, `DELETE` **204**, and a `rules_changed` frame after each change
-- [ ] T017 [P] [US1] Scenario test `backend/tests/integration/test_automation_quickstart.py` for A1–A4 with a fake clock: fired at the minute, not on another weekday, only its targets move, a `position` rule ends `estimated`
+- [X] T016 [P] [US1] Contract test `backend/tests/contract/test_automation_rest.py`: `GET /api/automations` shape (`rules`, `pause`, `clock`, `location`), `POST` **201** with the stored rule, **422** for unknown shutter / empty targets / `position` without percent / offset on a time trigger, `DELETE` **204**, and a `rules_changed` frame after each change
+- [X] T017 [P] [US1] Scenario test `backend/tests/integration/test_automation_quickstart.py` for A1–A4 with a fake clock: fired at the minute, not on another weekday, only its targets move, a `position` rule ends `estimated`
 
 ### Implementation for User Story 1
 
-- [ ] T018 [US1] Implement `backend/src/somfy_shutters/api/automation_routes.py`: `GET /api/automations`, `POST`, `DELETE /api/automations/{id}` per [contracts/rest.md](./contracts/rest.md); rules carry `next` from the planner; every change calls `engine.reschedule()` and publishes `rules_changed`; register the router in `main.py`
-- [ ] T019 [P] [US1] Create `frontend/src/lib/automations.ts`: German wording for triggers ("06:45", "Sonnenuntergang −30 Min"), actions ("auf", "zu", "30 %"), targets ("Alle Rolladen", names, "kein Rolladen mehr"), next firing ("heute 06:45", "morgen", weekday + date) and statuses — the phrases a person reads, kept testable
-- [ ] T020 [P] [US1] Unit-test the wording in `frontend/src/lib/automations.test.ts`
-- [ ] T021 [US1] Create `frontend/src/lib/automations.svelte.ts`: rules, pause, clock and location state loaded from `GET /api/automations`; create/delete; refetch on `rules_changed` and `automation_fired`; `automations` frames update pause and clock
-- [ ] T022 [US1] Create `frontend/src/routes/RuleForm.svelte` from `mocks/rolladen-ui.html`: name, trigger *Uhrzeit*, day chips with *Werktags / Wochenende / Alle*, shutter chips with *Alle*, action *auf / zu / Position* with the slider and **the estimate note for positions (FR-023)**, save and delete
-- [ ] T023 [US1] Create `frontend/src/components/RuleCard.svelte` and `frontend/src/routes/Automations.svelte`: list of rules with name, trigger, targets → action and next firing, and *+ Neue Regel*
-- [ ] T024 [US1] Add navigation in `frontend/src/App.svelte` and an *Automationen* entry on `frontend/src/routes/Overview.svelte`
+- [X] T018 [US1] Implement `backend/src/somfy_shutters/api/automation_routes.py`: `GET /api/automations`, `POST`, `DELETE /api/automations/{id}` per [contracts/rest.md](./contracts/rest.md); rules carry `next` from the planner; every change calls `engine.reschedule()` and publishes `rules_changed`; register the router in `main.py`
+- [X] T019 [P] [US1] Create `frontend/src/lib/automations.ts`: German wording for triggers ("06:45", "Sonnenuntergang −30 Min"), actions ("auf", "zu", "30 %"), targets ("Alle Rolladen", names, "kein Rolladen mehr"), next firing ("heute 06:45", "morgen", weekday + date) and statuses — the phrases a person reads, kept testable
+- [X] T020 [P] [US1] Unit-test the wording in `frontend/src/lib/automations.test.ts`
+- [X] T021 [US1] Create `frontend/src/lib/automations.svelte.ts`: rules, pause, clock and location state loaded from `GET /api/automations`; create/delete; refetch on `rules_changed` and `automation_fired`; `automations` frames update pause and clock
+- [X] T022 [US1] Create `frontend/src/routes/RuleForm.svelte` from `mocks/rolladen-ui.html`: name, trigger *Uhrzeit*, day chips with *Werktags / Wochenende / Alle*, shutter chips with *Alle*, action *auf / zu / Position* with the slider and **the estimate note for positions (FR-023)**, save and delete
+- [X] T023 [US1] Create `frontend/src/components/RuleCard.svelte` and `frontend/src/routes/Automations.svelte`: list of rules with name, trigger, targets → action and next firing, and *+ Neue Regel*
+- [X] T024 [US1] Add navigation in `frontend/src/App.svelte` and an *Automationen* entry on `frontend/src/routes/Overview.svelte`
 
 **Checkpoint**: MVP — morning and evening schedules work end to end.
 

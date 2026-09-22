@@ -5,6 +5,7 @@
 // and no missed-message detection to get wrong.
 
 import { interpolate } from './animate';
+import { automations } from './automations.svelte';
 import type { Action, BridgeStatus, Frame, Movement, Shutter } from './types';
 
 const BACKOFF_START = 1000;
@@ -109,6 +110,19 @@ class ShutterState {
         // same position as one that just opened the page.
         this.shutters = frame.data.shutters;
         this.bridge = frame.data.bridge;
+        if (frame.data.automations) automations.setState(frame.data.automations);
+        break;
+      case 'automations':
+        automations.setState({
+          paused: frame.paused,
+          until: frame.until,
+          clock_reliable: frame.clock_reliable,
+          clock_reason: frame.clock_reason
+        });
+        break;
+      case 'automation_fired':
+      case 'rules_changed':
+        automations.changed();
         break;
       case 'movement':
         this.#patch(frame.shutter_id, (s) => ({ ...s, movement: frame.movement }));

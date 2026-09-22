@@ -3,6 +3,8 @@
   import { ticker } from './lib/animate';
   import { shutters } from './lib/shutters.svelte';
   import ArrivalPrompt from './components/ArrivalPrompt.svelte';
+  import Automations from './routes/Automations.svelte';
+  import RuleForm from './routes/RuleForm.svelte';
   import Calibration from './routes/Calibration.svelte';
   import CalibrationRun from './routes/CalibrationRun.svelte';
   import Detail from './routes/Detail.svelte';
@@ -12,7 +14,9 @@
     | { name: 'overview' }
     | { name: 'detail'; id: string }
     | { name: 'calibration' }
-    | { name: 'calibrationRun'; id: string };
+    | { name: 'calibrationRun'; id: string }
+    | { name: 'automations' }
+    | { name: 'ruleForm'; id?: string };
 
   let view = $state<View>({ name: 'overview' });
 
@@ -60,10 +64,18 @@
     />
   {:else if view.name === 'calibrationRun'}
     <CalibrationRun id={view.id} onback={() => (view = { name: 'calibration' })} />
+  {:else if view.name === 'automations'}
+    <Automations
+      onedit={(id) => (view = { name: 'ruleForm', id })}
+      onback={() => (view = { name: 'overview' })}
+    />
+  {:else if view.name === 'ruleForm'}
+    <RuleForm id={view.id} onback={() => (view = { name: 'automations' })} />
   {:else}
     <Overview
       onopen={(id) => (view = { name: 'detail', id })}
       oncalibration={() => (view = { name: 'calibration' })}
+      onautomations={() => (view = { name: 'automations' })}
     />
   {/if}
 </main>
