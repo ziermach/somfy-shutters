@@ -192,6 +192,13 @@ class CalibrationState {
       body: JSON.stringify({ answer: reply })
     });
     const body = await response.json();
+    // One drive, one answer: the buttons go away either way, because after an
+    // answer the shutter no longer stands at the midpoint being asked about.
+    this.checking = false;
+    if (!response.ok) {
+      this.message = body.message ?? 'Antwort nicht angenommen.';
+      return;
+    }
     this.atLimit = body.at_limit;
 
     if (reply === 'about_right') {
@@ -200,10 +207,9 @@ class CalibrationState {
     } else if (body.at_limit) {
       this.message = `Mitte um ${body.shift_pp.toFixed(1)} pp verschoben — weiter geht es nicht. Wenn es immer noch nicht passt, lieber neu messen.`;
     } else {
-      this.message = `Mitte um ${body.shift_pp.toFixed(1)} pp verschoben. Nochmal prüfen?`;
+      this.message = `Mitte um ${body.shift_pp.toFixed(1)} pp verschoben. Nochmal auf die Mitte fahren und prüfen?`;
     }
     await this.loadDetail(id);
-    this.checking = reply !== 'about_right' && !body.at_limit;
   }
 
   async undoCheck(id: string): Promise<void> {

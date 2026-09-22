@@ -178,6 +178,10 @@ class Tracker:
         await self._emit({"type": "movement", "shutter_id": shutter_id, "movement": movement})
         return movement
 
+    def last_direction(self, shutter_id: str) -> Direction | None:
+        """Which way this shutter last travelled on our command, if we know."""
+        return self._last_direction.get(shutter_id)
+
     def level_for(self, shutter_id: str, target_percent: int) -> int:
         """What to ask the bridge for, so the shutter lands on `target_percent`.
 

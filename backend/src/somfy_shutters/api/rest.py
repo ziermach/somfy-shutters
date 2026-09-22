@@ -54,6 +54,9 @@ async def _apply(request: Request, shutter_id: str, body: CommandBody) -> dict[s
     tracker: Tracker = request.app.state.tracker
     bridge = request.app.state.bridge
     action = Action(body.action)
+    # Driven somewhere else, the shutter no longer shows the check's midpoint;
+    # an answer now would describe a position nobody asked about.
+    getattr(request.app.state, "pending_checks", {}).pop(shutter_id, None)
 
     if action is Action.STOP:
         # Expressed as a level command at the current position: we only speak

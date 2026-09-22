@@ -199,23 +199,27 @@ async def test_c3_2_end_points_are_untouchable(client) -> None:
     await park(client, 0)
     await guided_run(client)
     for _ in range(6):
+        await client.post("/api/calibration/flink/check")
         await client.post("/api/calibration/flink/check/answer", json={"answer": "too_high"})
 
-    await park(client, 0)
-    await client.post("/api/shutters/flink/command", json={"action": "open"})
+    # The check drove down from the end of the guided run, so that is the
+    # curve the answers bent — and the travel to test the end points on.
+    await park(client, 100)
+    await client.post("/api/shutters/flink/command", json={"action": "close"})
     tracker = client.app.state.tracker
     movement = tracker.movement("flink")
-    a = client.app.state.calibration.curve_a("flink", "up")
+    a = client.app.state.calibration.curve_a("flink", "down")
     assert a != 1.0
     assert movement.curve_a == a
-    assert movement.position_at(movement.started_monotonic) == 0
-    assert movement.position_at(movement.started_monotonic + movement.duration_seconds) == 100
+    assert movement.position_at(movement.started_monotonic) == 100
+    assert movement.position_at(movement.started_monotonic + movement.duration_seconds) == 0
 
 
 async def test_c3_3_undo_keeps_the_measurements(client) -> None:
     await park(client, 0)
     await guided_run(client)
     for _ in range(2):
+        await client.post("/api/calibration/flink/check")
         await client.post("/api/calibration/flink/check/answer", json={"answer": "too_low"})
 
     before = (await client.get("/api/calibration/flink")).json()["up"]["travel_seconds"]
@@ -229,6 +233,7 @@ async def test_c3_4_the_limit_is_reported(client) -> None:
     await guided_run(client)
     last = {}
     for _ in range(12):
+        await client.post("/api/calibration/flink/check")
         last = (
             await client.post("/api/calibration/flink/check/answer", json={"answer": "too_low"})
         ).json()

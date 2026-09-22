@@ -106,7 +106,16 @@ Starts verification: drives to the displayed midpoint (FR-023).
 { "answer": "too_high" }
 ```
 
-**200** `{ "curve_a": 1.1, "shift_pp": 3.4, "at_limit": false }`
+**200** `{ "direction": "down", "curve_a": 1.1, "shift_pp": 3.4, "at_limit": false }`
+
+**409** `no_check` — no drive to the midpoint is waiting for an answer. Exactly one
+answer is accepted per `POST …/check`: after it the curve has moved, so the shutter no
+longer stands at the midpoint being asked about. Any other command to the shutter, a
+measurement run, or an undo also discards the waiting check. **409** `already_running`
+while a measurement is in progress.
+
+`direction` is the way the check drive travelled, and the curve of that direction is
+the one adjusted — the client does not choose it. `POST …/check` returns it too.
 
 `at_limit` is true once the bound is reached, so the interface can stop offering more
 of something that will not move.

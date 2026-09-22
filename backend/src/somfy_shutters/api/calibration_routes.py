@@ -185,6 +185,7 @@ async def start_run(request: Request, shutter_id: str) -> JSONResponse:
     target = 100 if plan.direction is Direction.UP else 0
     expected = plan.expected_total or tracker._travel_seconds(shutter_id, plan.direction)
 
+    request.app.state.pending_checks.pop(shutter_id, None)
     try:
         runs.start(
             ActiveRun(
@@ -409,10 +410,19 @@ async def start_check(request: Request, shutter_id: str) -> JSONResponse:
         movement = await tracker.start_movement(shutter_id, 50)
     except BridgeUnreachable:
         return JSONResponse(BRIDGE_UNREACHABLE, status_code=503)
+    # The curve is per direction, so the answer has to land on the one this
+    # drive used. Already standing at 50 %, the way it got there decides.
+    direction = (
+        movement.direction
+        if movement is not None
+        else tracker.last_direction(shutter_id) or Direction.UP
+    )
+    request.app.state.pending_checks[shutter_id] = direction
     return JSONResponse(
         {
             "accepted": True,
             "target_percent": 50,
+            "direction": direction.value,
             "expected_arrival": movement.expected_arrival.isoformat() if movement else None,
         }
     )
@@ -420,16 +430,29 @@ async def start_check(request: Request, shutter_id: str) -> JSONResponse:
 
 class AnswerBody(BaseModel):
     answer: Literal["too_high", "about_right", "too_low"]
-    direction: Literal["up", "down"] = "up"
 
 
 @router.post("/{shutter_id}/check/answer")
-async def answer_check(request: Request, shutter_id: str, body: AnswerBody) -> dict[str, Any]:
-    tracker, service, _, _ = _parts(request)
+async def answer_check(request: Request, shutter_id: str, body: AnswerBody) -> Any:
+    """One answer per drive to the midpoint.
+
+    An answer describes what the person sees at the check position. Without a
+    drive there is no such position, and after one answer the curve has moved,
+    so the shutter no longer stands at the new midpoint — accepting a second
+    answer there shifts the curve again for something nobody looked at.
+    """
+    tracker, service, runs, _ = _parts(request)
     _require_shutter(tracker, shutter_id)
-    direction = Direction(body.direction)
+    if runs.is_measuring(shutter_id):
+        return _conflict(CalibrationError("already_running", "Es läuft gerade eine Messung."))
+    direction = request.app.state.pending_checks.pop(shutter_id, None)
+    if direction is None:
+        return _conflict(
+            CalibrationError("no_check", "Erst auf die Mitte fahren, dann sagen, wie es aussieht.")
+        )
     value = service.answer_check(shutter_id, direction, CheckReply(body.answer))
     return {
+        "direction": direction.value,
         "curve_a": round(value.curve_a, 3),
         "shift_pp": round(abs(midpoint_shift(value.curve_a)), 1),
         "at_limit": at_curve_limit(value.curve_a),
@@ -442,4 +465,5 @@ async def clear_check(request: Request, shutter_id: str) -> dict[str, Any]:
     tracker, service, _, _ = _parts(request)
     _require_shutter(tracker, shutter_id)
     service.clear_checks(shutter_id)
+    request.app.state.pending_checks.pop(shutter_id, None)
     return _shutter_json(tracker, service, shutter_id)

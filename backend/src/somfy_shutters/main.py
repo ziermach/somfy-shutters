@@ -227,6 +227,8 @@ def create_app(
     app.state.runs = runs
     app.state.on_report = on_report
     app.state.pending_confirmations = pending
+    # shutter id -> the direction its check drive went. One answer per drive.
+    app.state.pending_checks = {}
 
     app.include_router(rest.router)
     app.include_router(calibration_routes.router)
