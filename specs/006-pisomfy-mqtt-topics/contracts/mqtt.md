@@ -1,5 +1,8 @@
 # Contract: MQTT — the whole integration surface (current Pi-Somfy)
 
+> **Superseded in part** by [feature 005's contract](../../005-shutter-add-remove/contracts/mqtt.md):
+> the discovery topic `homeassistant/cover/+/config`, excluded here, is now subscribed to.
+
 Supersedes [feature 001's contract](../../001-mqtt-live-position/contracts/mqtt.md), whose
 `level/cmd` / `level/set_state` topics no longer exist in Pi-Somfy since v3.1. Everything in
 this file is known only to `backend/src/somfy_shutters/bridge/mqtt.py`; nothing above the

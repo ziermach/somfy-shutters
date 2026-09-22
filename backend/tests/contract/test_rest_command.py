@@ -11,6 +11,8 @@ SHUTTER_KEYS = {
     "position",
     "movement",
     "measuring",
+    "origin",  # feature 005
+    "forgotten",  # feature 005
 }
 POSITION_KEYS = {"percent", "confidence", "certain_at", "age_seconds", "stale", "source"}
 MOVEMENT_KEYS = {

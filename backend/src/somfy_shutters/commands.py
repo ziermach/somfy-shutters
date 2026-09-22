@@ -23,8 +23,19 @@ class MeasurementInProgress(RuntimeError):
     """A command was aimed at a shutter that is being measured (FR-028)."""
 
 
+class ShutterForgotten(RuntimeError):
+    """The bridge no longer announces this shutter (feature 005, FR-017). A command
+    would be published to a topic nobody listens to."""
+
+
 def _record(
-    state: Any, actor: Actor, shutter_id: str, action: str, percent: int | None, outcome: str
+    state: Any,
+    actor: Actor,
+    shutter_id: str,
+    action: str,
+    percent: int | None,
+    outcome: str,
+    reason: str | None = None,
 ) -> None:
     """Feature 008: who asked, written after the frame went out (research §9).
 
@@ -38,6 +49,8 @@ def _record(
     detail: dict[str, Any] = {"action": action}
     if percent is not None:
         detail["percent"] = percent
+    if reason is not None:
+        detail["reason"] = reason
     audit.record(
         actor,
         "command",
@@ -57,14 +70,17 @@ async def apply(
 ) -> dict[str, Any]:
     """Issue one command, and record who asked for it.
 
-    Raises MeasurementInProgress, BridgeUnreachable (from the bridge) or
-    UnknownShutter (from the tracker). Nothing is queued: a command that cannot be
+    Raises MeasurementInProgress, ShutterForgotten, BridgeUnreachable (from the
+    bridge) or UnknownShutter (from the tracker). Nothing is queued: a command that cannot be
     handed over now did not happen.
     """
     try:
         result = await _send(state, shutter_id, action, target_percent)
     except MeasurementInProgress:
         _record(state, actor, shutter_id, action, target_percent, "skipped")
+        raise
+    except ShutterForgotten:
+        _record(state, actor, shutter_id, action, target_percent, "skipped", "forgotten")
         raise
     except BridgeUnreachable:
         _record(state, actor, shutter_id, action, target_percent, "failed")
@@ -81,6 +97,9 @@ async def _send(
     runs = getattr(state, "runs", None)
     if runs is not None and runs.is_measuring(shutter_id):
         raise MeasurementInProgress(shutter_id)
+    roster = getattr(state, "roster", None)
+    if roster is not None and roster.is_forgotten(shutter_id):
+        raise ShutterForgotten(shutter_id)
 
     tracker = state.tracker
     bridge = state.bridge
@@ -129,6 +148,8 @@ async def apply_many(
             results.append(
                 {"id": shutter_id, "accepted": False, "error": "measurement_in_progress"}
             )
+        except ShutterForgotten:
+            results.append({"id": shutter_id, "accepted": False, "error": "forgotten"})
         except BridgeUnreachable:
             results.append({"id": shutter_id, "accepted": False, "error": "bridge_unreachable"})
     return results

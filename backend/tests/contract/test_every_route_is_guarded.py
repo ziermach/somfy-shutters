@@ -26,6 +26,7 @@ PARAMS = {
     "state": "online",
     "credential_id": "c_x",
     "code_id": "p_x",
+    "address": "0x279621",
 }
 
 

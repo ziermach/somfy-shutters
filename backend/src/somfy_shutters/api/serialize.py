@@ -42,6 +42,7 @@ def movement_json(movement: Movement | None) -> dict[str, Any] | None:
 
 def shutter_json(shutter_id: str, tracker: Tracker, runs: Any = None) -> dict[str, Any]:
     config = tracker.settings.shutters[shutter_id]
+    roster: Any = tracker.roster
     return {
         "id": config.id,
         "name": config.name,
@@ -53,6 +54,10 @@ def shutter_json(shutter_id: str, tracker: Tracker, runs: Any = None) -> dict[st
         # While a measurement runs, commands to this shutter are refused. The
         # interface needs to know that before somebody presses a dead button.
         "measuring": bool(runs and runs.is_measuring(shutter_id)),
+        # Feature 005: from shutters.toml or the bridge's announcements, and whether
+        # the bridge still knows it. A forgotten shutter must not look drivable.
+        "origin": roster.origin(shutter_id) if roster is not None else "config",
+        "forgotten": bool(roster is not None and roster.is_forgotten(shutter_id)),
     }
 
 

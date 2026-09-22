@@ -9,6 +9,7 @@ import { auth } from './auth.svelte';
 import { automations } from './automations.svelte';
 import { groups } from './groups.svelte';
 import { commandText } from './groups';
+import { roster } from './roster.svelte';
 import type { Action, BridgeStatus, CommandResult, Frame, Movement, Shutter } from './types';
 
 const BACKOFF_START = 1000;
@@ -58,17 +59,20 @@ class ShutterState {
 
   /** "auf" does nothing for a shutter that is open or already opening. */
   canOpen(shutter: Shutter): boolean {
-    return this.#endsAt(shutter) !== 100;
+    return !shutter.forgotten && this.#endsAt(shutter) !== 100;
   }
 
   /** "zu" does nothing for a shutter that is closed or already closing. */
   canClose(shutter: Shutter): boolean {
-    return this.#endsAt(shutter) !== 0;
+    return !shutter.forgotten && this.#endsAt(shutter) !== 0;
   }
 
-  /** "stop" only means something while a travel is under way. */
+  /**
+   * "stop" only means something while a travel is under way. A shutter the bridge
+   * forgot (feature 005) takes no command at all: it would vanish into the air.
+   */
   canStop(shutter: Shutter): boolean {
-    return shutter.movement !== null;
+    return !shutter.forgotten && shutter.movement !== null;
   }
 
   /** Advance the animation clock; called once per frame. */
@@ -124,6 +128,15 @@ class ShutterState {
         this.bridge = frame.data.bridge;
         if (frame.data.automations) automations.setState(frame.data.automations);
         groups.set(frame.data.groups ?? []);
+        // A snapshot now also arrives when the household changed (feature 005).
+        if (frame.data.roster) roster.setCounts(frame.data.roster);
+        break;
+      case 'roster':
+        roster.setCounts({ new: frame.new, forgotten: frame.forgotten });
+        // Forgotten is decided without a snapshot; the buttons must follow at once.
+        this.shutters = this.shutters.map((s) =>
+          s.forgotten === frame.forgotten.includes(s.id) ? s : { ...s, forgotten: !s.forgotten }
+        );
         break;
       case 'groups':
         groups.set(frame.groups);

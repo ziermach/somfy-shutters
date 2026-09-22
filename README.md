@@ -41,12 +41,16 @@ shutter stands, and automations that run on the house's own network.
 | ✅ | Groups — rooms, floors, a side of the house — that overlap, move with one tap, and serve as rule targets |
 | ✅ | Installable as an app; opens without the backend and says positions are not current; updates reach every phone |
 | ✅ | Speaks Pi-Somfy's current MQTT interface (v3.1+): explicit stop, the bridge's own availability, retained reports treated as old news |
+| ✅ | Shutters come from Pi-Somfy's own announcements: nobody copies an address; new ones wait for a name before they join anything |
+| ✅ | A guide for adding a window — with or without a working remote — that notices the new shutter by itself |
+| ✅ | Removing a shutter names what goes with it, cleans groups and rules, and sends nothing to the bridge |
+| ✅ | A shutter deleted in Pi-Somfy is marked "vergessen" after its next restart, and takes no more commands |
 | ✅ | Nothing moves without a credential: every phone pairs once with a six-character code, and each can be revoked alone |
 | ✅ | A credential may do less than everything — watch, drive, configure, calibrate, manage devices |
 | ✅ | A record of who moved what, including rules and movements the app only observed; guessing and flooding are throttled |
 | ⬜ | Anything confirmed on a real motor |
 
-693 backend and 72 frontend tests, against the real API surface, the tracker's rules,
+791 backend and 84 frontend tests, against the real API surface, the tracker's rules,
 the calibration arithmetic, and the simulated house end to end.
 
 ## The problem this project takes seriously
@@ -79,8 +83,9 @@ flowchart LR
 
 Pi-Somfy stays the only process that holds rolling-code counters and transmits. This
 project never touches the radio — it publishes to `somfy/<id>/command` (OPEN/CLOSE/STOP)
-and `somfy/<id>/set_position`, and listens to `somfy/<id>/position`, `somfy/<id>/state` and
-`somfy/bridge/availability`, nothing else — Pi-Somfy's interface since v3.1. That keeps the
+and `somfy/<id>/set_position`, and listens to `somfy/<id>/position`, `somfy/<id>/state`,
+`somfy/bridge/availability` and Pi-Somfy's discovery announcements
+(`homeassistant/cover/+/config`), nothing else — Pi-Somfy's interface since v3.1. That keeps the
 transmitter swappable: moving to ESPSomfy-RTS would change an endpoint, not the app.
 
 | Layer | Choice |
@@ -111,6 +116,8 @@ against:
 ## Running it
 
 No broker and no hardware needed — `bridge.kind = "sim"` runs a simulated house.
+`shutters.toml` may list shutters by hand, or none at all: the app learns them from the
+bridge (see [Adding and removing shutters](#adding-and-removing-shutters)).
 
 ```bash
 cp config/shutters.example.toml config/shutters.toml
@@ -133,7 +140,8 @@ reconciliation cases, are in the quickstarts of
 [001](specs/001-mqtt-live-position/quickstart.md),
 [002](specs/002-travel-calibration/quickstart.md),
 [003](specs/003-shutter-automations/quickstart.md),
-[004](specs/004-shutter-groups/quickstart.md) and
+[004](specs/004-shutter-groups/quickstart.md),
+[005](specs/005-shutter-add-remove/quickstart.md) and
 [006](specs/006-pisomfy-mqtt-topics/quickstart.md) — most of them automated, all of
 001's walked once more in the browser against the simulator, and 006's against a local
 Mosquitto with `mosquitto_pub`/`mosquitto_sub` playing Pi-Somfy.
@@ -227,6 +235,35 @@ groups; membership is read when the rule fires, so a shutter added to "Obergesch
 is closed by the evening rule without editing it, and a shutter reached through two
 groups is commanded once.
 
+### Adding and removing shutters
+
+Pi-Somfy announces every shutter it knows, with its address and name. The app reads
+those announcements instead of asking anyone to copy an address — a mistyped one is
+completely silent, because the radio never answers. A shutter the bridge announces is
+**new** until a person gives it a name; until then it is in no "Alle zu", no group and
+no automation.
+
+Adding a window happens in Pi-Somfy, because only it may teach a motor a sender. The
+app's guide says what to do there, on the remote and at the window: create the shutter,
+hold PROG until it jogs (or switch its circuit off and on, with a warning about every
+other motor on that circuit), press "Program" — and **restart Pi-Somfy**. Its code
+announces shutters, and subscribes to their commands, only when it connects to the
+broker; a shutter added in its interface is invisible and deaf until then. The open
+guide notices the announcement within seconds and asks for a name.
+
+Removing a shutter lists the groups and rules it leaves before one confirmation, then
+takes it out of all of them, deletes its measurements and sends nothing to the bridge.
+Pi-Somfy never withdraws an announcement — not even for a shutter deleted in its own
+interface — so a removed shutter it still announces is **set aside**, not offered as
+new again, and can be taken back. For the same reason "the bridge deleted it" can only
+be seen after a restart: a bridge shutter missing from the fresh announcements is marked
+**vergessen**, keeps its settings, and takes no commands until the bridge knows it
+again. A window after a restart with no fresh announcement at all decides nothing, so
+connecting to a bridge that has been up for hours never forgets anything.
+
+Shutters written into `shutters.toml` keep working as before, are matched by address
+and never duplicated, and are changed only in that file, which the app never writes.
+
 ### Who may move the shutters
 
 With a real bridge, every request needs a credential — the live feed included, and it
@@ -251,9 +288,8 @@ Four screens in German: overview, detail, automations, and calibration, includin
 adding and removing a shutter and the power-cycle reset for when every remote is lost.
 
 It predates the real frontend and is **throwaway**. Where the two disagree, the code
-wins — calibration and automations now exist for real, and the app is the reference for
-how they work. The mock still holds two flows the app does not: adding or removing a
-shutter, and the power-cycle reset.
+wins — every flow it shows now exists for real, and the app is the reference for how
+they work.
 
 ## Development
 
@@ -273,8 +309,8 @@ recalibration with no user involvement, and
 [CLAUDE.md](CLAUDE.md) for conventions and build commands.
 
 ```bash
-cd backend && .venv/bin/python -m pytest       # 693 tests
-cd frontend && npx vitest run                  # 72 tests
+cd backend && .venv/bin/python -m pytest       # 791 tests
+cd frontend && npx vitest run                  # 84 tests
 cd frontend && npx svelte-check --tsconfig ./tsconfig.json
 ```
 
@@ -293,10 +329,14 @@ The software is built so that answering them changes configuration, not code:
 4. Whether **CC1101 receive mode** gets enabled, which tracks physical remotes. Without
    it, drift from manual use is invisible and the age of the estimate is all the app can
    offer.
-5. **Rolling-code pairing** per window, addresses recorded in `operateShutters.conf` and
-   copied into ours.
+5. **Rolling-code pairing** per window, in Pi-Somfy. The app's guide walks through it;
+   the addresses reach the app through Pi-Somfy's announcements, not by copying.
 
-Two more, found by reading Pi-Somfy rather than by measuring:
+Three more, found by reading Pi-Somfy rather than by measuring:
+
+- A shutter added in Pi-Somfy is announced, and obeys MQTT, only after Pi-Somfy restarts;
+  a deleted one keeps its announcement on the broker. Both are read from its code, not yet
+  watched on a device.
 
 - `stop` is Pi-Somfy's explicit STOP command. The earlier way — asking for the current
   position — would do nothing on current Pi-Somfy and let the shutter run on. That it halts

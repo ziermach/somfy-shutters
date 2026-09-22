@@ -152,12 +152,26 @@ class SimShutter:
 
 
 @dataclass
+class BridgeEntry:
+    """A shutter as the simulated bridge itself knows it (feature 005)."""
+
+    name: str
+    enabled: bool = True
+    listening: bool = True
+    """Subscribed to its command topics. Pi-Somfy subscribes only when it connects to
+    the broker, so a shutter added in its interface ignores commands until a restart."""
+
+
+@dataclass
 class SimBridge(ShutterBridge):
     """Implements the port. Everything above is invisible through it."""
 
     addresses: list[str]
     loss_rate: float = 0.0
     kind: str = "sim"
+    names: dict[str, str] = field(default_factory=dict)
+    """Display names the bridge announces; an address without one is announced by
+    its address, as Pi-Somfy would with an unnamed shutter."""
 
     _shutters: dict[str, SimShutter] = field(default_factory=dict)
     _queue: asyncio.Queue[Report] = field(default_factory=asyncio.Queue)
@@ -165,31 +179,44 @@ class SimBridge(ShutterBridge):
     _task: asyncio.Task[None] | None = None
     _callbacks: list[Callable[[bool], None]] = field(default_factory=list)
     _rng: random.Random = field(default_factory=random.Random)
+    _bridge: dict[str, BridgeEntry] = field(default_factory=dict)
+    # What the broker keeps under the discovery topics: never withdrawn by the bridge.
+    _retained_announcements: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        for address in self.addresses:
+            self._add_window(address)
+            name = self.names.get(address, address)
+            self._bridge[address] = BridgeEntry(name=name)
+            self._retained_announcements[address] = name
+
+    def _add_window(self, address: str) -> None:
         # Each window differs, the way real ones do.
-        for index, address in enumerate(self.addresses):
-            spread = index % 4
-            start = 100.0 if index % 2 == 0 else 0.0
-            self._shutters[address] = SimShutter(
-                address=address,
-                dead_time=0.5 + spread * 0.08,
-                travel_up=12.0 + spread * 2.1,
-                travel_down=10.8 + spread * 1.8,
-                curve_a=1.1 + spread * 0.12,
-                percent=start,
-                believed=start,
-                start_believed=start,
-                target_believed=start,
-            )
+        index = len(self._shutters)
+        spread = index % 4
+        start = 100.0 if index % 2 == 0 else 0.0
+        self._shutters[address] = SimShutter(
+            address=address,
+            dead_time=0.5 + spread * 0.08,
+            travel_up=12.0 + spread * 2.1,
+            travel_down=10.8 + spread * 1.8,
+            curve_a=1.1 + spread * 0.12,
+            percent=start,
+            believed=start,
+            start_believed=start,
+            target_believed=start,
+        )
 
     @property
     def connected(self) -> bool:
         return self._connected
 
     async def start(self) -> None:
-        # What a broker hands a new subscriber: every shutter's last position and
-        # state, kept from before. Old news, and marked as such (feature 006).
+        # What a broker hands a new subscriber: every announcement ever made, then
+        # every shutter's last position and state, kept from before. Old news, and
+        # marked as such (features 005 and 006).
+        for address, name in self._retained_announcements.items():
+            await self._queue.put(self._announcement(address, name, retained=True))
         for shutter in self._shutters.values():
             await self._queue.put(Report(shutter.address, round(shutter.believed), retained=True))
             await self._queue.put(
@@ -208,7 +235,7 @@ class SimBridge(ShutterBridge):
         if not self._connected:
             raise BridgeUnreachable("simulated bridge is offline")
         shutter = self._shutters.get(address)
-        if shutter is None:
+        if shutter is None or not self._listens(address):
             return
         # A lost command is indistinguishable from a delivered one on one-way radio:
         # the caller still succeeds, and the shutter simply never moves.
@@ -230,7 +257,7 @@ class SimBridge(ShutterBridge):
         if not self._connected:
             raise BridgeUnreachable("simulated bridge is offline")
         shutter = self._shutters.get(address)
-        if shutter is None or self._rng.random() < self.loss_rate:
+        if shutter is None or not self._listens(address) or self._rng.random() < self.loss_rate:
             return
         was_moving = shutter.moving
         shutter.halt(time.monotonic())
@@ -266,6 +293,13 @@ class SimBridge(ShutterBridge):
     def on_connection_change(self, callback: Callable[[bool], None]) -> None:
         self._callbacks.append(callback)
 
+    def _listens(self, address: str) -> bool:
+        entry = self._bridge.get(address)
+        return entry is not None and entry.enabled and entry.listening
+
+    def _announcement(self, address: str, name: str, *, retained: bool) -> Report:
+        return Report(address, kind="announcement", name=name, retained=retained)
+
     # --- controls the real bridge does not have, used by the sim-only endpoints ---
 
     def set_connected(self, connected: bool) -> None:
@@ -273,6 +307,42 @@ class SimBridge(ShutterBridge):
             self._connected = connected
             for callback in self._callbacks:
                 callback(connected)
+            if connected:
+                # Pi-Somfy's on_connect: announce every shutter it knows, live, and
+                # subscribe to their commands (feature 005, research §1).
+                for address, entry in self._bridge.items():
+                    if not entry.enabled:
+                        continue
+                    entry.listening = True
+                    self._retained_announcements[address] = entry.name
+                    self._queue.put_nowait(self._announcement(address, entry.name, retained=False))
+
+    def bridge_add(self, name: str) -> str:
+        """A person creates a shutter in the bridge's interface. Announced — and
+        commandable — only after the bridge's next restart, as in Pi-Somfy."""
+        known = [int(a, 16) for a in self._bridge] or [0x279620]
+        address = f"0x{max(known) + 1:06x}"
+        self._add_window(address)
+        self._bridge[address] = BridgeEntry(name=name, listening=False)
+        return address
+
+    def bridge_delete(self, address: str) -> bool:
+        """A person deletes a shutter in the bridge. Its retained announcement stays."""
+        entry = self._bridge.get(address)
+        if entry is None or not entry.enabled:
+            return False
+        entry.enabled = False
+        return True
+
+    def bridge_restart(self) -> None:
+        self.set_connected(False)
+        self.set_connected(True)
+
+    def bridge_shutters(self) -> list[dict[str, object]]:
+        return [
+            {"address": a, "name": e.name, "enabled": e.enabled, "listening": e.listening}
+            for a, e in self._bridge.items()
+        ]
 
     async def inject_report(self, address: str, percent: int) -> None:
         await self._queue.put(Report(address, percent))

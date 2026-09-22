@@ -216,7 +216,7 @@ class AutomationEngine:
             via = resolution.via.get(result["id"], [])
             if result["accepted"]:
                 outcomes.append(Outcome(shutter_id=result["id"], result="commanded", via=via))
-            elif result["error"] == "measurement_in_progress":
+            elif result["error"] in ("measurement_in_progress", "forgotten"):
                 outcomes.append(
                     Outcome(
                         shutter_id=result["id"], result="skipped", reason=result["error"], via=via

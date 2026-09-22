@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
+import re
 from collections.abc import AsyncIterator, Callable
 
 import aiomqtt
 
-from ..config import BridgeConfig
+from ..config import ADDRESS_PATTERN, BridgeConfig
 from .base import MOVEMENT_STATES, BridgeUnreachable, Report, ShutterBridge
 
 log = logging.getLogger(__name__)
@@ -27,6 +29,9 @@ PREFIX = "somfy"
 COMMAND_TOPIC = PREFIX + "/{id}/command"
 POSITION_REQUEST_TOPIC = PREFIX + "/{id}/set_position"
 AVAILABILITY_TOPIC = PREFIX + "/bridge/availability"
+DISCOVERY_TOPIC = "homeassistant/cover/+/config"
+"""Inbound only. Those topics belong to the bridge; nothing is published there."""
+COMMAND_TOPIC_RE = re.compile(r"^" + PREFIX + r"/([^/]+)/command$")
 
 RECONNECT_START = 1.0
 RECONNECT_MAX = 30.0
@@ -52,8 +57,13 @@ def publish_plan(verb: str, value: int | None = None) -> tuple[str, str]:
 class MqttBridge(ShutterBridge):
     kind = "mqtt"
 
-    SUBSCRIPTIONS = (PREFIX + "/+/position", PREFIX + "/+/state", AVAILABILITY_TOPIC)
-    """Nothing else. Discovery (homeassistant/#) is feature 005's."""
+    SUBSCRIPTIONS = (
+        PREFIX + "/+/position",
+        PREFIX + "/+/state",
+        AVAILABILITY_TOPIC,
+        DISCOVERY_TOPIC,
+    )
+    """Nothing else. Discovery is read to learn the shutters (feature 005)."""
 
     def __init__(self, config: BridgeConfig) -> None:
         self._config = config
@@ -66,6 +76,9 @@ class MqttBridge(ShutterBridge):
         self._unknown_addresses: set[str] = set()
         # lower-cased address -> how the bridge spells it in its topics
         self._spelling: dict[str, str] = {}
+        # discovery topic -> the address it last announced, so that clearing the
+        # topic can be understood as withdrawing that shutter
+        self._announced: dict[str, str] = {}
 
     # --- port ----------------------------------------------------------------
 
@@ -163,6 +176,12 @@ class MqttBridge(ShutterBridge):
                 log.warning("unknown availability %r", text)
             return
 
+        if topic.startswith("homeassistant/"):
+            report = self._parse_announcement(topic, text, retain)
+            if report is not None:
+                self._queue.put_nowait(report)
+            return
+
         parts = topic.split("/")
         if len(parts) != 3 or parts[0] != PREFIX or parts[1] == "bridge":
             return
@@ -188,6 +207,51 @@ class MqttBridge(ShutterBridge):
             self._queue.put_nowait(
                 Report(address, kind="movement", state=text, retained=retain)  # type: ignore[arg-type]
             )
+
+    def _parse_announcement(self, topic: str, text: str, retain: bool) -> Report | None:
+        """One discovery message as an announcement, or None when it is not the bridge's.
+
+        The address comes from ``command_topic`` — the only field carrying the bridge's own
+        id; the topic's ``<bridge>_<id>`` segment is not relied on. Other integrations
+        publish covers under the same prefix, so anything else is quietly ignored.
+        """
+        parts = topic.split("/")
+        if len(parts) != 4 or parts[1] != "cover" or parts[3] != "config":
+            return None
+        if not text:
+            # How a retained message is cleared. Current Pi-Somfy never does it, but a
+            # later version clearing deleted shutters would mean exactly this.
+            address = self._announced.pop(topic, None)
+            if address is None:
+                return None
+            return Report(address, kind="announcement", name=None, retained=retain)
+        try:
+            payload = json.loads(text)
+        except ValueError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        command_topic = payload.get("command_topic")
+        match = COMMAND_TOPIC_RE.match(command_topic) if isinstance(command_topic, str) else None
+        if match is None:
+            return None
+        wire_id = match.group(1)
+        address = wire_id.lower()
+        if not re.match(ADDRESS_PATTERN, address):
+            log.warning("announcement with an address we cannot use: %r", wire_id)
+            return None
+        name = payload.get("name")
+        device = payload.get("device")
+        web_url = device.get("configuration_url") if isinstance(device, dict) else None
+        self._spelling[address] = wire_id
+        self._announced[topic] = address
+        return Report(
+            address,
+            kind="announcement",
+            name=name.strip() if isinstance(name, str) and name.strip() else wire_id,
+            web_url=web_url if isinstance(web_url, str) and web_url else None,
+            retained=retain,
+        )
 
     async def _run(self) -> None:
         delay = RECONNECT_START

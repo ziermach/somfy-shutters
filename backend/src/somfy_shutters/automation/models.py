@@ -174,7 +174,9 @@ class Outcome(BaseModel):
 
     shutter_id: str
     result: Literal["commanded", "skipped", "failed"]
-    reason: Literal["measurement_in_progress", "removed", "bridge_unreachable"] | None = None
+    reason: (
+        Literal["measurement_in_progress", "removed", "bridge_unreachable", "forgotten"] | None
+    ) = None
     via: list[str] = Field(default_factory=list)
     """Names of the groups this shutter was reached through, at firing time (feature
     004, FR-027). Empty for a direct target or "all", and in rows from before 004."""

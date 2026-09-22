@@ -206,6 +206,8 @@ CHANGES = (
     ("/api/location", "location_changed"),
     ("/api/groups", "group_changed"),
     ("/api/calibration", "calibration"),
+    ("/api/roster", "shutter_added"),  # feature 005: taking one over, or back
+    ("/api/shutters", "shutter_changed"),  # feature 005: renamed or removed
 )
 """Which record entry a successful configuring or calibrating request becomes."""
 

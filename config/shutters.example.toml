@@ -29,7 +29,7 @@ port = 1883
 # Direction needs no setting: Pi-Somfy (v3.1 and later) declares 100 = fully open and
 # 0 = fully closed, which is what this app uses. An old `invert_level` line is ignored.
 
-# Who may talk to the app (feature 007). Every phone gets its own credential by
+# Who may talk to the app (feature 008). Every phone gets its own credential by
 # pairing; the first one comes from running `somfy-shutters auth recover` on the Pi.
 # Left out, `mode` is "open" with the simulator and "required" with a real bridge;
 # "open" with bridge.kind = "mqtt" refuses to start.
@@ -44,9 +44,11 @@ pairing_minutes = 5           # how long a pairing code lasts
 audit_retention_days = 180    # how long the record of who did what is kept
 # trusted_proxy = "127.0.0.1" # only then is X-Forwarded-For believed
 
-# One block per shutter. The address is the RTS address Pi-Somfy assigned, copied
-# by hand from its operateShutters.conf. We deliberately do not read that file:
-# see specs/001-mqtt-live-position/research.md, section 5.
+# Optional since feature 005: the app learns shutters from Pi-Somfy's announcements,
+# and each joins once someone names it in the app. List a shutter here only to keep it
+# fixed by hand. The address is the RTS address Pi-Somfy assigned, copied from its
+# operateShutters.conf; a hand-listed shutter is matched to the announcement by address.
+# web_url under [bridge] overrides the "Pi-Somfy öffnen" link the bridge announces.
 [[shutter]]
 id = "wohnzimmer"
 name = "Wohnzimmer"

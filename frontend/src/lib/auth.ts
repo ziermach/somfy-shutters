@@ -139,6 +139,8 @@ const ACTIONS: Record<string, string> = {
   group_changed: 'Gruppe geändert',
   location_changed: 'Standort geändert',
   calibration: 'Kalibrierung',
+  shutter_added: 'Rolladen übernommen',
+  shutter_changed: 'Rolladen geändert',
   credential_issued: 'Zugang ausgegeben',
   credential_revoked: 'Zugang widerrufen',
   credential_expired: 'Zugang abgelaufen',

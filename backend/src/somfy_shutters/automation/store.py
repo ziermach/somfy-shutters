@@ -205,6 +205,35 @@ class AutomationStore:
             changed = True
         return changed
 
+    def rules_naming(self, shutter_id: str) -> list[Rule]:
+        """Rules that list this shutter by name — not through a group, not as "all"."""
+        return [
+            rule
+            for rule in self.rules()
+            if rule.targets != "all" and shutter_id in rule.targets.shutters  # type: ignore[union-attr]
+        ]
+
+    def remove_shutter(self, shutter_id: str) -> list[str]:
+        """Take a removed shutter out of every rule's targets (feature 005, FR-013).
+
+        Mirrors drop_group. Returns the rules left with no target at all; those say
+        "no_targets" and do not fire.
+        """
+        emptied = []
+        for rule in self.rules_naming(shutter_id):
+            left = Targets(
+                shutters=[s for s in rule.targets.shutters if s != shutter_id],  # type: ignore[union-attr]
+                groups=rule.targets.groups,  # type: ignore[union-attr]
+            )
+            with self._lock:
+                self._conn.execute(
+                    "UPDATE automation_rule SET targets = ?, updated_at = ? WHERE id = ?",
+                    (json.dumps(left.wire()), utcnow().isoformat(), rule.id),
+                )
+            if left.empty:
+                emptied.append(rule.id)
+        return emptied
+
     # --- firings -------------------------------------------------------------
 
     def record_firing(self, firing: Firing) -> bool:

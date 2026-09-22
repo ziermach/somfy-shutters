@@ -264,10 +264,16 @@ sudo -u somfy nano config/shutters.toml
 Mode `600`: the file will hold the broker password, and nobody but the app needs to
 read it.
 
-`config/shutters.toml` is gitignored — it holds the real RTS addresses and this
-repository is public. Copy each `address` by hand out of Pi-Somfy's
-`operateShutters.conf`. A wrong address is completely silent: the radio never
-answers, so the app cheerfully animates a shutter that never moved.
+`config/shutters.toml` is gitignored — it holds the broker password and this
+repository is public. **Shutters do not have to be listed in it.** Pi-Somfy announces
+every shutter it knows; the app shows them as "Neuer Rolladen gefunden" and each joins
+the household once you give it a name in the app ("Rolladen"). That needs Pi-Somfy's
+announcements switched on — `EnableDiscovery = true` in its config, which is its default.
+
+If you do list a shutter by hand, copy its `address` exactly out of Pi-Somfy's
+`operateShutters.conf`. A wrong address is completely silent: the radio never answers,
+so the app cheerfully animates a shutter that never moved. A hand-listed shutter is
+matched to Pi-Somfy's announcement by address and never appears twice.
 
 ```toml
 [bridge]
@@ -347,9 +353,13 @@ Expect `ready: N shutters, bridge=mqtt`. Move one shutter from the app and watch
 window. Two things are worth knowing before you trust it:
 
 - **Pi-Somfy must be v3.1 or newer.** The app speaks its current topics
-  (`somfy/<id>/command`, `set_position`, `position`, `state`, `somfy/bridge/availability`);
-  older versions used `level/cmd` and are not supported. Direction needs no setting — the
-  bridge declares 100 = open.
+  (`somfy/<id>/command`, `set_position`, `position`, `state`, `somfy/bridge/availability`,
+  and the discovery announcements under `homeassistant/cover/`); older versions used
+  `level/cmd` and are not supported. Direction needs no setting — the bridge declares
+  100 = open.
+- **A shutter added or deleted in Pi-Somfy shows up in the app only after Pi-Somfy
+  restarts.** Pi-Somfy announces its shutters, and listens for their commands, only when it
+  connects to the broker. The app's "Rolladen hinzufügen" guide includes the restart.
 - **A lost command looks exactly like a delivered one.** RTS is one-way. If the
   furthest window misses commands, that is radio range, not software — check the
   antenna before changing anything here.
@@ -372,9 +382,9 @@ sudo systemctl restart somfy-shutters
 
 | File | What it is | Backup |
 |---|---|---|
-| `shutters.toml` | hand-written: addresses, names, measured overrides | yes — it is not in git |
+| `shutters.toml` | hand-written: broker, hand-listed shutters, measured overrides | yes — it is not in git |
 | `calibration.toml` | written by the app: measured travel times | yes — re-measuring costs eight windows of button presses |
-| `state.db` | SQLite: last known positions and history | optional — positions go stale on restart anyway |
+| `state.db` | SQLite: the shutters confirmed in the app, groups, rules, last known positions and history | yes — it now holds which shutters belong to the house |
 
 ```bash
 sudo systemctl stop somfy-shutters
@@ -409,7 +419,9 @@ sudo systemctl start somfy-shutters
 | `bridge.connected` stays `false` | Broker down, wrong credentials, the app is not on the Pi and Mosquitto is bound to loopback — or Pi-Somfy is not running: the app counts the bridge reachable only once it announces `online` on `somfy/bridge/availability`. Check with `mosquitto_sub -h 127.0.0.1 -u somfy -P '…' -t somfy/bridge/availability -v`. |
 | App works, shutters do not move | Prove the broker path outside the app: `mosquitto_pub -h 127.0.0.1 -u somfy -P '…' -t 'somfy/0x279621/command' -m CLOSE`. If that moves nothing, it is Pi-Somfy or the radio, not this app. |
 | Positions never become "sicher" | Expected until a shutter reaches an end stop. Only the end stops are certain. |
-| Unknown address warnings | An address in `shutters.toml` does not match `operateShutters.conf`. Copy it again. |
+| Unknown address warnings | An address in `shutters.toml` does not match `operateShutters.conf`. Copy it again — or remove the block and confirm the shutter from Pi-Somfy's announcement in the app. |
+| No "Neuer Rolladen gefunden" for a new shutter | Pi-Somfy was not restarted after adding it, or its announcements are off (`EnableDiscovery`). Check with `mosquitto_sub -h 127.0.0.1 -u somfy -P '…' -t 'homeassistant/cover/#' -v`. |
+| A long-deleted shutter shows up as new | Pi-Somfy never withdraws an announcement. Name it and remove it again: it then lies under "Beiseitegelegt" and stays out of the way. |
 | Commands land seconds late, live view keeps reconnecting | WiFi power saving is on. `iw dev wlan0 get power_save` — see [WiFi](#wifi-turn-off-power-saving). |
 | `<hostname>.local` does not resolve | The phone or network blocks mDNS. Use the IP from `hostname -I` on the Pi. |
 | Blank page, API responds | The frontend was never built, or `dist` landed in the wrong place. |

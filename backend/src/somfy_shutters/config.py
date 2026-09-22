@@ -62,6 +62,9 @@ class BridgeConfig(BaseModel):
     port: int = Field(default=1883, ge=1, le=65535)
     user: str | None = None
     password: str | None = None
+    web_url: str | None = None
+    """Where Pi-Somfy's own interface is, for the "Pi-Somfy öffnen" link. Overrides
+    what the bridge announces; the app never requests that page itself (feature 005)."""
     invert_level: bool = False
     """Ignored since feature 006. Pi-Somfy v3.1 declares 100 = open, 0 = closed, the
     convention of the whole app. Still accepted so older configs validate; a warning
@@ -125,7 +128,10 @@ class Settings(BaseModel):
     bridge: BridgeConfig = Field(default_factory=BridgeConfig)
     location: LocationConfig | None = None
     auth: AuthConfig = Field(default_factory=AuthConfig)
-    shutter: list[ShutterConfig] = Field(min_length=1)
+    shutter: list[ShutterConfig] = Field(default_factory=list)
+    """From shutters.toml, then extended at start and at runtime by the roster with
+    the shutters confirmed from the bridge's announcements (feature 005). Every reader
+    goes through ``shutters`` / ``by_address``, so they all see the change."""
 
     @model_validator(mode="after")
     def _auth_mode(self) -> Settings:

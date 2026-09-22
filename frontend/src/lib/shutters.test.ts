@@ -19,7 +19,9 @@ const shutter = (percent: number | null, movement: Movement | null = null): Shut
   travel_down_seconds: 10,
   position: position(percent),
   movement,
-  measuring: false
+  measuring: false,
+  origin: 'config',
+  forgotten: false
 });
 
 const opening: Movement = {
@@ -48,6 +50,13 @@ describe('which buttons make sense', () => {
   it('stop is on offer only while a travel is under way', () => {
     expect(shutters.canStop(shutter(40))).toBe(false);
     expect(shutters.canStop(shutter(0, opening))).toBe(true);
+  });
+
+  it('offers nothing for a shutter the bridge forgot (feature 005)', () => {
+    const gone = { ...shutter(40, opening), forgotten: true };
+    expect(shutters.canOpen(gone)).toBe(false);
+    expect(shutters.canClose(gone)).toBe(false);
+    expect(shutters.canStop(gone)).toBe(false);
   });
 
   it('an unknown position leaves both on offer — that is how it becomes known', () => {

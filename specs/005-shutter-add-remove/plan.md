@@ -48,7 +48,7 @@ new shutters invisible to "all shutters", groups and automations until confirmed
 | Principle | How this plan complies |
 |---|---|
 | **I. Pi-Somfy owns the radio** | The app never sends PROG, never creates or deletes shutters in the bridge. The person does those in Pi-Somfy's interface; the app only explains. |
-| **II. MQTT is the only integration boundary** | Still MQTT only, and nothing is published beyond `command`/`set_position`. **But** the principle lists the inbound topics exhaustively, and the discovery topic `homeassistant/cover/+/config` is not among them. → **Amendment 1.1.0 → 1.2.0**: add the bridge's discovery announcements as an inbound topic; rule and rationale unchanged. A link to Pi-Somfy's web interface that the *person* opens is not the app calling its routes. |
+| **II. MQTT is the only integration boundary** | Still MQTT only, and nothing is published beyond `command`/`set_position`. **But** the principle lists the inbound topics exhaustively, and the discovery topic `homeassistant/cover/+/config` is not among them. → **Amendment 1.2.0 → 1.3.0**: add the bridge's discovery announcements as an inbound topic; rule and rationale unchanged. A link to Pi-Somfy's web interface that the *person* opens is not the app calling its routes. |
 | **III. Honest position state** | New shutters start unknown; a forgotten shutter is shown as such and cannot be commanded — no graphic pretending a deleted shutter still works. |
 | **IV. Local-first** | Announcements come over the local broker. |
 | **V. Single-Pi simplicity** | No new component or dependency. |
@@ -76,7 +76,7 @@ specs/005-shutter-add-remove/
 ### Source Code
 
 ```text
-.specify/memory/constitution.md          # principle II: discovery inbound (1.2.0)
+.specify/memory/constitution.md          # principle II: discovery inbound (1.3.0)
 
 backend/src/somfy_shutters/
 ├── roster.py              # NEW — Roster: announcements, new/active/set-aside/forgotten, confirm, remove

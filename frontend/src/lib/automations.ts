@@ -44,7 +44,7 @@ export interface Rule extends RuleDraft {
 export interface Outcome {
   shutter_id: string;
   result: 'commanded' | 'skipped' | 'failed';
-  reason: 'measurement_in_progress' | 'removed' | 'bridge_unreachable' | null;
+  reason: 'measurement_in_progress' | 'removed' | 'bridge_unreachable' | 'forgotten' | null;
   /** Names of the groups it was reached through, as they were then (feature 004). */
   via?: string[];
 }
@@ -212,6 +212,7 @@ function outcomeReason(outcome: Outcome): string {
   if (outcome.reason === 'measurement_in_progress') return 'übersprungen — Messung läuft';
   if (outcome.reason === 'removed') return 'übersprungen — nicht mehr konfiguriert';
   if (outcome.reason === 'bridge_unreachable') return 'nicht gefahren — Funkbrücke nicht erreichbar';
+  if (outcome.reason === 'forgotten') return 'übersprungen — Funkbrücke kennt ihn nicht mehr';
   return outcome.result;
 }
 

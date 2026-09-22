@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 
 from .bridge.base import Report
 from .calibration import to_level, to_percent
-from .config import Settings
+from .config import Settings, ShutterConfig
 from .models import (
     Action,
     Confidence,
@@ -106,6 +106,29 @@ class Tracker:
         # Shutters the bridge says are moving on somebody else's command — a physical
         # remote it heard (feature 006). Transient: a restart forgets it.
         self._external_moving: set[str] = set()
+        # Feature 005: who knows where each shutter came from and whether the bridge
+        # still knows it. Set by the app; read when shutters are serialised.
+        self.roster: object | None = None
+
+    # --- the household changing (feature 005) --------------------------------
+
+    def add_shutter(self, shutter: ShutterConfig) -> None:
+        """A shutter joined ``settings.shutter``. Where it is, nobody knows yet."""
+        self._positions[shutter.id] = PositionEstimate.unknown()
+
+    def remove_shutter(self, shutter_id: str) -> None:
+        """Forget everything about a shutter. Nothing is sent: a travel under way
+        finishes on its own, the motor does not need us for that."""
+        for table in (
+            self._positions,
+            self._movements,
+            self._last_report,
+            self._last_direction,
+            self._bridge_level,
+            self._bridge_runs,
+        ):
+            table.pop(shutter_id, None)
+        self._external_moving.discard(shutter_id)
 
     # --- reading -------------------------------------------------------------
 

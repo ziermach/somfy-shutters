@@ -1,5 +1,19 @@
 <!--
 Sync Impact Report
+Version change: 1.2.0 → 1.3.0 (MINOR — materially expanded guidance, no principle removed or redefined)
+Modified principles:
+  - II. MQTT Is the Only Integration Boundary: the bridge's discovery announcements
+    (`homeassistant/cover/+/config`) join the inbound topics; publishing under
+    `homeassistant/#` is ruled out explicitly. Rule and rationale unchanged.
+  - Interface rules: learning RTS addresses from those announcements counts as referencing
+    them, never inventing them.
+Added sections: none. Removed sections: none.
+Driven by: specs/005-shutter-add-remove.
+Templates requiring updates: none.
+Follow-up updates: CLAUDE.md (non-negotiables), README.md,
+  specs/006-pisomfy-mqtt-topics/contracts/mqtt.md (superseded in part).
+
+Previous amendment:
 Version change: 1.1.0 → 1.2.0 (MINOR — hardware rule materially changed, no principle touched)
 Modified sections:
   - Technology and Hardware Constraints → hardware rules: the fixed CC1101 wiring moves from
@@ -51,8 +65,10 @@ its own counter desynchronizes the motors and requires physical re-pairing at ev
 ### II. MQTT Is the Only Integration Boundary
 
 This project MUST talk to the shutter layer exclusively over MQTT topics — `somfy/<id>/command`
-and `somfy/<id>/set_position` outbound; `somfy/<id>/position`, `somfy/<id>/state` and
-`somfy/bridge/availability` inbound. Pi-Somfy's Flask routes, its HTML, its database, and its
+and `somfy/<id>/set_position` outbound; `somfy/<id>/position`, `somfy/<id>/state`,
+`somfy/bridge/availability` and the bridge's discovery announcements
+`homeassistant/cover/+/config` inbound. Nothing is ever published under `homeassistant/#`:
+those topics belong to the bridge. Pi-Somfy's Flask routes, its HTML, its database, and its
 config files MUST NOT be scraped, called, or written by this project.
 
 Rationale: MQTT is Pi-Somfy's documented, supported interface; the web UI is not. Holding this
@@ -114,6 +130,8 @@ Hardware rules:
 Interface rules:
 
 - RTS addresses live in `operateShutters.conf` and are referenced by the app, never invented.
+  Learning them from the bridge's discovery announcements is how they are referenced; a
+  hand-written entry in the app's configuration is the other.
 - The backend subscribes to the position, state and availability topics for all shutters and pushes changes to clients over
   WebSocket; clients MUST NOT connect to MQTT directly.
 - Command animation starts on send and runs for the configured travel time; it MUST NOT wait
@@ -147,4 +165,4 @@ conflicts with it, the constitution wins.
   fixed or recorded with an explicit justification in the plan's complexity tracking.
 - Runtime development guidance lives in `CLAUDE.md` and must stay consistent with this document.
 
-**Version**: 1.2.0 | **Ratified**: 2026-09-21 | **Last Amended**: 2026-09-22
+**Version**: 1.3.0 | **Ratified**: 2026-09-21 | **Last Amended**: 2026-09-22

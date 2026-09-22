@@ -1,7 +1,7 @@
 # somfy-shutters
 
 App for controlling SIMU/Somfy RTS roller shutters through Pi-Somfy: live animated
-state, plus user-defined automations. Features 001–004 and 008 are implemented against a simulated
+state, plus user-defined automations. Features 001–006 and 008 are implemented against a simulated
 house; nothing has run on real hardware yet.
 Development is driven by [GitHub Spec Kit](https://github.com/github/spec-kit):
 specification first, then plan, then tasks, then implementation.
@@ -80,8 +80,12 @@ npm run build          # backend serves frontend/dist in production
 npx svelte-check --tsconfig ./tsconfig.json
 ```
 
-`config/shutters.toml` (gitignored) decides which shutters exist. With
-`bridge.kind = "sim"` everything runs without a broker or hardware.
+`config/shutters.toml` (gitignored) holds settings and, optionally, hand-configured shutters.
+The rest of the household comes from Pi-Somfy's announcements: a new one joins only once a
+person names it in the app (`household_shutter` table, feature 005); the roster mutates
+`settings.shutter` in place. With `bridge.kind = "sim"` everything runs without a broker or
+hardware; `POST /api/sim/bridge/shutters` and `/api/sim/bridge/restart` play a person working
+in Pi-Somfy.
 `general.timezone` (default `Europe/Berlin`) is the wall clock automations follow; an
 optional `[location]` seeds the house coordinates once — after that the app's value wins.
 In the simulator, `POST /api/sim/clock {"reliable": false}` exercises the held path.
@@ -101,11 +105,12 @@ These come straight from the constitution; read it before planning.
   holder of rolling-code counters. A second transmitter desyncs the motors and forces physical
   re-pairing at every window.
 - **MQTT is the only integration point.** Publish to `somfy/<id>/command` (OPEN/CLOSE/STOP) and
-  `somfy/<id>/set_position`; subscribe to `somfy/<id>/position`, `somfy/<id>/state` and
-  `somfy/bridge/availability` (Pi-Somfy v3.1+; the old `level/cmd` topics are gone). Stop is
-  always the explicit STOP — a position equal to the bridge's belief does nothing. Do not scrape
-  or call Pi-Somfy's Flask UI. `<id>` is the RTS address from `operateShutters.conf` — read it,
-  never invent it.
+  `somfy/<id>/set_position`; subscribe to `somfy/<id>/position`, `somfy/<id>/state`,
+  `somfy/bridge/availability` and the discovery announcements `homeassistant/cover/+/config`
+  (Pi-Somfy v3.1+; the old `level/cmd` topics are gone). Never publish under `homeassistant/#`.
+  Stop is always the explicit STOP — a position equal to the bridge's belief does nothing. Do
+  not scrape or call Pi-Somfy's Flask UI. `<id>` is the RTS address Pi-Somfy announces (or one
+  hand-written into `shutters.toml`) — read it, never invent it.
 - **Positions are estimates, not feedback.** RTS is one-way; only the end stops are reliable.
   Never render an estimate as confirmed state. Animate from the configured travel time on send —
   do not wait for a position report, it arrives sparsely. Retained reports on connect are old
@@ -123,6 +128,8 @@ Blocking — measure on real hardware before any feature depends on them:
 2. Per-window travel times, up and down separately.
 3. Radio range to the furthest window (antenna attached).
 4. Whether CC1101 receive mode gets enabled (tracks physical remotes, improves accuracy).
-5. Rolling-code pairing per window; addresses recorded in `operateShutters.conf`.
+5. Rolling-code pairing per window, in Pi-Somfy (the app's guide explains it); addresses
+   arrive through its announcements. Whether a new shutter really needs a Pi-Somfy restart
+   to be announced is read from its code, not yet seen on a device.
 
 CC1101 power: 3.3V only (Pi pin 1 or 17). 5V destroys the module.
