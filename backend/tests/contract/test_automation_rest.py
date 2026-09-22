@@ -206,3 +206,54 @@ def test_rules_are_listed_by_next_firing(client) -> None:
     ids = [r["id"] for r in client.get("/api/automations").json()["rules"]]
     assert ids[-1] == off["id"], "rules that never fire go last"
     assert ids.index(late["id"]) < ids.index(early["id"])
+
+
+# --- US4 ---------------------------------------------------------------------
+
+
+def test_pause_until_a_time_and_resume(client) -> None:
+    got = client.put("/api/automations/pause", json={"until": "2099-01-01T00:00"}).json()
+    assert got["paused"] is True and got["until"].startswith("2099-01-01T00:00")
+    assert client.get("/api/automations").json()["pause"]["paused"] is True
+    assert client.delete("/api/automations/pause").json() == {"paused": False, "until": None}
+
+
+def test_pause_until_resumed(client) -> None:
+    assert client.put("/api/automations/pause", json={"until": None}).json() == {
+        "paused": True,
+        "until": None,
+    }
+
+
+def test_pause_in_the_past_is_422(client) -> None:
+    response = client.put("/api/automations/pause", json={"until": "2000-01-01T00:00"})
+    assert response.status_code == 422
+    assert set(response.json()) == {"error", "message", "detail"}
+
+
+def test_skip_next_and_nothing_to_skip(client) -> None:
+    rule = client.post("/api/automations", json=body()).json()
+    skipped = client.patch(f"/api/automations/{rule['id']}", json={"skip_next": True}).json()
+    assert skipped["skip_next"] is True
+    assert skipped["next"]["at"] == rule["next"]["at"], "the skipped firing is still shown"
+    off = client.post("/api/automations", json=body(days=[False] * 7)).json()
+    response = client.patch(f"/api/automations/{off['id']}", json={"skip_next": True})
+    assert response.status_code == 409 and response.json()["error"] == "nothing_to_skip"
+
+
+def test_editing_away_the_skipped_instant_clears_the_skip(client) -> None:
+    rule = client.post("/api/automations", json=body()).json()
+    client.patch(f"/api/automations/{rule['id']}", json={"skip_next": True})
+    edited = client.put(
+        f"/api/automations/{rule['id']}", json=body(trigger={"kind": "time", "time": "07:15"})
+    ).json()
+    assert edited["skip_next"] is False
+    assert client.app.state.automation.store.rule(rule["id"]).skip_planned_at is None
+
+
+def test_a_pause_change_tells_open_clients(client) -> None:
+    with client.websocket_connect("/api/ws") as socket:
+        assert socket.receive_json()["data"]["automations"]["paused"] is False
+        client.put("/api/automations/pause", json={"until": None})
+        frame = socket.receive_json()
+        assert frame["type"] == "automations" and frame["paused"] is True

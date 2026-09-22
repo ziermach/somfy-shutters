@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionText, daysText, lastText, nextText, outcomeText, targetsText, triggerText, WEEKDAYS } from './automations';
+import { pauseText, tomorrowMidnight, actionText, daysText, lastText, nextText, outcomeText, targetsText, triggerText, WEEKDAYS } from './automations';
 
 // 2026-09-22 10:00 in Berlin (UTC+2)
 const NOW = new Date('2026-09-22T08:00:00Z');
@@ -55,5 +55,16 @@ describe('what happened', () => {
       'übersprungen — Messung läuft'
     );
     expect(outcomeText({ shutter_id: 'x', result: 'failed', reason: 'bridge_unreachable' })).toContain('Funkbrücke');
+  });
+});
+
+describe('pausing', () => {
+  it('says until when, or that it waits for someone', () => {
+    expect(pauseText('2026-09-23T00:00:00+02:00', NOW)).toBe('Automationen pausiert bis morgen 00:00');
+    expect(pauseText(null, NOW)).toBe('Automationen pausiert');
+  });
+
+  it('offers tomorrow at midnight in local time', () => {
+    expect(tomorrowMidnight(new Date(2026, 8, 30, 15, 0))).toBe('2026-10-01T00:00');
   });
 });

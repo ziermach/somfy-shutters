@@ -136,15 +136,15 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ### Tests for User Story 4
 
-- [ ] T041 [P] [US4] Extend `backend/tests/integration/test_automation_engine.py`: paused → `paused` recorded, **resumes by itself after `until`**; skip next → exactly one `skipped`, the following firing `fired`; editing a rule so the skipped instant no longer exists clears the skip
-- [ ] T042 [P] [US4] Extend `backend/tests/contract/test_automation_rest.py`: `PUT/DELETE /api/automations/pause` (**422** for a past time), `PATCH {skip_next}` (**409 `nothing_to_skip`**), and the `automations` frame on each change
+- [X] T041 [P] [US4] Extend `backend/tests/integration/test_automation_engine.py`: paused → `paused` recorded, **resumes by itself after `until`**; skip next → exactly one `skipped`, the following firing `fired`; editing a rule so the skipped instant no longer exists clears the skip
+- [X] T042 [P] [US4] Extend `backend/tests/contract/test_automation_rest.py`: `PUT/DELETE /api/automations/pause` (**422** for a past time), `PATCH {skip_next}` (**409 `nothing_to_skip`**), and the `automations` frame on each change
 
 ### Implementation for User Story 4
 
-- [ ] T043 [US4] Engine and store: pause in `app_setting`, `paused` and `skipped` decisions in `run_due`, an expired pause deleted on the next check, `skip_planned_at` cleared when used or when it is no longer a planned firing
-- [ ] T044 [US4] `PUT/DELETE /api/automations/pause` and `PATCH {skip_next}` in `backend/src/somfy_shutters/api/automation_routes.py`, publishing `automations` on pause changes
-- [ ] T045 [US4] Create `frontend/src/components/AutomationBanner.svelte` on `frontend/src/routes/Overview.svelte`: *Automationen pausiert bis …* with *Fortsetzen*, and *Uhrzeit unsicher — Automationen angehalten* (FR-026)
-- [ ] T046 [US4] Pause controls in `frontend/src/routes/Automations.svelte` (*bis morgen*, *bis Datum*, *bis ich fortsetze*) and *Nächste Ausführung überspringen* on `frontend/src/components/RuleCard.svelte`
+- [X] T043 [US4] Engine and store: pause in `app_setting`, `paused` and `skipped` decisions in `run_due`, an expired pause deleted on the next check, `skip_planned_at` cleared when used or when it is no longer a planned firing
+- [X] T044 [US4] `PUT/DELETE /api/automations/pause` and `PATCH {skip_next}` in `backend/src/somfy_shutters/api/automation_routes.py`, publishing `automations` on pause changes
+- [X] T045 [US4] Create `frontend/src/components/AutomationBanner.svelte` on `frontend/src/routes/Overview.svelte`: *Automationen pausiert bis …* with *Fortsetzen*, and *Uhrzeit unsicher — Automationen angehalten* (FR-026)
+- [X] T046 [US4] Pause controls in `frontend/src/routes/Automations.svelte` (*bis morgen*, *bis Datum*, *bis ich fortsetze*) and *Nächste Ausführung überspringen* on `frontend/src/components/RuleCard.svelte`
 
 **Checkpoint**: holidays handled without deleting anything.
 

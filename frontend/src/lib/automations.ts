@@ -174,3 +174,15 @@ export function outcomeText(outcome: Outcome): string {
   if (outcome.reason === 'bridge_unreachable') return 'nicht gefahren — Funkbrücke nicht erreichbar';
   return outcome.result;
 }
+
+/** "Automationen pausiert bis morgen 00:00" — or until resumed. */
+export function pauseText(until: string | null, now: Date = new Date()): string {
+  return until ? `Automationen pausiert bis ${nextText({ at: until, reason: null }, now)}` : 'Automationen pausiert';
+}
+
+/** Tomorrow at midnight, as the local "YYYY-MM-DDTHH:MM" the pause endpoint takes. */
+export function tomorrowMidnight(now: Date = new Date()): string {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T00:00`;
+}

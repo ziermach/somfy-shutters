@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
+  import AutomationBanner from '../components/AutomationBanner.svelte';
   import LocationCard from '../components/LocationCard.svelte';
   import RuleCard from '../components/RuleCard.svelte';
+  import { tomorrowMidnight } from '../lib/automations';
   import { automations } from '../lib/automations.svelte';
   import { shutters } from '../lib/shutters.svelte';
 
@@ -13,6 +15,12 @@
 
   onMount(() => automations.watch(true));
   onDestroy(() => automations.watch(false));
+
+  let pauseUntil = $state('');
+  let pauseMessage = $state<string | null>(null);
+  async function pause(until: string | null) {
+    pauseMessage = await automations.pause(until);
+  }
 
   const names = $derived(Object.fromEntries(shutters.shutters.map((s) => [s.id, s.name])));
 </script>
@@ -29,6 +37,21 @@
       <p class="sub">Regeln laufen auf dem Pi — auch wenn kein Handy an ist.</p>
     </div>
   </div>
+
+  <AutomationBanner />
+
+  {#if !automations.state.paused && automations.rules.length}
+    <div class="pause">
+      <span class="label">Pausieren</span>
+      <div class="pause-row">
+        <button type="button" class="chip" onclick={() => pause(tomorrowMidnight())}>bis morgen</button>
+        <button type="button" class="chip" onclick={() => pause(null)}>bis ich fortsetze</button>
+        <input type="datetime-local" bind:value={pauseUntil} aria-label="Pausieren bis" />
+        <button type="button" class="chip" disabled={!pauseUntil} onclick={() => pause(pauseUntil)}>bis Datum</button>
+      </div>
+      {#if pauseMessage}<p class="error" role="alert">{pauseMessage}</p>{/if}
+    </div>
+  {/if}
 
   <div class="rules">
     {#each automations.rules as rule (rule.id)}
@@ -86,6 +109,47 @@
     margin: 2px 0 0;
     font-size: 13px;
     color: var(--muted);
+  }
+  .pause {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .label {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .pause-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .chip {
+    border-radius: 9px;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--text);
+  }
+  .chip:disabled {
+    opacity: 0.4;
+  }
+  input[type='datetime-local'] {
+    height: 34px;
+    border-radius: 9px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--text);
+    padding: 0 8px;
+    font-size: 12px;
+  }
+  .error {
+    margin: 0;
+    font-size: 12px;
+    color: var(--amber);
   }
   .rules {
     display: flex;

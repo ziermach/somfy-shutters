@@ -217,3 +217,40 @@ async def test_a_day_without_sunset_is_recorded_not_silent(house) -> None:
     assert last is not None and last.status is FiringStatus.NO_SUN
     await house.engine.run_due(midsummer_noon + timedelta(hours=1))
     assert len(house.store.firings(rule.id)) == 1, "once per day, not once per wake-up"
+
+
+# --- US4: pause and skip -------------------------------------------------------
+
+from somfy_shutters.automation.engine import PAUSE_KEY  # noqa: E402
+
+
+async def test_paused_records_paused_and_resumes_by_itself(house) -> None:
+    rule = add(house, targets=["kueche"])
+    until = TUESDAY_0645 + timedelta(hours=12)
+    house.store.set_setting(PAUSE_KEY, {"until": until.isoformat()})
+    [firing] = await house.engine.run_due(TUESDAY_0645)
+    assert firing.status is FiringStatus.PAUSED
+    assert house.tracker.movement("kueche") is None
+
+    wednesday = TUESDAY_0645 + timedelta(days=1)
+    [again] = await house.engine.run_due(wednesday)
+    assert again.status is FiringStatus.FIRED, "nobody had to resume it"
+    assert house.store.setting(PAUSE_KEY) is None
+    assert len(house.store.firings(rule.id)) == 2
+
+
+async def test_pause_until_resumed_has_no_end(house) -> None:
+    add(house)
+    house.store.set_setting(PAUSE_KEY, {"until": None})
+    [firing] = await house.engine.run_due(TUESDAY_0645 + timedelta(days=30))
+    assert firing.status is FiringStatus.PAUSED
+
+
+async def test_skip_next_skips_exactly_one(house) -> None:
+    rule = add(house)
+    house.store.set_skip(rule.id, TUESDAY_0645)
+    [skipped] = await house.engine.run_due(TUESDAY_0645)
+    assert skipped.status is FiringStatus.SKIPPED
+    [fired] = await house.engine.run_due(TUESDAY_0645 + timedelta(days=1))
+    assert fired.status is FiringStatus.FIRED
+    assert house.store.rule(rule.id).skip_planned_at is None

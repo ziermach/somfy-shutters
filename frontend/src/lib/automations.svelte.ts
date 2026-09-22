@@ -104,6 +104,24 @@ class Automations {
     return null;
   }
 
+  /** Pause every rule — until a local "YYYY-MM-DDTHH:MM", or until resumed (null). */
+  async pause(until: string | null): Promise<string | null> {
+    const response = await fetch('/api/automations/pause', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ until })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) return body.message ?? 'Pausieren fehlgeschlagen.';
+    this.state = { ...this.state, paused: body.paused, until: body.until };
+    return null;
+  }
+
+  async resume(): Promise<void> {
+    await fetch('/api/automations/pause', { method: 'DELETE' });
+    this.state = { ...this.state, paused: false, until: null };
+  }
+
   async firings(id: string): Promise<Firing[]> {
     const response = await fetch(`/api/automations/${id}/firings`);
     if (!response.ok) return [];

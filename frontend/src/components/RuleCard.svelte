@@ -14,6 +14,10 @@
   let showHistory = $state(false);
   let message = $state<string | null>(null);
 
+  async function skip() {
+    message = await automations.patch(rule.id, { skip_next: !rule.skip_next });
+  }
+
   async function toggle() {
     message = await automations.patch(rule.id, { enabled: !rule.enabled });
   }
@@ -39,7 +43,12 @@
     ></button>
   </div>
   <div class="foot">
-    <span class="next" class:none={!rule.next.at}>Nächste: {nextText(rule.next)}</span>
+    <span class="next" class:none={!rule.next.at}>
+      Nächste: {nextText(rule.next)}{#if rule.skip_next} — wird übersprungen{/if}
+      {#if rule.next.at}
+        <button type="button" class="skip" onclick={skip}>{rule.skip_next ? 'doch ausführen' : 'überspringen'}</button>
+      {/if}
+    </span>
     {#if last}
       <button type="button" class="last" onclick={() => (showHistory = !showHistory)}>
         Zuletzt {last} {showHistory ? '▴' : '▾'}
@@ -140,6 +149,14 @@
   }
   .next.none {
     color: var(--amber);
+  }
+  .skip {
+    all: unset;
+    cursor: pointer;
+    margin-left: 6px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    color: var(--muted);
   }
   .last {
     all: unset;

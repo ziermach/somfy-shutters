@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AutomationBanner from '../components/AutomationBanner.svelte';
   import MeasuringBanner from '../components/MeasuringBanner.svelte';
   import ShutterCard from '../components/ShutterCard.svelte';
   import { shutters } from '../lib/shutters.svelte';
@@ -16,6 +17,8 @@
     <h1>Zuhause</h1>
     <p class="sub">{shutters.shutters.length} Rolladen · 100 % = ganz offen</p>
   </header>
+
+  <AutomationBanner />
 
   {#if shutters.measuring}
     <MeasuringBanner name={shutters.measuring.name} />

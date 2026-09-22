@@ -152,6 +152,43 @@ async def create_rule(request: Request) -> Any:
     return JSONResponse({**rule_json(engine, rule), "conflicts": conflicts}, status_code=201)
 
 
+# Registered before /automations/{rule_id}: FastAPI matches in order, and "pause"
+# would otherwise be taken for a rule id.
+@router.put("/automations/pause")
+async def pause(request: Request) -> Any:
+    """Pause every rule until a time, or until resumed (FR-024)."""
+    from ..automation.engine import PAUSE_KEY
+
+    engine = _engine(request)
+    raw = await request.json()
+    until_text = raw.get("until") if isinstance(raw, dict) else None
+    until = None
+    if until_text is not None:
+        try:
+            until = datetime.fromisoformat(until_text)
+        except (TypeError, ValueError):
+            return error(422, "invalid_pause", "Unbekanntes Datum.", {"until": until_text})
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=engine.tz)
+        if until <= engine.clock():
+            return error(422, "invalid_pause", "Dieser Zeitpunkt liegt in der Vergangenheit.")
+    engine.store.set_setting(PAUSE_KEY, {"until": until.isoformat() if until else None})
+    await engine.announce_state()
+    await changed(request)
+    return _pause_json(engine)
+
+
+@router.delete("/automations/pause")
+async def resume(request: Request) -> Any:
+    from ..automation.engine import PAUSE_KEY
+
+    engine = _engine(request)
+    engine.store.set_setting(PAUSE_KEY, None)
+    await engine.announce_state()
+    await changed(request)
+    return _pause_json(engine)
+
+
 @router.put("/automations/{rule_id}")
 async def replace_rule(request: Request, rule_id: str) -> Any:
     engine = _engine(request)
