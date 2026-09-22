@@ -1,0 +1,64 @@
+Local patch for Pi-Somfy Release 3.3 (01d19f2): stop treating every Pi as a Pi 5.
+
+Pi-Somfy reads /proc/device-tree/model, and then *also* guesses "Pi 5" whenever
+/dev/gpiochip4 exists. Current Raspberry Pi OS kernels create gpiochip4 -> gpiochip0
+on every Pi, so a Pi 3 or 4 on Trixie ends up on the experimental lgpio path, with
+software-timed RTS frames, instead of pigpio's DMA timing. This limits the guess to
+when the model file cannot be read (the Docker case the upstream comment describes).
+
+Apply:   cd /opt/Pi-Somfy && sudo git apply /opt/somfy-shutters/deploy/pi-somfy-pi5-detection.patch
+Check:   grep -E "pigpio|lgpio" /var/log/operateShutters.log | tail -2
+         -> "pigpio's pi instantiated", not "lgpio ... (Pi 5)"
+
+diff --git a/operateShutters.py b/operateShutters.py
+index 5c4b257..feac5a6 100755
+--- a/operateShutters.py
++++ b/operateShutters.py
+@@ -62,16 +62,20 @@ import socket
+ # fall back to checking for /dev/gpiochip4 (RP1 chip, Pi 5 only) or the
+ # CPU revision code in /proc/cpuinfo.
+ IS_PI5 = False
++_MODEL_READ = False
+ LGPIO_CHIP = 4   # gpiochip number for lgpio (Pi 5): 4 on older kernels, 0 on newer
+ if not WINDOWS:
+     try:
+         with open('/proc/device-tree/model', 'r') as f:
+             _model = f.read()
++        _MODEL_READ = True  # local patch: model known, skip the gpiochip4 guess
+         if 'Pi 5' in _model:
+             IS_PI5 = True
+     except (FileNotFoundError, PermissionError):
+         pass
+-    if not IS_PI5 and os.path.exists('/dev/gpiochip4'):
++    # local patch: every Pi on current kernels has a gpiochip4 -> gpiochip0 link, so this
++    # guess is only safe when the model file could not be read (Docker, per the note above).
++    if not IS_PI5 and not _MODEL_READ and os.path.exists('/dev/gpiochip4'):
+         IS_PI5 = True
+     if not IS_PI5:
+         try:
+diff --git a/receiver.py b/receiver.py
+index 3cccbd3..2008849 100644
+--- a/receiver.py
++++ b/receiver.py
+@@ -36,16 +36,20 @@ except ImportError:
+ 
+ # ── Pi model detection (copied from operateShutters.py — see note above) ────
+ IS_PI5 = False
++_MODEL_READ = False
+ LGPIO_CHIP = 4   # gpiochip number for lgpio (Pi 5): 4 on older kernels, 0 on newer
+ if sys.platform.startswith("linux"):
+     try:
+         with open('/proc/device-tree/model', 'r') as f:
+             _model = f.read()
++        _MODEL_READ = True  # local patch: model known, skip the gpiochip4 guess
+         if 'Pi 5' in _model:
+             IS_PI5 = True
+     except (FileNotFoundError, PermissionError):
+         pass
+-    if not IS_PI5 and os.path.exists('/dev/gpiochip4'):
++    # local patch: every Pi on current kernels has a gpiochip4 -> gpiochip0 link, so this
++    # guess is only safe when the model file could not be read (Docker, per the note above).
++    if not IS_PI5 and not _MODEL_READ and os.path.exists('/dev/gpiochip4'):
+         IS_PI5 = True
+     if not IS_PI5:
+         try:
