@@ -1,0 +1,40 @@
+# Pushing a tag v* builds the frontend once, here, and attaches it to a GitHub release,
+# so the Pi never needs Node: deploy/update.sh downloads frontend-dist.tar.gz instead.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Check, test and build the frontend
+        working-directory: frontend
+        run: npm ci && npm run check && npm test && npm run build
+
+      - name: Package
+        run: |
+          tar -czf frontend-dist.tar.gz -C frontend/dist .
+          sha256sum frontend-dist.tar.gz > frontend-dist.tar.gz.sha256
+          ls -l frontend-dist.tar.gz
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME"
+          frontend-dist.tar.gz frontend-dist.tar.gz.sha256
+          --title "$GITHUB_REF_NAME" --generate-notes --verify-tag

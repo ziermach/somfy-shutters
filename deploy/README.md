@@ -342,6 +342,9 @@ cd /opt/somfy-shutters/frontend
 sudo -u somfy npm ci && sudo -u somfy npm run build
 ```
 
+Easier: skip Node entirely and install a release with `deploy/update.sh` (see
+[Updating](#operating-it)) — it downloads the frontend CI built.
+
 On a Pi Zero 2 W or a 1 GB Pi 3 the Vite build can run out of memory. Build on a
 workstation instead and copy the result over — `dist` is static, nothing in it is
 architecture-specific:
@@ -502,7 +505,24 @@ sudo systemctl start somfy-shutters
 Stop the service first: SQLite is in WAL mode and a live copy can catch a torn write.
 `sudo` because the service creates its files readable only by `somfy`.
 
-**Updating:**
+**Updating from a release** — no Node needed on the Pi. Every `v*` tag pushed to GitHub
+builds the frontend in CI and attaches it to the release as `frontend-dist.tar.gz`
+(under 300 KB). The script checks out the tag, reinstalls the backend, swaps in the
+downloaded frontend after verifying its checksum, and restarts the service:
+
+```bash
+sh /opt/somfy-shutters/deploy/update.sh          # newest release
+sh /opt/somfy-shutters/deploy/update.sh v0.2.0   # or a given one
+```
+
+It leaves the checkout on the tag (detached HEAD); `git pull` then refuses, so either
+keep using the script or `sudo -u somfy git -C /opt/somfy-shutters checkout main` first.
+The first time, the script is not on the Pi yet — fetch it with
+`sudo -u somfy git -C /opt/somfy-shutters pull`.
+
+Cutting a release, on your machine: `git tag v0.2.0 && git push origin v0.2.0`.
+
+**Updating from `main`, building on the Pi:**
 
 ```bash
 cd /opt/somfy-shutters
