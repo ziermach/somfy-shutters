@@ -6,8 +6,9 @@
   interface Props {
     id: string;
     onback: () => void;
+    oncalibrate: (id: string) => void;
   }
-  let { id, onback }: Props = $props();
+  let { id, onback, oncalibrate }: Props = $props();
 
   const shutter = $derived(shutters.byId(id));
   const live = $derived(shutter ? shutters.livePercent(shutter) : null);
@@ -82,6 +83,10 @@
       <button type="button" class="btn big" disabled={busy} onclick={() => shutters.command(shutter.id, 'stop')}>stop</button>
       <button type="button" class="btn big" disabled={busy} onclick={() => shutters.command(shutter.id, 'close')}>zu</button>
     </div>
+
+    <button type="button" class="btn calibrate" onclick={() => oncalibrate(shutter.id)}>
+      {shutter.calibrated ? 'Laufzeiten neu messen' : 'Laufzeiten messen'}
+    </button>
 
     {#if shutter.position.confidence !== 'certain'}
       <div class="conf">
@@ -205,6 +210,11 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+  }
+  .calibrate {
+    height: 44px;
+    border-radius: 12px;
+    background: var(--surface);
   }
   .conf p {
     margin: 0;

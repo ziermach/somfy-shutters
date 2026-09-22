@@ -4,8 +4,9 @@
 
   interface Props {
     onopen: (id: string) => void;
+    oncalibration: () => void;
   }
-  let { onopen }: Props = $props();
+  let { onopen, oncalibration }: Props = $props();
 </script>
 
 <section class="screen">
@@ -28,6 +29,8 @@
       <ShutterCard {shutter} {onopen} />
     {/each}
   </div>
+
+  <button type="button" class="btn ghost wide" onclick={oncalibration}>Kalibrierung</button>
 
   <p class="footnote">
     Position ist eine Zeitschätzung, kein Rückmeldewert. Nur die Endlagen sind sicher.
@@ -69,6 +72,10 @@
   .btn:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+  .wide {
+    flex: none;
+    width: 100%;
   }
   .cards {
     display: flex;

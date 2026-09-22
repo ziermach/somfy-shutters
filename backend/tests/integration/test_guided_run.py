@@ -145,19 +145,37 @@ async def test_clearing_discards_everything_measured(client) -> None:
     assert (await client.get("/api/calibration/flink")).json()["runs"] == []
 
 
-async def test_a_report_during_a_run_marks_it_disturbed(client) -> None:
-    """FR-029: somebody else drove the shutter, so the measurement is worthless.
+async def test_reports_that_narrate_our_own_travel_do_not_disturb_a_run(client) -> None:
+    """The bridge publishes a position every second while the shutter moves,
+    because we told it to move. Treating that as interference rejected every
+    real run — the bug this test exists to prevent coming back."""
+    await park(client, 0)
+    await client.post("/api/calibration/flink/run")
+    await asyncio.sleep(0.25)
+    await client.post("/api/calibration/flink/mark", json={"mark": "moving"})
+    for percent in (20, 45, 70, 95):
+        await client.post("/api/sim/report", json={"shutter_id": "flink", "percent": percent})
+    await asyncio.sleep(SIMULATED_TRAVEL)
+    result = (await client.post("/api/calibration/flink/mark", json={"mark": "arrived"})).json()
 
-    Only detectable at all when the receiver is on. With it off, the run finishes
-    with a wrong duration and the plausibility band has to catch it — an accepted
-    limitation, recorded in research.md.
+    assert result["run"]["rejected"] is None
+    assert result["calibration"]["source"] == "measured"
+
+
+async def test_motion_against_the_commanded_direction_disturbs_a_run(client) -> None:
+    """FR-029: nothing we did could move the shutter the other way.
+
+    Only detectable when the receiver is on. With it off, a disturbed run
+    finishes with a wrong duration and the plausibility band has to catch it —
+    an accepted limitation, recorded in research.md.
     """
     await park(client, 0)
     await client.post("/api/calibration/flink/run")
     await asyncio.sleep(0.25)
     await client.post("/api/calibration/flink/mark", json={"mark": "moving"})
-    # a physical remote, heard by the receiver
-    await client.post("/api/sim/report", json={"shutter_id": "flink", "percent": 55})
+    # somebody presses their remote and sends it back down
+    for percent in (60, 40, 15):
+        await client.post("/api/sim/report", json={"shutter_id": "flink", "percent": percent})
     await asyncio.sleep(SIMULATED_TRAVEL)
     result = (await client.post("/api/calibration/flink/mark", json={"mark": "arrived"})).json()
 

@@ -89,13 +89,14 @@ def create_app(
     async def on_report(address: str, percent: int) -> None:
         """Every report goes through here, from the bridge or from the simulator.
 
-        A report for a shutter under measurement means somebody else is driving
-        it — a physical remote, most likely. The run cannot be trusted and is
-        marked rather than silently recorded (FR-029).
+        A report for a shutter under measurement is usually the bridge narrating
+        the travel we ourselves started. Only motion against the commanded
+        direction means somebody else is driving, and only that invalidates the
+        run (FR-029).
         """
         shutter = settings.by_address(address)
         if shutter is not None and runs.is_measuring(shutter.id):
-            runs.disturb(shutter.id)
+            runs.note_report(shutter.id, percent)
         await tracker.handle_report(address, percent)
 
     @contextlib.asynccontextmanager

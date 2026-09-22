@@ -33,6 +33,10 @@ CURVE_STEP = 0.1
 CURVE_BOUND = 0.8
 CONFIRM_COOLDOWN_HOURS = 24
 
+CONTRARY_DELTA = 3
+"""How far a report must move against the run's direction to count as somebody
+else driving. Anything smaller is noise between two estimates."""
+
 
 class RejectionReason:
     DEAD_AFTER_ARRIVAL = "dead_after_arrival"
@@ -143,10 +147,34 @@ class ActiveRun:
     dead_monotonic: float | None = None
     disturbed: bool = False
     kind: RunKind = RunKind.GUIDED
+    last_report: int | None = None
 
     @property
     def phase(self) -> str:
         return "timing" if self.dead_monotonic is not None else "waiting_for_movement"
+
+    def note_report(self, percent: int) -> None:
+        """A position report arrived while this run is in progress.
+
+        The bridge narrates our own travel — it publishes a position roughly
+        every second while the shutter moves, because we told it to move. Those
+        reports are expected and must not invalidate the run; an earlier version
+        treated any of them as interference and would have rejected every real
+        measurement.
+
+        What does mean interference is a report moving *against* the direction
+        we commanded: nothing we did could produce that.
+        """
+        if self.last_report is not None:
+            delta = percent - self.last_report
+            against = (
+                delta < -CONTRARY_DELTA
+                if self.direction is Direction.UP
+                else delta > CONTRARY_DELTA
+            )
+            if against:
+                self.disturbed = True
+        self.last_report = percent
 
     def mark_moving(self, now_monotonic: float) -> float:
         self.dead_monotonic = now_monotonic
@@ -221,6 +249,11 @@ class RunRegistry:
         run = self._active.get(shutter_id)
         if run is not None:
             run.disturbed = True
+
+    def note_report(self, shutter_id: str, percent: int) -> None:
+        run = self._active.get(shutter_id)
+        if run is not None:
+            run.note_report(percent)
 
     def is_measuring(self, shutter_id: str) -> bool:
         return shutter_id in self._active

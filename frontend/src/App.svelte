@@ -2,10 +2,18 @@
   import { onMount } from 'svelte';
   import { ticker } from './lib/animate';
   import { shutters } from './lib/shutters.svelte';
+  import Calibration from './routes/Calibration.svelte';
+  import CalibrationRun from './routes/CalibrationRun.svelte';
   import Detail from './routes/Detail.svelte';
   import Overview from './routes/Overview.svelte';
 
-  let openId = $state<string | null>(null);
+  type View =
+    | { name: 'overview' }
+    | { name: 'detail'; id: string }
+    | { name: 'calibration' }
+    | { name: 'calibrationRun'; id: string };
+
+  let view = $state<View>({ name: 'overview' });
 
   onMount(() => {
     shutters.connect();
@@ -30,10 +38,24 @@
     </div>
   {/if}
 
-  {#if openId}
-    <Detail id={openId} onback={() => (openId = null)} />
+  {#if view.name === 'detail'}
+    <Detail
+      id={view.id}
+      onback={() => (view = { name: 'overview' })}
+      oncalibrate={(id) => (view = { name: 'calibrationRun', id })}
+    />
+  {:else if view.name === 'calibration'}
+    <Calibration
+      onopen={(id) => (view = { name: 'calibrationRun', id })}
+      onback={() => (view = { name: 'overview' })}
+    />
+  {:else if view.name === 'calibrationRun'}
+    <CalibrationRun id={view.id} onback={() => (view = { name: 'calibration' })} />
   {:else}
-    <Overview onopen={(id) => (openId = id)} />
+    <Overview
+      onopen={(id) => (view = { name: 'detail', id })}
+      oncalibration={() => (view = { name: 'calibration' })}
+    />
   {/if}
 </main>
 

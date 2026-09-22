@@ -66,11 +66,11 @@ or plain storage, which is why the tests below are cheap.
 - [X] T017 [US1] Implement `GET /api/calibration` and `DELETE /api/calibration/{id}` in `backend/src/somfy_shutters/api/rest.py`, returning per-direction values, run counts, `source` and `updated_at`
 - [X] T018 [US1] Block other commands to a shutter under measurement in `backend/src/somfy_shutters/api/rest.py`, with a stated reason rather than a silent refusal (**FR-028**)
 - [X] T019 [US1] Broadcast the `calibration` frame from `backend/src/somfy_shutters/api/ws.py` when a stored value changes, so other clients stop animating on the old timing (**FR-017**)
-- [ ] T020 [P] [US1] Implement the run state machine client-side in `frontend/src/lib/calibration.svelte.ts`: elapsed time, which press is expected next, and the two `mark` calls
-- [ ] T021 [P] [US1] Build `frontend/src/components/RunTable.svelte`: runs with dead time, total and verdict; **rejected runs struck through with their reason, not hidden** (**FR-012**)
-- [ ] T022 [US1] Build `frontend/src/routes/Calibration.svelte`: every shutter with its state — calibrated, partly measured, never measured, or manual — and when its value last changed (**FR-015**, **SC-006**)
-- [ ] T023 [US1] Build `frontend/src/routes/CalibrationRun.svelte`: the guided run, one large button that changes with the phase, abort, and the homing drive when the shutter is not at an end stop
-- [ ] T024 [US1] Reach the calibration screen from the detail view in `frontend/src/routes/Detail.svelte`, for the shutter already open
+- [X] T020 [P] [US1] Implement the run state machine client-side in `frontend/src/lib/calibration.svelte.ts`: elapsed time, which press is expected next, and the two `mark` calls
+- [X] T021 [P] [US1] Build `frontend/src/components/RunTable.svelte`: runs with dead time, total and verdict; **rejected runs struck through with their reason, not hidden** (**FR-012**)
+- [X] T022 [US1] Build `frontend/src/routes/Calibration.svelte`: every shutter with its state — calibrated, partly measured, never measured, or manual — and when its value last changed (**FR-015**, **SC-006**)
+- [X] T023 [US1] Build `frontend/src/routes/CalibrationRun.svelte`: the guided run, one large button that changes with the phase, abort, and the homing drive when the shutter is not at an end stop
+- [X] T024 [US1] Reach the calibration screen from the detail view in `frontend/src/routes/Detail.svelte`, for the shutter already open
 
 **Checkpoint**: run quickstart C1.1–C1.8.
 
