@@ -61,7 +61,8 @@ not yet measured. Delivers a working app without touching a configuration file.
 Someone has a new window with a SIMU motor and its original remote. In the app they choose
 "Rolladen hinzufügen". The app explains, step by step, what to do in the radio bridge —
 create the shutter there, hold the PROG button on the old remote until the shutter jogs,
-then press "Program" in the bridge — and offers to open the bridge's page. When the bridge
+press "Program" in the bridge, then restart the bridge so it announces the new shutter and
+starts accepting commands for it — and offers to open the bridge's page. When the bridge
 announces the new shutter, the app notices by itself, says so, and asks for a name. It then
 offers to measure the travel time.
 
@@ -84,9 +85,9 @@ offered for calibration. Delivers a new window, end to end, without a text edito
    it appears on the overview, marked "Laufzeit nicht gemessen", and the app offers to go
    straight to measuring it.
 4. **Given** the guide is open and nothing new appears within ten minutes, **When** the
-   person looks, **Then** the app says what usually went wrong (PROG not held long enough,
-   learning mode timed out, created in the bridge but not programmed) and lets them keep
-   waiting or cancel.
+   person looks, **Then** the app says what usually went wrong (bridge not restarted after
+   adding, PROG not held long enough, learning mode timed out, announcements switched off in
+   the bridge) and lets them keep waiting or cancel.
 5. **Given** a shutter appears while nobody is running the guide, **When** anyone opens the
    app, **Then** it shows "Neuer Rolladen gefunden" with the same naming step — it is not
    silently added to automations that target all shutters until a person has confirmed it.
@@ -125,15 +126,15 @@ left with no targets says so, and that the app did not send anything to the brid
 
 ### User Story 4 - The bridge forgets a shutter (Priority: P2)
 
-Someone deletes a shutter in the bridge's own interface. The app notices that the bridge no
-longer announces it, marks the shutter "Funkbrücke kennt diesen Rolladen nicht mehr", stops
+Someone deletes a shutter in the bridge's own interface and restarts the bridge. The app
+notices that the bridge no longer announces it, marks the shutter "Funkbrücke kennt diesen Rolladen nicht mehr", stops
 offering commands for it, and offers to remove it from the app too.
 
 **Why this priority**: Without it, a shutter deleted in the bridge would look perfectly
 drivable in the app while every command vanishes into the air.
 
-**Independent Test**: Stop the bridge announcing a shutter. Confirm the app marks it within a
-minute, disables its buttons, keeps its settings, and offers removal.
+**Independent Test**: Restart the bridge without one of its shutters. Confirm the app marks it
+within a minute of the restart, disables its buttons, keeps its settings, and offers removal.
 
 **Acceptance Scenarios**:
 
@@ -216,7 +217,9 @@ detection as in story 2.
   bridge, or operate the bridge's web interface. It MAY offer a link that opens the
   bridge's page for the person.
 - **FR-008**: While the guide is open, a newly announced shutter MUST be detected within
-  5 seconds without a reload, and the guide MUST continue to naming.
+  5 seconds of the bridge announcing it, without a reload, and the guide MUST continue to
+  naming. The guide MUST include restarting the bridge, since the bridge announces a new
+  shutter — and accepts commands for it — only after a restart.
 - **FR-009**: On confirming, the person MUST give the shutter a name (prefilled from the
   bridge, made unique); it then appears marked as not yet measured, with an offer to
   measure it.
@@ -241,8 +244,8 @@ detection as in story 2.
 
 **The bridge forgetting**
 
-- **FR-017**: A shutter learned from the bridge that the bridge stops announcing MUST be
-  marked as unknown to the bridge within 60 seconds, with commands disabled and
+- **FR-017**: A shutter learned from the bridge that the bridge no longer announces after its
+  next restart MUST be marked as unknown to the bridge within 60 seconds of that restart, with commands disabled and
   automations skipping it with that reason; its settings MUST be kept.
 - **FR-018**: A bridge that is unreachable MUST NOT make shutters count as forgotten.
 
@@ -276,7 +279,7 @@ detection as in story 2.
 - **SC-004**: After a removal, the shutter appears in no screen, group or rule of the app,
   and no message was sent to the bridge.
 - **SC-005**: A shutter deleted in the bridge is marked forgotten in the app within 60
-  seconds, and no command is offered for it from then on.
+  seconds of the bridge's next restart, and no command is offered for it from then on.
 - **SC-006**: Zero shutter addresses are typed by a person for a household set up entirely
   after this feature.
 
@@ -289,8 +292,12 @@ detection as in story 2.
   constitution principle II, which names the old topics. That is its own feature; this one
   assumes it is done.
 - The bridge's announcements carry, per shutter, a stable identity and a display name, and
-  are kept available for anyone who connects later. Deleting a shutter in the bridge
-  withdraws its announcement.
+  are kept available for anyone who connects later. **Corrected during planning** (from the
+  bridge's code): the bridge announces its shutters only when it connects to the message
+  channel, so a shutter added in the bridge appears — and becomes commandable — only after
+  the bridge restarts; and deleting a shutter withdraws nothing, its old announcement stays
+  kept. A deletion is therefore visible as a shutter missing from the fresh announcements
+  after a restart.
 - The bridge's announcements define 100 as fully open and 0 as fully closed. That settles
   the direction question for bridges on the current interface.
 - Programming a motor, creating a shutter and deleting it in the bridge are only possible in
