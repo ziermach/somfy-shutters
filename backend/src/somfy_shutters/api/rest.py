@@ -39,8 +39,18 @@ def _tracker(request: Request) -> Tracker:
     return request.app.state.tracker
 
 
+class MeasurementInProgress(RuntimeError):
+    """A command was aimed at a shutter that is being measured (FR-028)."""
+
+
 async def _apply(request: Request, shutter_id: str, body: CommandBody) -> dict[str, Any]:
     """Issue one command. Raises BridgeUnreachable if it could not be handed over."""
+    # Checked here rather than on one route: "Alle zu" reached this function by
+    # another path and drove straight through a running measurement.
+    runs = getattr(request.app.state, "runs", None)
+    if runs is not None and runs.is_measuring(shutter_id):
+        raise MeasurementInProgress(shutter_id)
+
     tracker: Tracker = request.app.state.tracker
     bridge = request.app.state.bridge
     action = Action(body.action)
@@ -94,6 +104,11 @@ async def command_all(request: Request, body: CommandBody) -> JSONResponse:
         try:
             await _apply(request, shutter_id, body)
             results.append({"id": shutter_id, "accepted": True})
+        except MeasurementInProgress:
+            # The others still move; this one is left alone and the reason is said.
+            results.append(
+                {"id": shutter_id, "accepted": False, "error": "measurement_in_progress"}
+            )
         except BridgeUnreachable:
             results.append({"id": shutter_id, "accepted": False, "error": "bridge_unreachable"})
     accepted = sum(1 for r in results if r["accepted"])
@@ -113,18 +128,6 @@ async def command_one(request: Request, shutter_id: str, body: CommandBody) -> J
                 "detail": None,
             },
         )
-    # A command now would ruin the measurement in progress, and the user should
-    # be told so rather than have it silently swallowed (FR-028).
-    if getattr(request.app.state, "runs", None) and request.app.state.runs.is_measuring(shutter_id):
-        return JSONResponse(
-            {
-                "accepted": False,
-                "error": "measurement_in_progress",
-                "message": "Für diesen Rolladen läuft gerade eine Messung.",
-                "detail": None,
-            },
-            status_code=409,
-        )
     if body.action == "position" and body.target_percent is None:
         raise HTTPException(
             422,
@@ -136,6 +139,16 @@ async def command_one(request: Request, shutter_id: str, body: CommandBody) -> J
         )
     try:
         return JSONResponse(await _apply(request, shutter_id, body))
+    except MeasurementInProgress:
+        return JSONResponse(
+            {
+                "accepted": False,
+                "error": "measurement_in_progress",
+                "message": "Für diesen Rolladen läuft gerade eine Messung.",
+                "detail": None,
+            },
+            status_code=409,
+        )
     except BridgeUnreachable:
         return JSONResponse({"accepted": False, **BRIDGE_UNREACHABLE}, status_code=503)
     except UnknownShutter:
