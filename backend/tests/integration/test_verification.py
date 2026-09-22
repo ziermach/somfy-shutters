@@ -128,11 +128,9 @@ async def test_the_end_points_are_untouched_by_any_number_of_answers(client) -> 
     movement = tracker.movement("flink")
     a = client.app.state.calibration.curve_a("flink", Direction.UP)
     assert a != 1.0, "the curve is actually bent for this assertion to mean anything"
-    assert movement.position_at(movement.started_monotonic, curve_a=a) == 0
-    assert (
-        movement.position_at(movement.started_monotonic + movement.duration_seconds, curve_a=a)
-        == 100
-    )
+    assert movement.curve_a == a
+    assert movement.position_at(movement.started_monotonic) == 0
+    assert movement.position_at(movement.started_monotonic + movement.duration_seconds) == 100
 
 
 async def test_a_check_cannot_start_during_a_measurement(client) -> None:

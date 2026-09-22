@@ -239,10 +239,15 @@ class CalibrationService:
         raw = self._store.read_toml()
         for shutter_id, directions in raw.items():
             for name, entry in directions.items():
-                if not isinstance(entry, dict) or "travel_seconds" not in entry:
+                if not isinstance(entry, dict):
+                    continue
+                # A curve can exist without a measurement — an answer given
+                # against the default or a hand-written travel time. _flush
+                # writes such entries, so they have to be read back too.
+                self._curves[(shutter_id, name)] = float(entry.get("curve_a", 1.0))
+                if "travel_seconds" not in entry:
                     continue
                 updated = entry.get("updated_at")
-                self._curves[(shutter_id, name)] = float(entry.get("curve_a", 1.0))
                 self._cache[(shutter_id, name)] = Calibration(
                     travel_seconds=float(entry["travel_seconds"]),
                     dead_seconds=float(entry.get("dead_seconds", 0.0)),

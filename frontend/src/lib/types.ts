@@ -19,6 +19,8 @@ export interface Movement {
   started_at: string;
   expected_arrival: string;
   origin: 'local' | 'external';
+  /** Travel shape: 1 is linear. The motor runs linearly in time, not in percent. */
+  curve_a: number;
 }
 
 export interface Shutter {

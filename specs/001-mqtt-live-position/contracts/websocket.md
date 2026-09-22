@@ -38,7 +38,8 @@ next snapshot repairs everything anyway.
     "direction": "down",
     "started_at": "2026-09-21T18:03:11.412Z",
     "expected_arrival": "2026-09-21T18:03:27.512Z",
-    "origin": "local"
+    "origin": "local",
+    "curve_a": 1.0
   }
 }
 ```

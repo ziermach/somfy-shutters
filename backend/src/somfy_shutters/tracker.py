@@ -188,13 +188,55 @@ class Tracker:
         current = self.position(shutter_id).percent
         if current is None:
             direction = Direction.UP if target_percent == 100 else Direction.DOWN
+        elif target_percent == current:
+            # No travel, so the target says nothing about direction. The way it
+            # last went is the curve that put it here.
+            direction = self._last_direction.get(shutter_id, Direction.UP)
         else:
-            direction = Direction.UP if target_percent >= current else Direction.DOWN
+            direction = Direction.UP if target_percent > current else Direction.DOWN
         return round(to_level(target_percent, self._curve_a(shutter_id, direction)))
+
+    def halt_level(self, shutter_id: str) -> int:
+        """What to send so the shutter stops where it is right now.
+
+        While travelling this comes straight from the movement, in the level
+        coordinate the motor actually runs in. Going through the displayed
+        percentage would have to guess a direction, and "target == current"
+        always guessed up — the wrong curve for a shutter on its way down.
+        """
+        self._require(shutter_id)
+        movement = self._movements.get(shutter_id)
+        if movement is not None:
+            return round(movement.level_at(self._monotonic()))
+        current = self._positions[shutter_id].percent
+        return self.level_for(shutter_id, current if current is not None else 0)
+
+    def _report_direction(self, shutter_id: str, level: int) -> Direction:
+        """Which curve a report has to be read through.
+
+        During our own travel that is the travel's direction. While idle a report
+        that moves the value was caused by something we did not command — a
+        physical remote — and which side of our estimate it lands on says which
+        way that went. Only with nothing to compare against does the last known
+        direction decide, and after a restart there is not even that.
+        """
+        movement = self._movements.get(shutter_id)
+        if movement is not None:
+            return movement.direction
+        previous = self._positions[shutter_id].percent
+        if previous is not None:
+            # Compared through the same curve on both sides, so the answer does
+            # not depend on which curve is used for it.
+            here = to_level(previous, self._curve_a(shutter_id, Direction.UP))
+            if level > here + 0.5:
+                return Direction.UP
+            if level < here - 0.5:
+                return Direction.DOWN
+        return self._last_direction.get(shutter_id, Direction.UP)
 
     def percent_from_level(self, shutter_id: str, level: int) -> int:
         """A report arrives in the bridge's coordinate; this is what it means."""
-        direction = self._last_direction.get(shutter_id, Direction.UP)
+        direction = self._report_direction(shutter_id, level)
         return round(to_percent(level, self._curve_a(shutter_id, direction)))
 
     async def stop(self, shutter_id: str) -> PositionEstimate:

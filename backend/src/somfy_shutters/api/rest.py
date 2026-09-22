@@ -59,10 +59,8 @@ async def _apply(request: Request, shutter_id: str, body: CommandBody) -> dict[s
         # Expressed as a level command at the current position: we only speak
         # level/cmd. See contracts/mqtt.md — this is an approximation, and
         # hardware bring-up has to confirm the motor halts crisply.
-        current = tracker.position(shutter_id)
-        target = current.percent if current.percent is not None else 0
         await bridge.send_level(
-            tracker.settings.shutters[shutter_id].address, tracker.level_for(shutter_id, target)
+            tracker.settings.shutters[shutter_id].address, tracker.halt_level(shutter_id)
         )
         await tracker.stop(shutter_id)
         return {"accepted": True, "movement": None}

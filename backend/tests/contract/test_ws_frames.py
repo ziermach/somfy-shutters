@@ -61,6 +61,7 @@ def test_movement_frame_shape(test_client) -> None:
         "started_at",
         "expected_arrival",
         "origin",
+        "curve_a",
     }
     assert frame["movement"]["origin"] == "local"
 

@@ -205,6 +205,9 @@ async def start_run(request: Request, shutter_id: str) -> JSONResponse:
         await tracker.start_movement(shutter_id, target)
     except BridgeUnreachable:
         runs.finish(shutter_id)
+        # The run existed for a moment, and a client connecting in that moment
+        # got a snapshot saying so. Nothing else would ever tell it otherwise.
+        await _announce(request, shutter_id, False)
         return JSONResponse(BRIDGE_UNREACHABLE, status_code=503)
 
     log.info("calibration run started on %s, direction %s", shutter_id, plan.direction.value)
@@ -305,13 +308,11 @@ async def abort_run(request: Request, shutter_id: str) -> JSONResponse:
     except CalibrationError as exc:
         return _conflict(exc)
 
-    current = tracker.position(shutter_id).percent
     # The run is aborted either way; a bridge that cannot take the halt does not
     # change that.
     with contextlib.suppress(BridgeUnreachable):
-        halt_at = current if current is not None else 0
         await bridge.send_level(
-            tracker.settings.shutters[shutter_id].address, tracker.level_for(shutter_id, halt_at)
+            tracker.settings.shutters[shutter_id].address, tracker.halt_level(shutter_id)
         )
     await tracker.stop(shutter_id)
     await _announce(request, shutter_id, False)

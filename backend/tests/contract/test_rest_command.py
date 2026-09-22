@@ -20,6 +20,7 @@ MOVEMENT_KEYS = {
     "started_at",
     "expected_arrival",
     "origin",
+    "curve_a",
 }
 
 

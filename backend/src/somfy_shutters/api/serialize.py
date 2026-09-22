@@ -34,6 +34,9 @@ def movement_json(movement: Movement | None) -> dict[str, Any] | None:
         "started_at": movement.started_at.isoformat(),
         "expected_arrival": movement.expected_arrival.isoformat(),
         "origin": movement.origin.value,
+        # The travel shape. Without it a client can only interpolate linearly,
+        # and a stop mid-travel jumps to where the server says it really was.
+        "curve_a": round(movement.curve_a, 3),
     }
 
 

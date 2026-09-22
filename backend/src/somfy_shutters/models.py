@@ -132,25 +132,33 @@ class Movement(BaseModel):
             return 1.0
         return min(1.0, max(0.0, (now_monotonic - self.started_monotonic) / self.duration_seconds))
 
-    def position_at(self, now_monotonic: float, curve_a: float | None = None) -> int:
+    def level_at(self, now_monotonic: float) -> float:
+        """Where the bridge's own clock says the motor is, in its level coordinate.
+
+        The motor runs linearly in time, so this is a straight line. It is what a
+        halt has to be sent as: converting the displayed percentage back would
+        round twice and pick a curve by guessing the direction.
+        """
+        from .calibration import to_level
+
+        start_level = to_level(self.from_percent, self.curve_a)
+        end_level = to_level(self.target_percent, self.curve_a)
+        return start_level + (end_level - start_level) * self.progress(now_monotonic)
+
+    def position_at(self, now_monotonic: float) -> int:
         """Where the shutter is, in the percentages a person reads.
 
         The motor moves linearly in the bridge's level coordinate, so the
         interpolation happens there and is converted back. With a neutral curve
         the two coordinates coincide and this is the straight line of feature 001.
         """
-        a = self.curve_a if curve_a is None else curve_a
-        progress = self.progress(now_monotonic)
-        if a == 1.0:
+        if self.curve_a == 1.0:
             span = self.target_percent - self.from_percent
-            return round(self.from_percent + span * progress)
+            return round(self.from_percent + span * self.progress(now_monotonic))
 
-        from .calibration import to_level, to_percent
+        from .calibration import to_percent
 
-        start_level = to_level(self.from_percent, a)
-        end_level = to_level(self.target_percent, a)
-        level = start_level + (end_level - start_level) * progress
-        return round(to_percent(level, a))
+        return round(to_percent(self.level_at(now_monotonic), self.curve_a))
 
     def is_done(self, now_monotonic: float) -> bool:
         return self.progress(now_monotonic) >= 1.0

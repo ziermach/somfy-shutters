@@ -10,7 +10,7 @@ const value = (over: Partial<DirectionValue> = {}): DirectionValue => ({
   travel_seconds: 12,
   dead_seconds: 0.6,
   runs: 0,
-  curve_a: 0,
+  curve_a: 1,
   source: 'default',
   updated_at: null,
   ...over
