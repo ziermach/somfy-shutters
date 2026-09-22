@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { ticker } from './lib/animate';
   import { shutters } from './lib/shutters.svelte';
+  import ArrivalPrompt from './components/ArrivalPrompt.svelte';
   import Calibration from './routes/Calibration.svelte';
   import CalibrationRun from './routes/CalibrationRun.svelte';
   import Detail from './routes/Detail.svelte';
@@ -36,6 +37,14 @@
     <div class="banner" role="status">
       Funkbrücke nicht erreichbar — Rolladen lassen sich gerade nicht fahren.
     </div>
+  {/if}
+
+  {#if shutters.confirmable}
+    <ArrivalPrompt
+      name={shutters.confirmable.name}
+      onconfirm={() => shutters.confirmArrival()}
+      ondismiss={() => shutters.dismissArrival()}
+    />
   {/if}
 
   {#if view.name === 'detail'}

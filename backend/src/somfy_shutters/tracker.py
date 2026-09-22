@@ -194,9 +194,17 @@ class Tracker:
         for shutter_id, movement in list(self._movements.items()):
             if movement.is_done(now):
                 del self._movements[shutter_id]
-                await self._settle(shutter_id, movement.target_percent, Source.COMMAND)
+                await self._settle(
+                    shutter_id, movement.target_percent, Source.COMMAND, settled=movement
+                )
 
-    async def _settle(self, shutter_id: str, percent: int, source: Source) -> None:
+    async def _settle(
+        self,
+        shutter_id: str,
+        percent: int,
+        source: Source,
+        settled: Movement | None = None,
+    ) -> None:
         previous = self._positions[shutter_id]
         if percent in (0, 100):
             position = PositionEstimate.at_end_stop(percent, source, self._clock())
@@ -210,7 +218,16 @@ class Tracker:
             )
         self._positions[shutter_id] = position
         self._store.save(shutter_id, position, was_moving=False, now=self._clock())
-        await self._emit({"type": "position", "shutter_id": shutter_id, "position": position})
+        await self._emit(
+            {
+                "type": "position",
+                "shutter_id": shutter_id,
+                "position": position,
+                # Present only when a movement ran to completion. Feature 002 uses
+                # it to decide whether a travel is worth one question.
+                "settled_movement": settled,
+            }
+        )
 
     # --- reports from the bridge (FR-017) ------------------------------------
 

@@ -52,6 +52,8 @@ class CalibrationState {
   homingTarget = $state(100);
   lastRun = $state<Run | null>(null);
   busy = $state(false);
+  checking = $state(false);
+  atLimit = $state(false);
 
   #ticker = 0;
 
@@ -64,7 +66,6 @@ class CalibrationState {
     const response = await fetch(`/api/calibration/${id}`);
     this.detail = await response.json();
     this.needsHoming = false;
-    this.message = '';
     this.lastRun = null;
     this.phase = 'idle';
   }
@@ -160,6 +161,56 @@ class CalibrationState {
     this.needsHoming = true;
     this.message =
       'Abgebrochen. Der Rolladen steht zwischen den Endlagen — erst wieder anfahren.';
+    await this.loadDetail(id);
+  }
+
+  // --- verification ---------------------------------------------------------
+  //
+  // A check adjusts the *shape* of the estimate. It never makes the position
+  // better known, and it can never move where the display reaches 0 or 100 —
+  // that is guaranteed by the curve, not by anything here.
+
+  async startCheck(id: string): Promise<void> {
+    this.busy = true;
+    const response = await fetch(`/api/calibration/${id}/check`, { method: 'POST' });
+    const body = await response.json();
+    this.busy = false;
+    if (!response.ok) {
+      this.message = body.message ?? 'Prüfung nicht möglich.';
+      return;
+    }
+    this.checking = true;
+    this.atLimit = false;
+    this.message =
+      'Fährt auf die angezeigte Mitte. Wenn er steht: sieht er etwa halb offen aus?';
+  }
+
+  async answerCheck(id: string, reply: 'too_high' | 'about_right' | 'too_low'): Promise<void> {
+    const response = await fetch(`/api/calibration/${id}/check/answer`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answer: reply })
+    });
+    const body = await response.json();
+    this.atLimit = body.at_limit;
+
+    if (reply === 'about_right') {
+      this.checking = false;
+      this.message = 'Passt. Die Mitte der Fahrt stimmt.';
+    } else if (body.at_limit) {
+      this.message = `Mitte um ${body.shift_pp.toFixed(1)} pp verschoben — weiter geht es nicht. Wenn es immer noch nicht passt, lieber neu messen.`;
+    } else {
+      this.message = `Mitte um ${body.shift_pp.toFixed(1)} pp verschoben. Nochmal prüfen?`;
+    }
+    await this.loadDetail(id);
+    this.checking = reply !== 'about_right' && !body.at_limit;
+  }
+
+  async undoCheck(id: string): Promise<void> {
+    await fetch(`/api/calibration/${id}/check`, { method: 'DELETE' });
+    this.checking = false;
+    this.atLimit = false;
+    this.message = 'Prüfungen zurückgenommen. Die gemessenen Laufzeiten bleiben.';
     await this.loadDetail(id);
   }
 

@@ -125,6 +125,39 @@
       {/if}
     </div>
 
+    {#if detail.up.source !== 'default' || detail.down.source !== 'default'}
+      <div class="panel">
+        <h3>Prüfen</h3>
+        <p class="hint">
+          Zwei Knopfdrücke können nicht erfassen, dass der Motor ungleichmäßig fährt — in
+          der Mitte bleibt ein Rest. Hier fährt er auf die angezeigte Mitte und du sagst,
+          was du siehst. Die Endlagen bleiben davon unberührt.
+        </p>
+        {#if calibration.checking}
+          <div class="answers">
+            <button type="button" class="btn" onclick={() => calibration.answerCheck(id, 'too_high')}>
+              zu hoch
+            </button>
+            <button type="button" class="btn" onclick={() => calibration.answerCheck(id, 'about_right')}>
+              passt
+            </button>
+            <button type="button" class="btn" onclick={() => calibration.answerCheck(id, 'too_low')}>
+              zu tief
+            </button>
+          </div>
+        {:else}
+          <button type="button" class="btn wide" disabled={running || calibration.busy} onclick={() => calibration.startCheck(id)}>
+            Auf die Mitte fahren
+          </button>
+        {/if}
+        {#if detail.up.curve_k !== 0 || detail.down.curve_k !== 0}
+          <button type="button" class="btn wide undo" disabled={running} onclick={() => calibration.undoCheck(id)}>
+            Prüfungen zurücknehmen
+          </button>
+        {/if}
+      </div>
+    {/if}
+
     <RunTable runs={detail.runs} />
 
     <p class="note">
@@ -271,6 +304,30 @@
   }
   .source {
     font-family: var(--body);
+  }
+  .hint {
+    margin: 0 0 10px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .answers {
+    display: flex;
+    gap: 8px;
+  }
+  .answers .btn {
+    height: 44px;
+    font-size: 14px;
+  }
+  .wide {
+    flex: none;
+    width: 100%;
+    height: 44px;
+  }
+  .undo {
+    margin-top: 8px;
+    background: transparent;
+    color: var(--muted);
   }
   .override {
     margin: 10px 0 0;

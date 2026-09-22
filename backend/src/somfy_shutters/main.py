@@ -22,10 +22,11 @@ from .api import calibration_routes, rest, ws
 from .bridge.base import ShutterBridge
 from .bridge.mqtt import MqttBridge
 from .bridge.sim import SimBridge
-from .calibration import RunRegistry
+from .calibration import PendingConfirmation, RunRegistry, may_ask_for_confirmation
 from .calibration_store import CalibrationService, CalibrationStore
 from .config import Settings, load_settings
 from .events import EventBus
+from .models import utcnow
 from .store import Store
 from .tracker import Tracker
 
@@ -86,6 +87,48 @@ def create_app(
 
     tracker = Tracker(settings, store, emit=emit, calibration=calibration)
 
+    pending: dict[str, PendingConfirmation] = {}
+
+    async def note_confirmable(event: dict[str, Any]) -> None:
+        """Decide whether a finished travel is worth one question.
+
+        No measurement comes from the travel itself — the arrival we computed is
+        the travel time we would be measuring. Only a person saying "yes, it is
+        up" is an observation (research.md §1).
+        """
+        if event.get("type") != "position":
+            return
+        movement = event.get("settled_movement")
+        if movement is None:
+            return
+        shutter_id = event["shutter_id"]
+        end_to_end = {movement.from_percent, movement.target_percent} == {0, 100}
+        if not may_ask_for_confirmation(
+            was_end_to_end=end_to_end,
+            was_interrupted=False,
+            initiated_by_us=movement.origin.value == "local",
+            last_asked=calibration_store.last_prompt(shutter_id),
+        ):
+            return
+        if runs.is_measuring(shutter_id):
+            return  # a guided run is already measuring this one properly
+        now = utcnow()
+        calibration_store.note_prompt(shutter_id, now)
+        pending[shutter_id] = PendingConfirmation(
+            shutter_id=shutter_id,
+            direction=movement.direction,
+            started_monotonic=movement.started_monotonic,
+            asked_at=now,
+        )
+        await bus.publish(
+            {
+                "type": "confirmable",
+                "shutter_id": shutter_id,
+                "direction": movement.direction.value,
+                "name": settings.shutters[shutter_id].name,
+            }
+        )
+
     async def on_report(address: str, percent: int) -> None:
         """Every report goes through here, from the bridge or from the simulator.
 
@@ -107,6 +150,7 @@ def create_app(
                 await hub.broadcast(frame)
 
         bus.subscribe(to_clients)
+        bus.subscribe(note_confirmable)
 
         # A reference is kept: a task only referenced by the event loop can be
         # garbage-collected mid-flight.
@@ -154,6 +198,7 @@ def create_app(
     app.state.calibration_store = calibration_store
     app.state.runs = runs
     app.state.on_report = on_report
+    app.state.pending_confirmations = pending
 
     app.include_router(rest.router)
     app.include_router(calibration_routes.router)

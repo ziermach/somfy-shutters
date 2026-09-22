@@ -77,6 +77,14 @@ def frame_for_event(event: dict[str, Any], tracker: Any) -> dict[str, Any] | Non
         return frame
     if kind == "bridge":
         return {"type": "bridge", "connected": event["connected"], "kind": event["kind"]}
+    if kind == "confirmable":
+        # An offer, not a claim: the app has no idea whether it has arrived.
+        return {
+            "type": "confirmable",
+            "shutter_id": event["shutter_id"],
+            "direction": event["direction"],
+            "name": event["name"],
+        }
     if kind == "calibration":
         # Other clients are animating on the old timing until they hear this.
         return {

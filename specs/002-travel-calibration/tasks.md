@@ -87,15 +87,15 @@ or plain storage, which is why the tests below are cheap.
 
 ### Tests for User Story 2
 
-- [ ] T025 [P] [US2] Integration test `backend/tests/integration/test_confirmation.py`: a confirmation after an end-to-end travel is recorded as a measurement; an ignored prompt records nothing; a stopped, reversed or partial travel prompts nothing at all (**FR-019**)
-- [ ] T026 [P] [US2] Convergence test in `backend/tests/integration/test_confirmation.py`: a deliberately wrong stored value reaches within 5 % of the truth after at most ten confirmations (**SC-004**)
+- [X] T025 [P] [US2] Integration test `backend/tests/integration/test_confirmation.py`: a confirmation after an end-to-end travel is recorded as a measurement; an ignored prompt records nothing; a stopped, reversed or partial travel prompts nothing at all (**FR-019**)
+- [X] T026 [P] [US2] Convergence test in `backend/tests/integration/test_confirmation.py`: a deliberately wrong stored value reaches within 5 % of the truth after at most ten confirmations (**SC-004**)
 
 ### Implementation for User Story 2
 
-- [ ] T027 [US2] Detect a confirmable travel in `backend/src/somfy_shutters/calibration.py`: initiated by us, end stop to end stop, uninterrupted — and **at most once per shutter per day** (**FR-018a**)
-- [ ] T028 [US2] Implement `POST /api/calibration/{id}/confirm` in `backend/src/somfy_shutters/api/rest.py`, recording the request's arrival as the observation and storing the run with `kind: "confirmed"` (**FR-020**)
-- [ ] T029 [US2] Build the prompt in `frontend/src/components/ArrivalPrompt.svelte`: one line, **Ja** and **Noch nicht**, dismissable, shown only while the app is in the foreground
-- [ ] T030 [US2] Wire the prompt into `frontend/src/App.svelte`: appears after a qualifying travel, "Noch nicht" leaves it up so the later tap is the measurement, ignoring it records nothing
+- [X] T027 [US2] Detect a confirmable travel in `backend/src/somfy_shutters/calibration.py`: initiated by us, end stop to end stop, uninterrupted — and **at most once per shutter per day** (**FR-018a**)
+- [X] T028 [US2] Implement `POST /api/calibration/{id}/confirm` in `backend/src/somfy_shutters/api/rest.py`, recording the request's arrival as the observation and storing the run with `kind: "confirmed"` (**FR-020**)
+- [X] T029 [US2] Build the prompt in `frontend/src/components/ArrivalPrompt.svelte`: one line, **Ja** and **Noch nicht**, dismissable, shown only while the app is in the foreground
+- [X] T030 [US2] Wire the prompt into `frontend/src/App.svelte`: appears after a qualifying travel, "Noch nicht" leaves it up so the later tap is the measurement, ignoring it records nothing
 
 **Checkpoint**: values maintain themselves at one tap each.
 
@@ -109,14 +109,14 @@ or plain storage, which is why the tests below are cheap.
 
 ### Tests for User Story 3
 
-- [ ] T031 [P] [US3] Integration test `backend/tests/integration/test_verification.py`: answers move `curve_k` by a bounded step, `at_limit` is reported at the bound, undo returns `curve_k` to 0 with the measurements untouched (**FR-026**)
-- [ ] T032 [P] [US3] Property test in `backend/tests/unit/test_curve.py`: after **any** sequence of answers, the displayed position at an end stop is exactly 0 or exactly 100 (**FR-025** — the invariant that makes this control safe)
+- [X] T031 [P] [US3] Integration test `backend/tests/integration/test_verification.py`: answers move `curve_k` by a bounded step, `at_limit` is reported at the bound, undo returns `curve_k` to 0 with the measurements untouched (**FR-026**)
+- [X] T032 [P] [US3] Property test in `backend/tests/unit/test_curve.py`: after **any** sequence of answers, the displayed position at an end stop is exactly 0 or exactly 100 (**FR-025** — the invariant that makes this control safe)
 
 ### Implementation for User Story 3
 
-- [ ] T033 [US3] Implement check start, answer and undo in `backend/src/somfy_shutters/calibration.py`, storing answers so they can be reversed independently of the measurements
-- [ ] T034 [US3] Implement `POST /api/calibration/{id}/check`, `/check/answer` and `DELETE …/check` in `backend/src/somfy_shutters/api/rest.py` per [contracts/rest.md](./contracts/rest.md)
-- [ ] T035 [US3] Build the check flow in `frontend/src/routes/CalibrationRun.svelte`: drive to the displayed midpoint, ask **zu hoch / passt / zu tief**, and stop offering answers once `at_limit` is reported
+- [X] T033 [US3] Implement check start, answer and undo in `backend/src/somfy_shutters/calibration.py`, storing answers so they can be reversed independently of the measurements
+- [X] T034 [US3] Implement `POST /api/calibration/{id}/check`, `/check/answer` and `DELETE …/check` in `backend/src/somfy_shutters/api/rest.py` per [contracts/rest.md](./contracts/rest.md)
+- [X] T035 [US3] Build the check flow in `frontend/src/routes/CalibrationRun.svelte`: drive to the displayed midpoint, ask **zu hoch / passt / zu tief**, and stop offering answers once `at_limit` is reported
 
 **Checkpoint**: quickstart C3.1–C3.4.
 

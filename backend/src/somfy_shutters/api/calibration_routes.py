@@ -23,8 +23,15 @@ from ..calibration import (
     at_curve_limit,
     nearest_end_stop,
     plan_run,
+    rejection_for,
 )
-from ..models import CheckReply, Direction, RunKind, utcnow
+from ..models import (
+    CheckReply,
+    Direction,
+    MeasurementRun,
+    RunKind,
+    utcnow,
+)
 
 log = logging.getLogger(__name__)
 
@@ -289,6 +296,64 @@ async def clear(request: Request, shutter_id: str) -> dict[str, Any]:
     _require_shutter(tracker, shutter_id)
     service.clear(shutter_id)
     return _shutter_json(tracker, service, shutter_id)
+
+
+@router.post("/{shutter_id}/confirm")
+async def confirm(request: Request, shutter_id: str) -> JSONResponse:
+    """One tap: the shutter has arrived.
+
+    The elapsed time from the command to this request is a real observation, and
+    the only kind this system can get without a person holding a stopwatch. The
+    travel itself measures nothing — its arrival was computed from the number we
+    are trying to find out.
+    """
+    tracker, service, _, _ = _parts(request)
+    _require_shutter(tracker, shutter_id)
+
+    pending = request.app.state.pending_confirmations.pop(shutter_id, None)
+    if pending is None:
+        return _conflict(
+            CalibrationError("nothing_to_confirm", "Für diesen Rolladen steht keine Frage offen.")
+        )
+
+    total = time.monotonic() - pending.started_monotonic
+    established = service.established_total(shutter_id, pending.direction)
+    run = MeasurementRun(
+        shutter_id=shutter_id,
+        direction=pending.direction,
+        dead_seconds=service.effective(shutter_id, pending.direction).dead_seconds,
+        total_seconds=round(total, 3),
+        recorded_at=utcnow(),
+        kind=RunKind.CONFIRMED,
+        rejected=rejection_for(
+            service.effective(shutter_id, pending.direction).dead_seconds, total, established
+        ),
+    )
+    stored = service.record(run, now=utcnow())
+    if stored is not None:
+        await request.app.state.bus.publish(
+            {
+                "type": "calibration",
+                "shutter_id": shutter_id,
+                "direction": pending.direction.value,
+                "travel_seconds": stored.travel_seconds,
+                "runs": stored.runs,
+            }
+        )
+    return JSONResponse(
+        {
+            "run": _run_json(run),
+            "calibration": _direction_state(service, shutter_id, pending.direction),
+        }
+    )
+
+
+@router.delete("/{shutter_id}/confirm")
+async def dismiss(request: Request, shutter_id: str) -> dict[str, Any]:
+    """Ignored, or answered "not yet". Nothing is recorded and nothing inferred
+    from the silence (FR-018a)."""
+    request.app.state.pending_confirmations.pop(shutter_id, None)
+    return {"dismissed": True}
 
 
 # --- verification ------------------------------------------------------------

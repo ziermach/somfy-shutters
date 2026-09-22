@@ -46,6 +46,15 @@ export type Frame =
   | { type: 'movement'; seq: number; shutter_id: string; movement: Movement }
   | { type: 'position'; seq: number; shutter_id: string; position: PositionEstimate }
   | { type: 'correction'; seq: number; shutter_id: string; position: PositionEstimate; ease_ms: number }
-  | { type: 'bridge'; seq: number; connected: boolean; kind: 'mqtt' | 'sim' };
+  | { type: 'bridge'; seq: number; connected: boolean; kind: 'mqtt' | 'sim' }
+  | { type: 'confirmable'; seq: number; shutter_id: string; direction: 'up' | 'down'; name: string }
+  | {
+      type: 'calibration';
+      seq: number;
+      shutter_id: string;
+      direction: 'up' | 'down';
+      travel_seconds: number;
+      runs: number;
+    };
 
 export type Action = 'open' | 'close' | 'stop' | 'position';

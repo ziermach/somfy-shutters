@@ -262,6 +262,21 @@ class RunRegistry:
 # --- the one-tap confirmation ------------------------------------------------
 
 
+@dataclass
+class PendingConfirmation:
+    """A travel that ran end to end, waiting for somebody to say it arrived.
+
+    The started_monotonic is what makes the tap a measurement: the elapsed time
+    from command to tap is the only number in this feature that nothing else in
+    the system could have produced.
+    """
+
+    shutter_id: str
+    direction: Direction
+    started_monotonic: float
+    asked_at: datetime
+
+
 def may_ask_for_confirmation(
     *,
     was_end_to_end: bool,

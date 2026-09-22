@@ -16,6 +16,8 @@ class ShutterState {
   connected = $state(false);
   /** Set while a correction is easing in, so the graphic glides (FR-017). */
   easing = $state<Record<string, number>>({});
+  /** A finished travel the app would like confirmed — one tap, feature 002. */
+  confirmable = $state<{ id: string; name: string } | null>(null);
 
   #socket: WebSocket | null = null;
   #backoff = BACKOFF_START;
@@ -86,6 +88,19 @@ class ShutterState {
       case 'bridge':
         this.bridge = { connected: frame.connected, kind: frame.kind };
         break;
+      case 'confirmable':
+        this.confirmable = { id: frame.shutter_id, name: frame.name };
+        break;
+      case 'calibration':
+        // A measured travel time changed, so this client must stop animating on
+        // the old one. The snapshot carries the new value.
+        fetch('/api/shutters')
+          .then((r) => r.json())
+          .then((data) => {
+            this.shutters = data.shutters;
+          })
+          .catch(() => {});
+        break;
     }
   }
 
@@ -127,6 +142,20 @@ class ShutterState {
     });
     if (response.status === 503) return 'Kein Rolladen konnte erreicht werden.';
     return null;
+  }
+
+  async confirmArrival(): Promise<void> {
+    const pending = this.confirmable;
+    if (!pending) return;
+    this.confirmable = null;
+    await fetch(`/api/calibration/${pending.id}/confirm`, { method: 'POST' });
+  }
+
+  async dismissArrival(): Promise<void> {
+    const pending = this.confirmable;
+    if (!pending) return;
+    this.confirmable = null;
+    await fetch(`/api/calibration/${pending.id}/confirm`, { method: 'DELETE' });
   }
 
   async resync(id: string): Promise<string | null> {
