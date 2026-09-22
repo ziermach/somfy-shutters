@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MeasuringBanner from '../components/MeasuringBanner.svelte';
   import ShutterCard from '../components/ShutterCard.svelte';
   import { shutters } from '../lib/shutters.svelte';
 
@@ -14,6 +15,10 @@
     <h1>Zuhause</h1>
     <p class="sub">{shutters.shutters.length} Rolladen · 100 % = ganz offen</p>
   </header>
+
+  {#if shutters.measuring}
+    <MeasuringBanner name={shutters.measuring.name} />
+  {/if}
 
   <div class="row">
     <button type="button" class="btn ghost" disabled={!shutters.bridge.connected} onclick={() => shutters.commandAll('open')}>

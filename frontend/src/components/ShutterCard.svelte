@@ -12,10 +12,12 @@
   let { shutter, onopen }: Props = $props();
 
   const live = $derived(shutters.livePercent(shutter));
-  const busy = $derived(!shutters.bridge.connected);
+  const busy = $derived(!shutters.bridge.connected || shutter.measuring);
 
   const state = $derived(
-    shutter.movement
+    shutter.measuring
+      ? 'wird gemessen …'
+      : shutter.movement
       ? shutter.movement.direction === 'up'
         ? 'fährt auf …'
         : 'fährt zu …'
@@ -29,7 +31,7 @@
   );
 </script>
 
-<div class="card" class:stale={shutter.position.stale}>
+<div class="card" class:stale={shutter.position.stale} class:measuring={shutter.measuring}>
   <div class="top">
     <WindowGraphic
       percent={live}
@@ -41,7 +43,9 @@
       <button type="button" class="name" onclick={() => onopen(shutter.id)}>{shutter.name}</button>
       <span class="sub">{state}</span>
       <ConfidenceBadge position={shutter.position} />
-      {#if !shutter.calibrated}
+      {#if shutter.measuring}
+        <span class="measuring"><span class="pulse"></span>Messung läuft</span>
+      {:else if !shutter.calibrated}
         <span class="warn">Laufzeit nicht gemessen</span>
       {/if}
     </div>
@@ -101,6 +105,32 @@
   .warn {
     font-size: 12px;
     color: var(--faint);
+  }
+  .card.measuring {
+    border-color: var(--amber-line);
+  }
+  .measuring {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--amber);
+  }
+  .pulse {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--amber);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.25;
+    }
   }
   .pct {
     font-family: var(--mono);

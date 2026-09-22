@@ -28,7 +28,8 @@ rather re-fetch than reconnect.
         "stale": false,
         "source": "command"
       },
-      "movement": null
+      "movement": null,
+      "measuring": false
     },
     {
       "id": "schlafzimmer",
@@ -44,7 +45,8 @@ rather re-fetch than reconnect.
         "stale": false,
         "source": "restored"
       },
-      "movement": null
+      "movement": null,
+      "measuring": false
     }
   ],
   "bridge": { "connected": true, "kind": "mqtt" }

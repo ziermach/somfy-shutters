@@ -62,6 +62,20 @@ def _require_shutter(tracker: Any, shutter_id: str) -> None:
         )
 
 
+async def _announce(
+    request: Request, shutter_id: str, active: bool, direction: str | None = None
+) -> None:
+    """Tell every open client that a measurement started or ended."""
+    await request.app.state.bus.publish(
+        {
+            "type": "measuring",
+            "shutter_id": shutter_id,
+            "active": active,
+            "direction": direction,
+        }
+    )
+
+
 def _conflict(exc: CalibrationError, extra: dict[str, Any] | None = None) -> JSONResponse:
     body = {"error": exc.code, "message": exc.message, "detail": None}
     body.update(extra or {})
@@ -194,6 +208,7 @@ async def start_run(request: Request, shutter_id: str) -> JSONResponse:
         return JSONResponse(BRIDGE_UNREACHABLE, status_code=503)
 
     log.info("calibration run started on %s, direction %s", shutter_id, plan.direction.value)
+    await _announce(request, shutter_id, True, plan.direction.value)
     return JSONResponse(
         {
             "direction": plan.direction.value,
@@ -268,6 +283,7 @@ async def mark(request: Request, shutter_id: str, body: MarkBody) -> JSONRespons
             }
         )
 
+    await _announce(request, shutter_id, False)
     next_direction = Direction.DOWN if finished.direction is Direction.UP else Direction.UP
     return JSONResponse(
         {
@@ -298,6 +314,7 @@ async def abort_run(request: Request, shutter_id: str) -> JSONResponse:
             tracker.settings.shutters[shutter_id].address, tracker.level_for(shutter_id, halt_at)
         )
     await tracker.stop(shutter_id)
+    await _announce(request, shutter_id, False)
     return JSONResponse({"aborted": True})
 
 

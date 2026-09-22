@@ -108,3 +108,20 @@ async def test_all_shutters_command_leaves_a_measurement_alone(client) -> None:
     detail = (await client.get("/api/calibration/kueche")).json()
     assert detail["active_run"] is not None, "the run survived the command"
     await client.delete("/api/calibration/kueche/run")
+
+
+async def test_the_shutter_payload_says_a_measurement_is_running(client) -> None:
+    """The interface cannot grey out a button it has not been told about."""
+    await park(client, "kueche", 0)
+    before = (await client.get("/api/shutters/kueche")).json()
+    assert before["measuring"] is False
+
+    await client.post("/api/calibration/kueche/run")
+    during = (await client.get("/api/shutters/kueche")).json()
+    assert during["measuring"] is True
+
+    others = (await client.get("/api/shutters")).json()["shutters"]
+    assert [s["id"] for s in others if s["measuring"]] == ["kueche"]
+
+    await client.delete("/api/calibration/kueche/run")
+    assert (await client.get("/api/shutters/kueche")).json()["measuring"] is False

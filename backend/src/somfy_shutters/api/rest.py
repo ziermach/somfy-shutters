@@ -80,7 +80,9 @@ async def _apply(request: Request, shutter_id: str, body: CommandBody) -> dict[s
 @router.get("/shutters")
 async def list_shutters(request: Request) -> dict[str, Any]:
     bridge = request.app.state.bridge
-    return snapshot_json(_tracker(request), bridge.kind, bridge.connected)
+    return snapshot_json(
+        _tracker(request), bridge.kind, bridge.connected, getattr(request.app.state, "runs", None)
+    )
 
 
 @router.get("/health")
@@ -201,7 +203,7 @@ async def get_shutter(request: Request, shutter_id: str) -> dict[str, Any]:
                 "detail": None,
             },
         )
-    return shutter_json(shutter_id, tracker)
+    return shutter_json(shutter_id, tracker, getattr(request.app.state, "runs", None))
 
 
 # --- simulator-only, registered only when bridge.kind == "sim" ----------------

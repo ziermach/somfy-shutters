@@ -77,6 +77,15 @@ def frame_for_event(event: dict[str, Any], tracker: Any) -> dict[str, Any] | Non
         return frame
     if kind == "bridge":
         return {"type": "bridge", "connected": event["connected"], "kind": event["kind"]}
+    if kind == "measuring":
+        # A measurement started or ended. Every open client has to stop offering
+        # buttons that the server would refuse anyway (FR-028).
+        return {
+            "type": "measuring",
+            "shutter_id": event["shutter_id"],
+            "active": event["active"],
+            "direction": event.get("direction"),
+        }
     if kind == "confirmable":
         # An offer, not a claim: the app has no idea whether it has arrived.
         return {
@@ -104,7 +113,8 @@ async def websocket_endpoint(socket: WebSocket) -> None:
     tracker = app.state.tracker
     bridge = app.state.bridge
 
-    await hub.join(socket, snapshot_json(tracker, bridge.kind, bridge.connected))
+    runs = getattr(app.state, "runs", None)
+    await hub.join(socket, snapshot_json(tracker, bridge.kind, bridge.connected, runs))
     try:
         while True:
             # Nothing is expected from the client; this keeps the socket open and

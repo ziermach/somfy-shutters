@@ -1,5 +1,6 @@
 <script lang="ts">
   import ConfidenceBadge from '../components/ConfidenceBadge.svelte';
+  import MeasuringBanner from '../components/MeasuringBanner.svelte';
   import WindowGraphic from '../components/WindowGraphic.svelte';
   import { percentText } from '../lib/confidence';
   import { shutters } from '../lib/shutters.svelte';
@@ -13,7 +14,7 @@
 
   const shutter = $derived(shutters.byId(id));
   const live = $derived(shutter ? shutters.livePercent(shutter) : null);
-  const busy = $derived(!shutters.bridge.connected);
+  const busy = $derived(!shutters.bridge.connected || (shutter?.measuring ?? false));
 
   let sliderValue = $state(0);
   let dragging = $state(false);
@@ -43,6 +44,10 @@
         <p class="sub">{travel}</p>
       </div>
     </div>
+
+    {#if shutter.measuring}
+      <MeasuringBanner name={shutter.name} />
+    {/if}
 
     <div class="stage">
       <WindowGraphic
@@ -85,7 +90,7 @@
       <button type="button" class="btn big" disabled={busy} onclick={() => shutters.command(shutter.id, 'close')}>zu</button>
     </div>
 
-    <button type="button" class="btn calibrate" onclick={() => oncalibrate(shutter.id)}>
+    <button type="button" class="btn calibrate" disabled={shutter.measuring} onclick={() => oncalibrate(shutter.id)}>
       {shutter.calibrated ? 'Laufzeiten neu messen' : 'Laufzeiten messen'}
     </button>
 

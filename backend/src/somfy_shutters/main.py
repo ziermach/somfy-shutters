@@ -193,6 +193,14 @@ def create_app(
                         "calibration run on %s abandoned, nobody confirmed arrival",
                         stale.shutter_id,
                     )
+                    await bus.publish(
+                        {
+                            "type": "measuring",
+                            "shutter_id": stale.shutter_id,
+                            "active": False,
+                            "direction": None,
+                        }
+                    )
                 await asyncio.sleep(TICK_SECONDS)
 
         tasks = [asyncio.create_task(pump_reports()), asyncio.create_task(pump_ticks())]

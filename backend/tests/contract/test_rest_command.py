@@ -10,6 +10,7 @@ SHUTTER_KEYS = {
     "travel_down_seconds",
     "position",
     "movement",
+    "measuring",
 }
 POSITION_KEYS = {"percent", "confidence", "certain_at", "age_seconds", "stale", "source"}
 MOVEMENT_KEYS = {

@@ -37,7 +37,7 @@ def movement_json(movement: Movement | None) -> dict[str, Any] | None:
     }
 
 
-def shutter_json(shutter_id: str, tracker: Tracker) -> dict[str, Any]:
+def shutter_json(shutter_id: str, tracker: Tracker, runs: Any = None) -> dict[str, Any]:
     config = tracker.settings.shutters[shutter_id]
     return {
         "id": config.id,
@@ -47,11 +47,16 @@ def shutter_json(shutter_id: str, tracker: Tracker) -> dict[str, Any]:
         "travel_down_seconds": config.travel_down_seconds,
         "position": position_json(tracker.position(shutter_id), tracker),
         "movement": movement_json(tracker.movement(shutter_id)),
+        # While a measurement runs, commands to this shutter are refused. The
+        # interface needs to know that before somebody presses a dead button.
+        "measuring": bool(runs and runs.is_measuring(shutter_id)),
     }
 
 
-def snapshot_json(tracker: Tracker, bridge_kind: str, connected: bool) -> dict[str, Any]:
+def snapshot_json(
+    tracker: Tracker, bridge_kind: str, connected: bool, runs: Any = None
+) -> dict[str, Any]:
     return {
-        "shutters": [shutter_json(sid, tracker) for sid in tracker.settings.shutters],
+        "shutters": [shutter_json(sid, tracker, runs) for sid in tracker.settings.shutters],
         "bridge": {"connected": connected, "kind": bridge_kind},
     }

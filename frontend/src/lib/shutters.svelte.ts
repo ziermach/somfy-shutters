@@ -23,6 +23,11 @@ class ShutterState {
   #backoff = BACKOFF_START;
   #closing = false;
 
+  /** The shutter being calibrated right now, if any. */
+  get measuring(): Shutter | undefined {
+    return this.shutters.find((s) => s.measuring);
+  }
+
   byId(id: string): Shutter | undefined {
     return this.shutters.find((s) => s.id === id);
   }
@@ -87,6 +92,9 @@ class ShutterState {
         break;
       case 'bridge':
         this.bridge = { connected: frame.connected, kind: frame.kind };
+        break;
+      case 'measuring':
+        this.#patch(frame.shutter_id, (s) => ({ ...s, measuring: frame.active }));
         break;
       case 'confirmable':
         this.confirmable = { id: frame.shutter_id, name: frame.name };

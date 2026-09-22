@@ -29,6 +29,8 @@ export interface Shutter {
   travel_down_seconds: number | null;
   position: PositionEstimate;
   movement: Movement | null;
+  /** A calibration run is under way; the server refuses commands for it. */
+  measuring: boolean;
 }
 
 export interface BridgeStatus {
@@ -47,6 +49,7 @@ export type Frame =
   | { type: 'position'; seq: number; shutter_id: string; position: PositionEstimate }
   | { type: 'correction'; seq: number; shutter_id: string; position: PositionEstimate; ease_ms: number }
   | { type: 'bridge'; seq: number; connected: boolean; kind: 'mqtt' | 'sim' }
+  | { type: 'measuring'; seq: number; shutter_id: string; active: boolean; direction: 'up' | 'down' | null }
   | { type: 'confirmable'; seq: number; shutter_id: string; direction: 'up' | 'down'; name: string }
   | {
       type: 'calibration';
