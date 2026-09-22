@@ -11,6 +11,12 @@
   let { rule, names, onedit }: Props = $props();
 
   const last = $derived(lastText(rule.last));
+  // A firing inside the pause will not happen; the card should not read as if it will.
+  const inPause = $derived(
+    automations.state.paused &&
+      rule.next.at !== null &&
+      (automations.state.until === null || Date.parse(rule.next.at) < Date.parse(automations.state.until))
+  );
   let showHistory = $state(false);
   let message = $state<string | null>(null);
 
@@ -44,7 +50,7 @@
   </div>
   <div class="foot">
     <span class="next" class:none={!rule.next.at}>
-      Nächste: {nextText(rule.next)}{#if rule.skip_next} — wird übersprungen{/if}
+      Nächste: {nextText(rule.next)}{#if rule.skip_next}{' '}— wird übersprungen{:else if inPause}{' '}— fällt in die Pause{/if}
       {#if rule.next.at}
         <button type="button" class="skip" onclick={skip}>{rule.skip_next ? 'doch ausführen' : 'überspringen'}</button>
       {/if}
