@@ -30,12 +30,14 @@ shutter stands, and automations that run on the house's own network.
 | ✅ | A simulated house with soft start and non-linear travel, so it develops without hardware |
 | ✅ | Guided travel-time calibration: two presses per trip, median over runs, per direction |
 | ✅ | One-tap confirmation after an ordinary trip, so the times stay true without a wizard |
-| ✅ | A midpoint check that bends the middle of a travel and never its end points |
+| ✅ | A midpoint check per direction: one drive, one answer, and it never moves the end points |
+| ✅ | "Drive to 50 %" lands at 50 %: the travel curve converts commands, not just the animation |
+| ✅ | A shutter under measurement says so everywhere and refuses commands — "Alle zu" included |
 | ⬜ | Automations and schedules |
 | ⬜ | Anything confirmed on a real motor |
 
-469 tests, against the real API surface, the tracker's rules, or the calibration
-arithmetic.
+334 backend and 27 frontend tests, against the real API surface, the tracker's rules,
+the calibration arithmetic, and the simulated house end to end.
 
 ## The problem this project takes seriously
 
@@ -117,7 +119,15 @@ reconciliation cases, are in
 
 The simulator is not a stub. It gives each window a soft-start dead time, a non-linear
 travel curve and different speeds up and down — none of it visible through the port the
-app talks to. An app that could see those would prove nothing by passing.
+app talks to. The motor runs on time, the way a bridge drives it, and the simulated bridge
+reports its own linear guess rather than the truth, as Pi-Somfy does. An app that could
+see the real position would prove nothing by passing.
+
+Most of the calibration bugs fixed so far were found by running this simulator against
+the live app, not by unit tests: a simulator that landed every command exactly on target,
+a curve family with zero error at the one point the check asks about, a curve applied to
+the animation but not to commands, and levels sent without regard to the bridge's own
+counter.
 
 ## The mock
 
@@ -136,10 +146,29 @@ Travel times cannot be read off the motor, so the user is the sensor: two button
 per trip, one when the shutter starts moving, one when it arrives. Runs alternate
 direction, so every trip starts from an end stop and none is wasted.
 
-Two presses leave about 9 percentage points of error mid-travel, because the motor does
-not move linearly; perfect presses would leave 8.8. A third press makes it *worse* —
-the curve is symmetric, so a halfway mark lands where the error is already zero. Four
-presses reach 3.7. Not worth it across eight windows, so two it is.
+On the simulator the measured times land about 0.3 s long in both directions — exactly
+the simulated reaction time, which is why the median of several runs is taken and not
+the mean.
+
+Two presses cannot capture that the motor does not move linearly: the slats stack at
+the top and tilt at the bottom, so "half the travel time" is not half open. On the
+simulated bedroom that leaves the midpoint about 10 percentage points off. The **check**
+closes that gap: the app drives to what it believes is the middle and asks whether the
+shutter hangs too high, too low, or about right. Each answer bends a curve `p^a` for
+that direction — never the end points, which stay exact by construction. One drive
+takes exactly one answer, because after an answer the shutter no longer stands at the
+new midpoint.
+
+The curve is a coordinate transform between the percentages a person reads and the
+bridge's level, which is time. It converts every command, so "drive to 50 %" lands at
+50 %, not only the animation. And since Pi-Somfy keeps a single linear counter while
+the curve has a shape per direction, commands are sent relative to that counter; an
+absolute level made the app and the bridge disagree about the distance after every
+reversal mid-window.
+
+On the simulator the midpoint converges from 10.5 to under 3 pp in about five answers
+per direction. Only the midpoint is fitted: a quarter of the way it can still be 5 pp
+off, and whether a real window needs more than one parameter is a hardware question.
 
 Staying accurate afterwards costs one tap: after an end-to-end travel the app asks once
 whether the shutter has arrived, and that answer is a measurement. It cannot do this by
@@ -165,7 +194,8 @@ recalibration with no user involvement, and
 [CLAUDE.md](CLAUDE.md) for conventions and build commands.
 
 ```bash
-cd backend && .venv/bin/python -m pytest       # 469 tests
+cd backend && .venv/bin/python -m pytest       # 334 tests
+cd frontend && npx vitest run                  # 27 tests
 cd frontend && npx svelte-check --tsconfig ./tsconfig.json
 ```
 
@@ -187,10 +217,15 @@ The software is built so that answering them changes configuration, not code:
 5. **Rolling-code pairing** per window, addresses recorded in `operateShutters.conf` and
    copied into ours.
 
-One more, found by reading Pi-Somfy rather than by measuring: `stop` is sent as a level
-command at the current position, because `level/cmd` is the only topic this project
-speaks. Whether a motor halts crisply that way is unverified; if not, the button-press
-topic is the fix and the MQTT contract changes.
+Two more, found by reading Pi-Somfy rather than by measuring:
+
+- `stop` is sent as a level command at the current position, because `level/cmd` is the
+  only topic this project speaks. Whether a motor halts crisply that way is unverified;
+  if not, the button-press topic is the fix and the MQTT contract changes.
+- Commands are sent relative to Pi-Somfy's level counter, which the app tracks on its
+  own. That rests on Pi-Somfy timing the motor linearly on one counter, the way the
+  simulator does. If it behaves otherwise, the check will not converge — which is how
+  the counter problem was found in the first place.
 
 **The CC1101 runs on 3.3V only** (Pi pin 1 or 17). 5V destroys the module.
 
