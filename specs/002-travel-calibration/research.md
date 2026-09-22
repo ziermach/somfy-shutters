@@ -137,6 +137,29 @@ than three taps can support.
 
 ---
 
+### 3a. The bridge keeps one counter, the curve has two directions
+
+Pi-Somfy times the motor on a single linear counter: sent a level, it runs for
+the difference between that level and its counter. The curve is per direction,
+so after a reversal mid-window the counter is *not* what the new direction's
+curve makes of the displayed percentage. Sending the absolute
+`to_level(target)` made the two sides disagree about the distance: the app
+declared arrival while the motor still ran, and the next command met a bridge
+mid-timer. Found checking the down-curve on the simulator, where it stopped
+converging entirely.
+
+- **Decision**: the tracker keeps its own copy of the bridge counter (level sent
+  once the travel finishes, the halt level on a stop, 0/100 at end stops, an idle
+  report verbatim) and sends `counter + (to_level(target) − to_level(current))`
+  in the direction of travel. End stops are sent as 0/100.
+- **And**: travel to an end stop lasts until the *bridge's* timer is done, not
+  only until the curve says the shutter is there. A command inside that window
+  would start from a counter that is still moving.
+- **Known limit**: the check fits one point per direction. On the simulator the
+  down-curve lands the midpoint within 2 pp but 75 % about 5 pp high, because
+  `p**a` in absolute coordinates is not the shape of the simulated window going
+  down. Whether a real window needs a second parameter is a hardware question.
+
 ## 4. Noticing that a run was disturbed (FR-029)
 
 **Decision**: detect what is detectable, and let plausibility catch the rest.

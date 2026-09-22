@@ -84,3 +84,62 @@ async def test_holding_position_keeps_the_last_direction(bent) -> None:
     await bent._settle("wohnzimmer", 40, bent.position("wohnzimmer").source)
     bent._last_direction["wohnzimmer"] = Direction.DOWN
     assert bent.level_for("wohnzimmer", 40) == round(to_level(40, DOWN_A))
+
+
+async def test_a_reversal_mid_window_is_sent_relative_to_the_bridge_counter(bent, clock) -> None:
+    """The bridge runs for (new level - its counter). After going down to 50 %
+    its counter sits where the down-curve put it, not where the up-curve would
+    place 50 % — an absolute level made the two sides disagree about the
+    distance, and the app declared arrival while the motor was still running."""
+    await bent._settle("wohnzimmer", 100, bent.position("wohnzimmer").source)
+    level = bent.level_for("wohnzimmer", 50)
+    down = await bent.start_movement("wohnzimmer", 50, level)
+    clock.advance(down.duration_seconds + 0.1)
+    await bent.tick()
+    counter = bent.bridge_level("wohnzimmer")
+    assert counter == level == round(to_level(50, DOWN_A))
+
+    sent = bent.level_for("wohnzimmer", 75)
+    travel = to_level(75, UP_A) - to_level(50, UP_A)
+    assert sent == round(counter + travel)
+    up = await bent.start_movement("wohnzimmer", 75, sent)
+    # Bridge's run and ours now describe the same distance.
+    full_up = bent._travel_seconds("wohnzimmer", Direction.UP)
+    assert up.duration_seconds == pytest.approx(full_up * travel / 100)
+    assert abs((sent - counter) / 100 * full_up - up.duration_seconds) < full_up * 0.01
+
+
+async def test_end_stops_are_sent_as_end_stops(bent, clock) -> None:
+    await bent._settle("wohnzimmer", 100, bent.position("wohnzimmer").source)
+    await bent.start_movement("wohnzimmer", 30)
+    clock.advance(60)
+    await bent.tick()
+    assert bent.level_for("wohnzimmer", 100) == 100
+    assert bent.level_for("wohnzimmer", 0) == 0
+
+
+async def test_a_halt_resets_the_counter_to_where_the_bridge_stopped(bent, clock) -> None:
+    await bent._settle("wohnzimmer", 0, bent.position("wohnzimmer").source)
+    movement = await bent.start_movement("wohnzimmer", 100)
+    clock.advance(movement.duration_seconds / 4)
+    halt = bent.halt_level("wohnzimmer")
+    await bent.stop("wohnzimmer")
+    assert bent.bridge_level("wohnzimmer") == pytest.approx(halt, abs=0.5)
+
+
+async def test_an_end_stop_waits_for_the_bridge_timer(bent, clock) -> None:
+    """Up from a midpoint reached going down: the bridge's counter lags the
+    up-curve, and it times the motor on that counter. Arrival is when both
+    are done, or the next command meets a bridge still counting."""
+    await bent._settle("wohnzimmer", 100, bent.position("wohnzimmer").source)
+    level = bent.level_for("wohnzimmer", 50)
+    down = await bent.start_movement("wohnzimmer", 50, level)
+    clock.advance(down.duration_seconds + 0.1)
+    await bent.tick()
+
+    up = await bent.start_movement("wohnzimmer", 100, bent.level_for("wohnzimmer", 100))
+    full_up = bent._travel_seconds("wohnzimmer", Direction.UP)
+    bridge_run = full_up * (100 - level) / 100
+    curve_run = full_up * (100 - to_level(50, UP_A)) / 100
+    assert bridge_run > curve_run, "the case only exists when the counter lags"
+    assert up.duration_seconds == pytest.approx(bridge_run)

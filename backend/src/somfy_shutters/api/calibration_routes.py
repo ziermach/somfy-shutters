@@ -200,10 +200,9 @@ async def start_run(request: Request, shutter_id: str) -> JSONResponse:
         return _conflict(exc)
 
     try:
-        await bridge.send_level(
-            tracker.settings.shutters[shutter_id].address, tracker.level_for(shutter_id, target)
-        )
-        await tracker.start_movement(shutter_id, target)
+        level = tracker.level_for(shutter_id, target)
+        await bridge.send_level(tracker.settings.shutters[shutter_id].address, level)
+        await tracker.start_movement(shutter_id, target, level)
     except BridgeUnreachable:
         runs.finish(shutter_id)
         # The run existed for a moment, and a client connecting in that moment
@@ -232,10 +231,9 @@ async def home(request: Request, shutter_id: str) -> JSONResponse:
 
     target = nearest_end_stop(tracker.position(shutter_id).percent)
     try:
-        await bridge.send_level(
-            tracker.settings.shutters[shutter_id].address, tracker.level_for(shutter_id, target)
-        )
-        movement = await tracker.start_movement(shutter_id, target)
+        level = tracker.level_for(shutter_id, target)
+        await bridge.send_level(tracker.settings.shutters[shutter_id].address, level)
+        movement = await tracker.start_movement(shutter_id, target, level)
     except BridgeUnreachable:
         return JSONResponse(BRIDGE_UNREACHABLE, status_code=503)
     return JSONResponse(
@@ -404,10 +402,9 @@ async def start_check(request: Request, shutter_id: str) -> JSONResponse:
         )
 
     try:
-        await bridge.send_level(
-            tracker.settings.shutters[shutter_id].address, tracker.level_for(shutter_id, 50)
-        )
-        movement = await tracker.start_movement(shutter_id, 50)
+        level = tracker.level_for(shutter_id, 50)
+        await bridge.send_level(tracker.settings.shutters[shutter_id].address, level)
+        movement = await tracker.start_movement(shutter_id, 50, level)
     except BridgeUnreachable:
         return JSONResponse(BRIDGE_UNREACHABLE, status_code=503)
     # The curve is per direction, so the answer has to land on the one this

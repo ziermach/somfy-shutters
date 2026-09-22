@@ -79,6 +79,12 @@ class Tracker:
         # coordinate and needs a curve to become a percentage; the direction it
         # last travelled is the one that put it where it is.
         self._last_direction: dict[str, Direction] = {}
+        # What the bridge's own counter says, as far as we can tell: the level we
+        # last sent once the travel finished, a halt, or a report. Commands are
+        # sent relative to it, because the bridge runs the motor for the
+        # difference between its counter and the new level — not for the
+        # distance the curve of the new direction would compute.
+        self._bridge_level: dict[str, float] = {}
 
     # --- reading -------------------------------------------------------------
 
@@ -138,9 +144,18 @@ class Tracker:
             return target_percent
         return None
 
-    async def start_movement(self, shutter_id: str, target: int) -> Movement | None:
-        """Begin travel. Returns None when the shutter is already there."""
+    async def start_movement(
+        self, shutter_id: str, target: int, level: int | None = None
+    ) -> Movement | None:
+        """Begin travel. Returns None when the shutter is already there.
+
+        `level` is what was sent to the bridge; the caller asks level_for()
+        first, so that nothing is recorded when the bridge refuses the send.
+        """
         self._require(shutter_id)
+        if level is None:
+            level = self.level_for(shutter_id, target)
+        bridge_from = self.bridge_level(shutter_id)
         current = self.position(shutter_id)
         # An unknown position still has to be drivable — that is how it becomes
         # known again. Assume the far end so the travel time is not underestimated.
@@ -158,6 +173,12 @@ class Tracker:
         start_level = to_level(from_percent, curve_a)
         end_level = to_level(target, curve_a)
         duration = full_travel * abs(end_level - start_level) / 100.0
+        if bridge_from is not None:
+            # The bridge times the motor on its own counter. Sent to an end stop
+            # from a counter that lags, it keeps its timer running after the
+            # shutter has hit the stop — and a command inside that window starts
+            # from a counter that is wrong. The travel is over when both agree.
+            duration = max(duration, full_travel * abs(level - bridge_from) / 100.0)
         started = self._clock()
         movement = Movement(
             shutter_id=shutter_id,
@@ -168,6 +189,8 @@ class Tracker:
             expected_arrival=started + timedelta(seconds=duration),
             origin=Origin.LOCAL,
             curve_a=curve_a,
+            bridge_from=bridge_from if bridge_from is not None else start_level,
+            bridge_to=float(level),
             started_monotonic=self._monotonic(),
             duration_seconds=duration,
         )
@@ -182,13 +205,30 @@ class Tracker:
         """Which way this shutter last travelled on our command, if we know."""
         return self._last_direction.get(shutter_id)
 
+    def bridge_level(self, shutter_id: str) -> float | None:
+        """The bridge's counter right now, if we have any idea of it."""
+        movement = self._movements.get(shutter_id)
+        if movement is not None:
+            return movement.level_at(self._monotonic())
+        return self._bridge_level.get(shutter_id)
+
     def level_for(self, shutter_id: str, target_percent: int) -> int:
         """What to ask the bridge for, so the shutter lands on `target_percent`.
 
         Everything the user and the API speak is a physical percentage. The
-        bridge speaks time. This is the one conversion between them.
+        bridge speaks time: it runs the motor for the difference between its
+        own counter and the new level. So the level sent is that counter plus
+        the distance, in this direction's time coordinate, still to travel. An
+        absolute conversion was right only from an end stop — after a reversal
+        mid-window the two sides disagreed about the distance, the app declared
+        arrival while the motor was still running, and the next command landed
+        in the middle of a travel.
         """
         self._require(shutter_id)
+        if target_percent in (0, 100):
+            # The motor stops at the end stop whatever the counter says, and the
+            # counter is reset by it.
+            return target_percent
         current = self.position(shutter_id).percent
         if current is None:
             direction = Direction.UP if target_percent == 100 else Direction.DOWN
@@ -198,7 +238,12 @@ class Tracker:
             direction = self._last_direction.get(shutter_id, Direction.UP)
         else:
             direction = Direction.UP if target_percent > current else Direction.DOWN
-        return round(to_level(target_percent, self._curve_a(shutter_id, direction)))
+        a = self._curve_a(shutter_id, direction)
+        counter = self.bridge_level(shutter_id)
+        if current is None or counter is None:
+            return round(to_level(target_percent, a))
+        level = counter + to_level(target_percent, a) - to_level(current, a)
+        return round(max(0.0, min(100.0, level)))
 
     def halt_level(self, shutter_id: str) -> int:
         """What to send so the shutter stops where it is right now.
@@ -209,9 +254,9 @@ class Tracker:
         always guessed up — the wrong curve for a shutter on its way down.
         """
         self._require(shutter_id)
-        movement = self._movements.get(shutter_id)
-        if movement is not None:
-            return round(movement.level_at(self._monotonic()))
+        counter = self.bridge_level(shutter_id)
+        if counter is not None:
+            return round(counter)
         current = self._positions[shutter_id].percent
         return self.level_for(shutter_id, current if current is not None else 0)
 
@@ -248,6 +293,7 @@ class Tracker:
         self._require(shutter_id)
         movement = self._movements.pop(shutter_id, None)
         if movement is not None:
+            self._bridge_level[shutter_id] = movement.level_at(self._monotonic())
             percent = movement.position_at(self._monotonic())
             await self._settle(shutter_id, percent, Source.COMMAND)
         return self._positions[shutter_id]
@@ -270,6 +316,8 @@ class Tracker:
         for shutter_id, movement in list(self._movements.items()):
             if movement.is_done(now):
                 del self._movements[shutter_id]
+                if movement.bridge_to is not None:
+                    self._bridge_level[shutter_id] = movement.bridge_to
                 await self._settle(
                     shutter_id, movement.target_percent, Source.COMMAND, settled=movement
                 )
@@ -283,6 +331,7 @@ class Tracker:
     ) -> None:
         previous = self._positions[shutter_id]
         if percent in (0, 100):
+            self._bridge_level[shutter_id] = float(percent)
             position = PositionEstimate.at_end_stop(percent, source, self._clock())
         else:
             position = PositionEstimate(
@@ -320,6 +369,9 @@ class Tracker:
             self._last_report[shutter_id] = (percent, self._monotonic())
             return
 
+        # Idle, the report is the bridge's counter itself — the best reading of
+        # it there is.
+        self._bridge_level[shutter_id] = float(level)
         previous = self._positions[shutter_id]
         last = self._last_report.get(shutter_id)
         now_mono = self._monotonic()

@@ -122,6 +122,11 @@ class Movement(BaseModel):
     curve_a: float = 1.0
     """The travel shape this movement was planned with. Carried along so the
     interpolation needs nothing but the movement itself."""
+    bridge_from: float | None = None
+    bridge_to: float | None = None
+    """The bridge's own level counter at the start and the level it was sent.
+    Pi-Somfy keeps one linear counter, so after a reversal mid-window it is
+    not what the curve of the new direction would make of the percentage."""
     # Monotonic clock, so a daylight-saving jump mid-travel cannot distort the
     # animation. The wall-clock fields above are what clients render.
     started_monotonic: float
@@ -139,10 +144,13 @@ class Movement(BaseModel):
         halt has to be sent as: converting the displayed percentage back would
         round twice and pick a curve by guessing the direction.
         """
-        from .calibration import to_level
+        if self.bridge_from is not None and self.bridge_to is not None:
+            start_level, end_level = self.bridge_from, self.bridge_to
+        else:
+            from .calibration import to_level
 
-        start_level = to_level(self.from_percent, self.curve_a)
-        end_level = to_level(self.target_percent, self.curve_a)
+            start_level = to_level(self.from_percent, self.curve_a)
+            end_level = to_level(self.target_percent, self.curve_a)
         return start_level + (end_level - start_level) * self.progress(now_monotonic)
 
     def position_at(self, now_monotonic: float) -> int:

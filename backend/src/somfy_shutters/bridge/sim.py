@@ -180,7 +180,12 @@ class SimBridge(ShutterBridge):
         # the caller still succeeds, and the shutter simply never moves.
         if self._rng.random() < self.loss_rate:
             return
-        shutter.command(percent, time.monotonic())
+        now = time.monotonic()
+        # Brought up to date first: the loop only steps once a second, and a
+        # command mid-travel has to start from where the motor is now, not from
+        # where it was at the last step.
+        shutter.advance(now)
+        shutter.command(percent, now)
 
     async def _run(self) -> None:
         while True:

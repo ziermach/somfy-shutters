@@ -12,12 +12,14 @@ certainty without a single field changing.
 from __future__ import annotations
 
 import asyncio
+import time
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from somfy_shutters.bridge.sim import SimBridge
-from somfy_shutters.calibration import CURVE_NEUTRAL
+from somfy_shutters.calibration import CURVE_NEUTRAL, to_level
 from somfy_shutters.config import Settings
 from somfy_shutters.main import create_app
 from somfy_shutters.store import Store
@@ -238,3 +240,39 @@ async def test_c3_4_the_limit_is_reported(client) -> None:
             await client.post("/api/calibration/flink/check/answer", json={"answer": "too_low"})
         ).json()
     assert last["at_limit"] is True
+
+
+async def test_c3_5_a_reversal_mid_window_waits_for_the_motor(client) -> None:
+    """Found checking the down-curve: from a midpoint reached going down, the
+    way back up was computed on the up-curve, the app declared arrival early,
+    and the next command reached a motor that was still running."""
+    await park(client, 100)
+    await guided_run(client)  # down
+    await guided_run(client)  # up
+    for _ in range(4):
+        await client.post("/api/calibration/flink/check")  # from 100 -> down
+        await client.post("/api/calibration/flink/check/answer", json={"answer": "too_high"})
+    sim = client.app.state.bridge._shutters["0x279631"]
+    assert client.app.state.calibration.curve_a("flink", "down") != 1.0
+
+    tracker = client.app.state.tracker
+
+    async def drive(**body) -> None:
+        await client.post("/api/shutters/flink/command", json=body)
+        movement = tracker.movement("flink")
+        if movement is not None:
+            await asyncio.sleep(movement.duration_seconds + SIM_DEAD + 0.3)
+        await tracker.tick()
+
+    await drive(action="open")
+    await drive(action="position", target_percent=50)  # down, on the bent curve
+    await client.post(
+        "/api/shutters/flink/command", json={"action": "position", "target_percent": 80}
+    )
+    sim.advance(time.monotonic())
+
+    # The bridge runs for the change in its own counter; the app's duration is
+    # the distance on the up-curve. They have to be the same distance.
+    a_up = client.app.state.calibration.curve_a("flink", "up")
+    distance = to_level(80, a_up) - to_level(50, a_up)
+    assert sim.target_believed - sim.start_believed == pytest.approx(distance, abs=1.5)

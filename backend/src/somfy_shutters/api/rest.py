@@ -70,10 +70,9 @@ async def _apply(request: Request, shutter_id: str, body: CommandBody) -> dict[s
 
     target = tracker.plan(shutter_id, action, body.target_percent)
     assert target is not None
-    await bridge.send_level(
-        tracker.settings.shutters[shutter_id].address, tracker.level_for(shutter_id, target)
-    )
-    movement = await tracker.start_movement(shutter_id, target)
+    level = tracker.level_for(shutter_id, target)
+    await bridge.send_level(tracker.settings.shutters[shutter_id].address, level)
+    movement = await tracker.start_movement(shutter_id, target, level)
     log.info("command %s on %s -> %s%%", body.action, shutter_id, target)
     return {"accepted": True, "movement": movement_json(movement)}
 
@@ -181,10 +180,9 @@ async def resync(request: Request, shutter_id: str) -> JSONResponse:
     target = tracker.nearest_end_stop(shutter_id)
     bridge = request.app.state.bridge
     try:
-        await bridge.send_level(
-            tracker.settings.shutters[shutter_id].address, tracker.level_for(shutter_id, target)
-        )
-        movement = await tracker.start_movement(shutter_id, target)
+        level = tracker.level_for(shutter_id, target)
+        await bridge.send_level(tracker.settings.shutters[shutter_id].address, level)
+        movement = await tracker.start_movement(shutter_id, target, level)
     except BridgeUnreachable:
         return JSONResponse({"accepted": False, **BRIDGE_UNREACHABLE}, status_code=503)
     return JSONResponse(
