@@ -288,7 +288,9 @@ The unit starts after `mosquitto.service`, restarts on failure, and is confined 
 `ProtectSystem=strict` — `config/` is the only writable path, because that is where
 the database and the measured calibration live.
 
-Check it:
+Check it. On a Pi 3 the app needs about 20 seconds after `systemctl start` before it
+answers — `curl` exits with code 7 (connection refused) until then, and the log shows
+`ready: N shutters` once it is up:
 
 ```bash
 curl -s localhost:8000/api/health
