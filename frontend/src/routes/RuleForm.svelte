@@ -128,6 +128,10 @@
     onback();
   }
 
+  // Deleting also deletes the rule's history, so it asks once — in the form, not in a
+  // browser dialog, which would block the page.
+  let confirmDelete = $state(false);
+
   async function remove() {
     if (!id) return;
     await automations.remove(id);
@@ -258,7 +262,15 @@
 
   {#if existing}
     <div class="danger">
-      <button type="button" class="btn danger-btn" onclick={remove}>Regel löschen</button>
+      {#if confirmDelete}
+        <p class="confirm" role="alert">„{existing.name}“ wirklich löschen? Der Verlauf dieser Regel geht mit.</p>
+        <div class="confirm-row">
+          <button type="button" class="btn" onclick={() => (confirmDelete = false)}>Abbrechen</button>
+          <button type="button" class="btn danger-btn" onclick={remove}>Löschen</button>
+        </div>
+      {:else}
+        <button type="button" class="btn danger-btn" onclick={() => (confirmDelete = true)}>Regel löschen</button>
+      {/if}
     </div>
   {/if}
 </section>
@@ -465,6 +477,15 @@
     color: var(--text);
     font-size: 15px;
     font-weight: 500;
+  }
+  .confirm {
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .confirm-row {
+    display: flex;
+    gap: 10px;
   }
   .danger-btn {
     border-color: var(--amber-line);
