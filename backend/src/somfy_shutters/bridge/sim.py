@@ -93,10 +93,13 @@ class SimShutter:
 
     def command(self, percent: int, now: float) -> None:
         if percent == round(self.believed):
-            # Already there by the bridge's count. If the motor is running — even
-            # still in its dead time — that is a halt, not nothing: "auf" right
-            # after "zu" used to let the close run all the way down.
-            self.started_at = None
+            if percent in (0, 100):
+                # OPEN or CLOSE towards where the count already is: the motor turns
+                # that way, so a running travel the other way ends — "auf" right after
+                # "zu" must not let the close run all the way down.
+                self.started_at = None
+            # A partial position equal to the bridge's belief does nothing at all.
+            # That is how current Pi-Somfy behaves, and why stop is its own verb.
             return
         self.direction = 1 if percent > self.believed else -1
         # The bridge runs the motor for as long as *its* estimate says it should.
@@ -105,6 +108,26 @@ class SimShutter:
         self.target_believed = float(percent)
         self.start_motor_time = self._motor_time_of(self.percent, self.direction)
         self.started_at = now
+
+    def halt(self, now: float) -> None:
+        """STOP: the motor stops where it is, and the bridge's count stops with it."""
+        self.advance(now)
+        if self.started_at is not None:
+            self.started_at = None
+            self.target_believed = self.believed
+
+    @property
+    def moving(self) -> bool:
+        return self.started_at is not None
+
+    def state_word(self) -> str:
+        if self.moving:
+            return "opening" if self.direction > 0 else "closing"
+        if round(self.believed) >= 100:
+            return "open"
+        if round(self.believed) <= 0:
+            return "closed"
+        return "stopped"
 
     def advance(self, now: float) -> None:
         if self.started_at is None:
@@ -165,6 +188,13 @@ class SimBridge(ShutterBridge):
         return self._connected
 
     async def start(self) -> None:
+        # What a broker hands a new subscriber: every shutter's last position and
+        # state, kept from before. Old news, and marked as such (feature 006).
+        for shutter in self._shutters.values():
+            await self._queue.put(Report(shutter.address, round(shutter.believed), retained=True))
+            await self._queue.put(
+                Report(shutter.address, kind="movement", state=shutter.state_word(), retained=True)
+            )
         self._task = asyncio.create_task(self._run())
 
     async def stop(self) -> None:
@@ -189,18 +219,44 @@ class SimBridge(ShutterBridge):
         # command mid-travel has to start from where the motor is now, not from
         # where it was at the last step.
         shutter.advance(now)
+        was_moving = shutter.moving
         shutter.command(percent, now)
+        if shutter.moving:
+            await self._movement(shutter)
+        elif was_moving:
+            await self._settled(shutter)
+
+    async def send_stop(self, address: str) -> None:
+        if not self._connected:
+            raise BridgeUnreachable("simulated bridge is offline")
+        shutter = self._shutters.get(address)
+        if shutter is None or self._rng.random() < self.loss_rate:
+            return
+        was_moving = shutter.moving
+        shutter.halt(time.monotonic())
+        if was_moving:
+            await self._settled(shutter)
+
+    async def _movement(self, shutter: SimShutter) -> None:
+        await self._queue.put(Report(shutter.address, kind="movement", state=shutter.state_word()))
+
+    async def _settled(self, shutter: SimShutter) -> None:
+        """What Pi-Somfy publishes when a travel ends: the position, then the state."""
+        await self._queue.put(Report(shutter.address, round(shutter.believed)))
+        await self._movement(shutter)
 
     async def _run(self) -> None:
         while True:
             now = time.monotonic()
             for shutter in self._shutters.values():
-                moving = shutter.started_at is not None
+                moving = shutter.moving
                 shutter.advance(now)
-                if moving:
+                if moving and shutter.moving:
                     # Its own dead reckoning, not the truth — the app has to cope
                     # with a second estimate, which is what it will get in the house.
                     await self._queue.put(Report(shutter.address, round(shutter.believed)))
+                elif moving:
+                    await self._settled(shutter)
             await asyncio.sleep(REPORT_INTERVAL)
 
     async def reports(self) -> AsyncIterator[Report]:

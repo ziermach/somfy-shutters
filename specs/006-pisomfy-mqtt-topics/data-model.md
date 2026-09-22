@@ -31,7 +31,7 @@ reports stay valid.
 
 | Report | Tracker already has a position | Tracker has none |
 |---|---|---|
-| position, retained | nothing emitted; bridge counter recorded | position filled (end stop → certain, else estimated), bridge counter recorded |
+| position, retained | nothing emitted; bridge counter recorded | position filled **as an estimate, even at 0 or 100** — it is the bridge's old belief, not a fresh end-stop observation; bridge counter recorded |
 | position, live | feature 001 reconciliation, unchanged | as today |
 | movement, retained | ignored | ignored |
 | movement `opening`/`closing`, live, during our travel or bridge run | ignored | ignored |

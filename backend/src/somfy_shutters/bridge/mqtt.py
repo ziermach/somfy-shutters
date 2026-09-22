@@ -77,6 +77,15 @@ class MqttBridge(ShutterBridge):
             # worse than one that never closed and said so.
             raise BridgeUnreachable(str(exc)) from exc
 
+    async def send_stop(self, address: str) -> None:
+        client = self._client
+        if client is None or not self._connected:
+            raise BridgeUnreachable("no connection to the MQTT broker")
+        try:
+            await client.publish(f"somfy/{address}/command", "STOP")
+        except aiomqtt.MqttError as exc:
+            raise BridgeUnreachable(str(exc)) from exc
+
     async def reports(self) -> AsyncIterator[Report]:
         while True:
             yield await self._queue.get()

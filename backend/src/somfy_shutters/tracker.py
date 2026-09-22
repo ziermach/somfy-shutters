@@ -17,6 +17,7 @@ import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 
+from .bridge.base import Report
 from .calibration import to_level, to_percent
 from .config import Settings
 from .models import (
@@ -431,6 +432,26 @@ class Tracker:
         )
 
     # --- reports from the bridge (FR-017) ------------------------------------
+
+    async def handle(self, report: Report) -> None:
+        """Every kind of report from the bridge (feature 006).
+
+        Live positions go through feature 001's reconciliation unchanged; retained
+        positions and movement reports get their own rules.
+        """
+        if report.kind == "position" and report.percent is not None:
+            if report.retained:
+                await self._handle_retained_position(report.address, report.percent)
+            else:
+                await self.handle_report(report.address, report.percent)
+        elif report.kind == "movement" and report.state is not None and not report.retained:
+            await self._handle_movement(report.address, report.state)
+
+    async def _handle_retained_position(self, address: str, level: int) -> None:
+        """Filled in by US3."""
+
+    async def _handle_movement(self, address: str, state: str) -> None:
+        """Filled in by US3."""
 
     async def handle_report(self, address: str, level: int) -> None:
         shutter = self._settings.by_address(address)
