@@ -140,9 +140,10 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T034 [P] Scenario tests A–D (including D6, D7) of [quickstart.md](./quickstart.md) in `backend/tests/integration/test_groups_quickstart.py` with the simulator and a fake clock (A5 via two app instances with different configs on one database); plus **SC-005**: 30 simulated days of `run_due` with three rules whose group targets overlap, asserting at most one outcome per shutter per firing and one `level/cmd` per shutter per firing on the simulated bridge
+- [X] T034 [P] Scenario tests A–D (including D6, D7) of [quickstart.md](./quickstart.md) in `backend/tests/integration/test_groups_quickstart.py` with the simulator and a fake clock (A5 via two app instances with different configs on one database); plus **SC-005**: 30 simulated days of `run_due` with three rules whose group targets overlap, asserting at most one outcome per shutter per firing and one `level/cmd` per shutter per firing on the simulated bridge
 - [ ] T035 Walk quickstart B2–B4 and C1–C4 by hand in two browser windows, one of them a private window (storage unavailable path). On a phone, time **SC-001** (a group of three created in < 30 s without help) and **SC-007** (with a 20-shutter sim config in 6 groups, a named shutter found in < 5 s); note the times in the commit message
-- [ ] T036 [P] Update `README.md` ("What works today", test counts) and `CLAUDE.md` (groups live in the app database, not in `shutters.toml`)
+  - *Partly done 2026-09-22, desktop Chrome against the simulator:* B1, B2 (shared shutter animates identically in both sections), B4 (flat list survives reload) and C1 (group close) walked by hand; the group form and groups screen checked. **Still open:** C4 by hand, the private-window path, and the SC-001/SC-007 timings on a phone.
+- [X] T036 [P] Update `README.md` ("What works today", test counts) and `CLAUDE.md` (groups live in the app database, not in `shutters.toml`)
 - [ ] T037 On the Pi, once ≥ 3 motors are paired: quickstart E1 — a real group closes with every motor moving and no frame lost when Pi-Somfy gets the commands back-to-back; if frames are lost, measure the smallest safe gap and add it as `bridge.command_gap_ms` in config (research §4). **The constitution's hardware check for the consolidated command loop** (joins T042–T044 of feature 002 and T052 of feature 003)
 
 ---

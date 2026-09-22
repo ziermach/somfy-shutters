@@ -157,6 +157,11 @@ class AutomationEngine:
         for rule in self.store.rules():
             if not rule.enabled:
                 continue
+            reach = self.targets(rule)
+            if not reach.reached and not reach.removed:
+                # Its last group was deleted (feature 004, FR-026). It says "no_targets"
+                # and does not fire; a firing of nothing would read as a failure.
+                continue
             for planned in firings_between(rule, start, end, self.tz, sun):
                 if not self.store.has_firing(rule.id, planned):
                     due.append((planned, rule))
