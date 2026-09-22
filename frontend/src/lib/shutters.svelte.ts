@@ -18,6 +18,12 @@ class ShutterState {
   easing = $state<Record<string, number>>({});
   /** A finished travel the app would like confirmed — one tap, feature 002. */
   confirmable = $state<{ id: string; name: string } | null>(null);
+  /**
+   * The animation clock. livePercent() reads it so that Svelte re-derives every
+   * frame; reading Date.now() directly is invisible to reactivity, and the
+   * graphic froze at the start of every travel until the final frame arrived.
+   */
+  now = $state(Date.now());
 
   #socket: WebSocket | null = null;
   #backoff = BACKOFF_START;
@@ -34,8 +40,31 @@ class ShutterState {
 
   /** Where a shutter is right now — interpolated locally while it travels. */
   livePercent(shutter: Shutter): number | null {
-    if (shutter.movement) return interpolate(shutter.movement);
+    if (shutter.movement) return interpolate(shutter.movement, this.now);
     return shutter.position.percent;
+  }
+
+  /** Where this shutter is headed or already stands, for disabling pointless buttons. */
+  #endsAt(shutter: Shutter): number | null {
+    if (shutter.movement) return shutter.movement.target_percent;
+    return shutter.position.percent;
+  }
+
+  /** "auf" does nothing for a shutter that is open or already opening. */
+  canOpen(shutter: Shutter): boolean {
+    return this.#endsAt(shutter) !== 100;
+  }
+
+  /** "zu" does nothing for a shutter that is closed or already closing. */
+  canClose(shutter: Shutter): boolean {
+    return this.#endsAt(shutter) !== 0;
+  }
+
+  /** Advance the animation clock; called once per frame. */
+  tick(): void {
+    // Only while something travels, so an idle page does not re-render at 60 fps.
+    if (this.shutters.some((s) => s.movement)) this.now = Date.now();
+    this.settleArrived();
   }
 
   connect(): void {

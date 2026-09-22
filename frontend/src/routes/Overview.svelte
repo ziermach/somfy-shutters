@@ -21,10 +21,10 @@
   {/if}
 
   <div class="row">
-    <button type="button" class="btn ghost" disabled={!shutters.bridge.connected} onclick={() => shutters.commandAll('open')}>
+    <button type="button" class="btn ghost" disabled={!shutters.bridge.connected || !shutters.shutters.some((s) => !s.measuring && shutters.canOpen(s))} onclick={() => shutters.commandAll('open')}>
       Alle auf
     </button>
-    <button type="button" class="btn ghost" disabled={!shutters.bridge.connected} onclick={() => shutters.commandAll('close')}>
+    <button type="button" class="btn ghost" disabled={!shutters.bridge.connected || !shutters.shutters.some((s) => !s.measuring && shutters.canClose(s))} onclick={() => shutters.commandAll('close')}>
       Alle zu
     </button>
   </div>

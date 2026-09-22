@@ -7,13 +7,21 @@
 
   interface Props {
     position: PositionEstimate;
+    /** A travel is under way. The stored position is where it started, and the
+     *  end stop it left is no longer certain — showing "sicher" mid-travel was
+     *  an estimate rendered as confirmed. */
+    moving?: boolean;
   }
-  let { position }: Props = $props();
+  let { position, moving = false }: Props = $props();
+
+  const shown = $derived<PositionEstimate>(
+    moving && position.confidence === 'certain' ? { ...position, confidence: 'estimated' } : position
+  );
 </script>
 
 <span class="badge">
-  <span class="dot {tone(position)}"></span>
-  <span>{confidenceLabel(position)}</span>
+  <span class="dot {tone(shown)}"></span>
+  <span>{confidenceLabel(shown)}</span>
 </span>
 
 <style>

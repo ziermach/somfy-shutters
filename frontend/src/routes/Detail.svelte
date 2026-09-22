@@ -61,7 +61,7 @@
 
     <div class="readout">
       <span class="pct">{percentText(live)}</span>
-      <ConfidenceBadge position={shutter.position} />
+      <ConfidenceBadge position={shutter.position} moving={shutter.movement !== null} />
     </div>
 
     <div class="slider">
@@ -85,9 +85,9 @@
     </div>
 
     <div class="row">
-      <button type="button" class="btn big" disabled={busy} onclick={() => shutters.command(shutter.id, 'open')}>auf</button>
+      <button type="button" class="btn big" disabled={busy || !shutters.canOpen(shutter)} onclick={() => shutters.command(shutter.id, 'open')}>auf</button>
       <button type="button" class="btn big" disabled={busy} onclick={() => shutters.command(shutter.id, 'stop')}>stop</button>
-      <button type="button" class="btn big" disabled={busy} onclick={() => shutters.command(shutter.id, 'close')}>zu</button>
+      <button type="button" class="btn big" disabled={busy || !shutters.canClose(shutter)} onclick={() => shutters.command(shutter.id, 'close')}>zu</button>
     </div>
 
     <button type="button" class="btn calibrate" disabled={shutter.measuring} onclick={() => oncalibrate(shutter.id)}>

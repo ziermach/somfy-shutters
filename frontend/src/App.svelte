@@ -20,7 +20,7 @@
     shutters.connect();
     // One animation loop for the whole app. Svelte re-reads livePercent() on
     // each frame; nothing is fetched while a shutter travels.
-    const stop = ticker(() => shutters.settleArrived());
+    const stop = ticker(() => shutters.tick());
     return () => {
       stop();
       shutters.disconnect();

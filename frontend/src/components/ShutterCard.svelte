@@ -42,7 +42,7 @@
     <div class="meta">
       <button type="button" class="name" onclick={() => onopen(shutter.id)}>{shutter.name}</button>
       <span class="sub">{state}</span>
-      <ConfidenceBadge position={shutter.position} />
+      <ConfidenceBadge position={shutter.position} moving={shutter.movement !== null} />
       {#if shutter.measuring}
         <span class="measuring"><span class="pulse"></span>Messung läuft</span>
       {:else if !shutter.calibrated}
@@ -52,9 +52,9 @@
     <span class="pct">{percentText(live)}</span>
   </div>
   <div class="row">
-    <button type="button" class="btn" disabled={busy} onclick={() => shutters.command(shutter.id, 'open')}>auf</button>
+    <button type="button" class="btn" disabled={busy || !shutters.canOpen(shutter)} onclick={() => shutters.command(shutter.id, 'open')}>auf</button>
     <button type="button" class="btn" disabled={busy} onclick={() => shutters.command(shutter.id, 'stop')}>stop</button>
-    <button type="button" class="btn" disabled={busy} onclick={() => shutters.command(shutter.id, 'close')}>zu</button>
+    <button type="button" class="btn" disabled={busy || !shutters.canClose(shutter)} onclick={() => shutters.command(shutter.id, 'close')}>zu</button>
   </div>
 </div>
 
