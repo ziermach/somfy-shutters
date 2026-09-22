@@ -100,6 +100,8 @@ async def test_c6_a_group_of_twelve_is_commanded_within_five_seconds(tmp_path) -
     ids = [f"s{i:02d}" for i in range(12)]
     async with running(tmp_path, house_of(12)) as http:
         group = await make(http, "Alle zwölf", *ids)
+        for sid in ids:  # all open first, so "zu" is a movement for every one
+            await http.post("/api/sim/report", json={"shutter_id": sid, "percent": 100})
         tapped = utcnow()
         response = await http.post(f"/api/groups/{group['id']}/command", json={"action": "close"})
     assert response.status_code == 200

@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+
+from httpx import ASGITransport, AsyncClient
+
+from somfy_shutters.bridge.sim import SimBridge
+from somfy_shutters.main import create_app
+from somfy_shutters.store import Store
+
 DIRECTION_KEYS = {"travel_seconds", "dead_seconds", "runs", "curve_a", "source", "updated_at"}
 
 
@@ -79,9 +87,21 @@ async def test_home_is_not_a_measurement(client) -> None:
     assert (await client.get("/api/calibration/schlafzimmer")).json()["runs"] == []
 
 
-async def test_an_unknown_position_cannot_start_a_run(client) -> None:
-    """A fresh start knows nothing, and a measurement must not begin on a guess."""
-    response = await client.post("/api/calibration/kueche/run")
+async def test_an_unknown_position_cannot_start_a_run(tmp_path, app_settings) -> None:
+    """With nothing known about a shutter, a measurement must not begin on a guess.
+
+    Since feature 006 the bridge hands over its retained positions on connect, which
+    fill an unknown one; this test used to pass only by running before they arrived.
+    A bridge that knows nothing of the kitchen makes "nothing known" deterministic.
+    """
+    others = [s.address for s in app_settings.shutter if s.id != "kueche"]
+    app = create_app(app_settings, store=Store(tmp_path / "s.db"), bridge=SimBridge(others))
+    async with (
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+        app.router.lifespan_context(app),
+    ):
+        await asyncio.sleep(0.05)  # let the retained reports that do exist arrive
+        response = await client.post("/api/calibration/kueche/run")
     assert response.status_code == 409
     assert response.json()["error"] == "not_at_end_stop"
     assert response.json()["suggested_target"] == 100

@@ -26,10 +26,20 @@ broker. Nothing in this path leaves the house.
 
 | | |
 |---|---|
-| Pi | Pi 3 or newer, Raspberry Pi OS Bookworm (64-bit). A Zero 2 W works but see [building the frontend](#4-build-the-frontend). |
+| Pi | Pi 3 or newer, Raspberry Pi OS **Lite** (64-bit), Bookworm or Trixie. A Zero 2 W works but see [building the frontend](#4-build-the-frontend). |
 | Radio | CC1101 (E07-M1101D-SMA) wired to the SPI header — see [wiring the radio](#wiring-the-radio). **3.3V only.** |
 | Pi-Somfy | Installed, paired with every window, publishing to MQTT. This project does not install or configure it. |
 | Network | Ethernet, WiFi or a phone hotspot — see [network](#1-network). |
+
+Use Lite, not the desktop image. On a 1 GB Pi 3 booting over USB 2.0 the desktop image
+can start so slowly that `systemd-logind`, `accounts-daemon` and cloud-init's final
+stage time out on first boot — and when cloud-init fails, the user, SSH and WiFi you
+set in Raspberry Pi Imager are never applied. Lite starts a fraction of the services
+and a shutter controller has no screen anyway.
+
+Nothing below assumes a particular login name. The app gets its own system user,
+`somfy`, and lives in `/opt/somfy-shutters`; you run the commands as whatever user
+you created in Imager, with `sudo`.
 
 Pi-Somfy owns the radio and the rolling-code counters. Never run a second transmitter
 against the same motors — resynchronising means walking to every window and
@@ -37,49 +47,56 @@ re-pairing by hand.
 
 ### Wiring the radio
 
-Fixed by the [constitution](../.specify/memory/constitution.md); module pin numbers are
-from Ebyte's [E07-M1101D-SMA manual](https://www.scribd.com/document/708471606/E07-M1101D-SMA-Usermanual-EN-v1-30).
+Fixed by the [constitution](../.specify/memory/constitution.md) (v1.2.0); module pin
+numbers are from Ebyte's [E07-M1101D-SMA manual](https://www.scribd.com/document/708471606/E07-M1101D-SMA-Usermanual-EN-v1-30).
+This is the wiring Pi-Somfy's CC1101 transmitter (`RFBackend = cc1101`) expects by
+default: the Pi's hardware SPI0, with the RTS waveform on GDO0 driven from `TXGPIO = 4`.
 
 | Module pin | Signal | Pi physical pin | Pi GPIO |
 |---|---|---|---|
-| 1 | GND | 39 | GND |
-| 2 | VCC | **17** (or 1) | **3.3V** |
-| 3 | GDO0 | 37 | GPIO26 |
-| 4 | CSN | 36 | GPIO16 |
-| 5 | SCK | 40 | GPIO21 |
-| 6 | MOSI | 38 | GPIO20 |
-| 7 | MISO/GDO1 | 35 | GPIO19 |
+| 1 | GND | 25 | GND |
+| 2 | VCC | **17** | **3.3V** |
+| 3 | GDO0 | 7 | GPIO4 |
+| 4 | CSN | 24 | GPIO8 (SPI0 CE0) |
+| 5 | SCK | 23 | GPIO11 (SPI0 SCLK) |
+| 6 | MOSI | 19 | GPIO10 (SPI0 MOSI) |
+| 7 | MISO/GDO1 | 21 | GPIO9 (SPI0 MISO) |
 | 8 | GDO2 | — | not connected |
 
-**Interactive diagram:** [open in Cirkit Designer](https://app.cirkitdesigner.com/project/c0b9f439-d559-4c61-9f5f-2cd1cb531f8d?view=interactive_preview)
-— the table above is the source of truth; if the two ever disagree, the table wins.
-
-<!-- GitHub strips iframes; this renders only in viewers that allow them. The link above always works. -->
-<div style="position: relative; width: 100%; padding-top: calc(max(56.25%, 400px));">
-  <iframe src="https://app.cirkitdesigner.com/project/c0b9f439-d559-4c61-9f5f-2cd1cb531f8d?view=interactive_preview" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"></iframe>
-</div>
-
-Everything but VCC sits in the last three rows of the header, the end nearest the USB
-ports:
+Six of the seven wires land in one block in the middle of the header; GDO0 goes to pin 7,
+near the pin-1 end:
 
 ```
-         inner  outer
-  35 MISO  ●     ●  36 CSN
-  37 GDO0  ●     ●  38 MOSI
-  39 GND   ●     ●  40 SCK
+          inner   outer
+   7 GDO0   ●       ●   8
+   …
+  17 VCC    ●       ●  18
+  19 MOSI   ●       ●  20
+  21 MISO   ●       ●  22
+  23 SCK    ●       ●  24 CSN
+  25 GND    ●       ●  26
 ```
 
-> **VCC to 3.3V — pin 17 or 1 — never 5V.** Pins 2 and 4 carry 5V and sit right next
-> to pin 1; the module's absolute maximum is about 3.6V and 5V destroys it. Wire with
-> the Pi unplugged and check VCC twice before powering on.
+Pin 1 is the corner farthest from the USB ports; odd pins are the inner row, even pins
+the row along the board edge.
+
+> **VCC to 3.3V — pin 17 — never 5V.** Pins 2 and 4 carry 5V; the module's absolute
+> maximum is about 3.6V and 5V destroys it. Wire with the Pi unplugged and check VCC
+> twice before powering on.
 >
 > **Screw the antenna on before anything transmits.** Transmitting into an open SMA
 > connector can damage the module.
 
-Pins 35, 38 and 40 are the Pi's *second* SPI bus (SPI1), not the one `raspi-config`
-switches on (SPI0). Which overlay is needed depends on how Pi-Somfy's CC1101 support
-drives the module — follow its installation instructions rather than assuming SPI is
-already set up. [pinout.xyz](https://pinout.xyz) shows every pin interactively.
+SPI0 is the bus `raspi-config` switches on:
+
+```bash
+sudo raspi-config nonint do_spi 0       # adds dtparam=spi=on; takes effect after a reboot
+ls /dev/spidev0.0                       # present once it is on
+```
+
+Pins 35–40 (GPIO 19/20/21/16/26) stay free on purpose: they are where Pi-Somfy wants an
+optional *second* CC1101 that listens to physical remotes (open hardware question 4).
+[pinout.xyz](https://pinout.xyz) shows every pin interactively.
 
 ## 1. Network
 
@@ -186,25 +203,37 @@ If nothing appears here, nothing will appear in the app either — fix it at thi
 
 ## 3. Install the app
 
-```bash
-sudo apt install -y git python3.11 python3.11-venv
-git clone https://github.com/ziermach/somfy-shutters.git /home/pi/somfy-shutters
-cd /home/pi/somfy-shutters/backend
+A system user with no login shell, and its own home for pip and npm caches so they do
+not land inside the checkout:
 
-python3.11 -m venv .venv          # or: uv venv --python 3.11 .venv
-.venv/bin/pip install -e .        # production needs no ".[dev]"
+```bash
+sudo apt install -y git python3 python3-venv
+sudo useradd --system --user-group --create-home --home-dir /var/lib/somfy \
+             --shell /usr/sbin/nologin somfy
+sudo install -d -o somfy -g somfy /opt/somfy-shutters
+sudo -u somfy git clone https://github.com/ziermach/somfy-shutters.git /opt/somfy-shutters
+
+cd /opt/somfy-shutters/backend
+sudo -u somfy python3 -m venv .venv
+sudo -u somfy .venv/bin/pip install -e .      # production needs no ".[dev]"
 ```
 
-The unit file expects exactly `/home/pi/somfy-shutters`. A different path means
-editing the five places it appears in `somfy-shutters.service`.
+`python3` is 3.11 on Bookworm and 3.13 on Trixie; the app needs 3.11 or newer, so
+either works.
+
+Everything from here on that touches `/opt/somfy-shutters` runs as `somfy` —
+`sudo -u somfy …`. The code belongs to that user so updating needs no root; the unit's
+`ProtectSystem=strict` still keeps the running service from writing anywhere but
+`config/`. The unit expects exactly `/opt/somfy-shutters`.
 
 ## 4. Build the frontend
 
 The backend serves `frontend/dist` itself, so production is one process on one port.
 
 ```bash
-cd /home/pi/somfy-shutters/frontend
-npm ci && npm run build
+sudo apt install -y nodejs npm                    # Vite needs Node 18 or newer
+cd /opt/somfy-shutters/frontend
+sudo -u somfy npm ci && sudo -u somfy npm run build
 ```
 
 On a Pi Zero 2 W or a 1 GB Pi 3 the Vite build can run out of memory. Build on a
@@ -214,8 +243,12 @@ architecture-specific:
 ```bash
 # on your machine
 cd frontend && npm ci && npm run build
-rsync -a dist/ pi@somfy.local:/home/pi/somfy-shutters/frontend/dist/
+rsync -a --rsync-path="sudo -u somfy rsync" \
+      dist/ <you>@<hostname>.local:/opt/somfy-shutters/frontend/dist/
 ```
+
+`--rsync-path` makes the far end write as `somfy`, so the files end up owned by the
+app user rather than by your login.
 
 Without a build the API still works, and the log says
 `no built frontend at … — run npm run build`.
@@ -223,9 +256,13 @@ Without a build the API still works, and the log says
 ## 5. Configure
 
 ```bash
-cd /home/pi/somfy-shutters
-cp config/shutters.example.toml config/shutters.toml
+cd /opt/somfy-shutters
+sudo -u somfy install -m 600 config/shutters.example.toml config/shutters.toml
+sudo -u somfy nano config/shutters.toml
 ```
+
+Mode `600`: the file will hold the broker password, and nobody but the app needs to
+read it.
 
 `config/shutters.toml` is gitignored — it holds the real RTS addresses and this
 repository is public. Copy each `address` by hand out of Pi-Somfy's
@@ -239,7 +276,6 @@ host = "127.0.0.1"
 port = 1883
 user = "somfy"
 password = "…"
-invert_level = false  # open hardware question 1 — flip if 0 turns out to mean "open"
 ```
 
 Validation is strict and startup fails loudly with the offending line. Leave travel
@@ -259,7 +295,9 @@ The unit starts after `mosquitto.service`, restarts on failure, and is confined 
 `ProtectSystem=strict` — `config/` is the only writable path, because that is where
 the database and the measured calibration live.
 
-Check it:
+Check it. On a Pi 3 the app needs about 20 seconds after `systemctl start` before it
+answers — `curl` exits with code 7 (connection refused) until then, and the log shows
+`ready: N shutters` once it is up:
 
 ```bash
 curl -s localhost:8000/api/health
@@ -300,7 +338,7 @@ after the restart the app shows the pairing screen. Run `auth recover` once, as 
 Only after the simulator works end to end:
 
 ```bash
-sudo -u pi sed -i 's/^kind = "sim"/kind = "mqtt"/' /home/pi/somfy-shutters/config/shutters.toml
+sudo -u somfy sed -i 's/^kind = "sim"/kind = "mqtt"/' /opt/somfy-shutters/config/shutters.toml
 sudo systemctl restart somfy-shutters
 journalctl -u somfy-shutters -f
 ```
@@ -308,9 +346,10 @@ journalctl -u somfy-shutters -f
 Expect `ready: N shutters, bridge=mqtt`. Move one shutter from the app and watch the
 window. Two things are worth knowing before you trust it:
 
-- **The direction may be inverted.** If "open" closes the shutter, set
-  `invert_level = true` and restart. That single setting is the only place the wire
-  direction is known.
+- **Pi-Somfy must be v3.1 or newer.** The app speaks its current topics
+  (`somfy/<id>/command`, `set_position`, `position`, `state`, `somfy/bridge/availability`);
+  older versions used `level/cmd` and are not supported. Direction needs no setting — the
+  bridge declares 100 = open.
 - **A lost command looks exactly like a delivered one.** RTS is one-way. If the
   furthest window misses commands, that is radio range, not software — check the
   antenna before changing anything here.
@@ -339,20 +378,24 @@ sudo systemctl restart somfy-shutters
 
 ```bash
 sudo systemctl stop somfy-shutters
-tar czf ~/somfy-backup-$(date +%F).tar.gz -C /home/pi/somfy-shutters config
+sudo tar czf ~/somfy-backup-$(date +%F).tar.gz -C /opt/somfy-shutters config
+sudo chown "$USER" ~/somfy-backup-*.tar.gz
 sudo systemctl start somfy-shutters
 ```
 
 Stop the service first: SQLite is in WAL mode and a live copy can catch a torn write.
+`sudo` because the service creates its files readable only by `somfy`.
 
 **Updating:**
 
 ```bash
-cd /home/pi/somfy-shutters
+cd /opt/somfy-shutters
 sudo systemctl stop somfy-shutters
-git pull
-backend/.venv/bin/pip install -e backend
-cd frontend && npm ci && npm run build
+sudo -u somfy git pull
+sudo -u somfy backend/.venv/bin/pip install -e backend
+cd frontend && sudo -u somfy npm ci && sudo -u somfy npm run build
+sudo cp /opt/somfy-shutters/deploy/somfy-shutters.service /etc/systemd/system/ \
+  && sudo systemctl daemon-reload                  # in case the unit changed
 sudo systemctl start somfy-shutters
 ```
 
@@ -362,8 +405,9 @@ sudo systemctl start somfy-shutters
 |---|---|
 | Service will not start | `journalctl -u somfy-shutters -n 50`. A config error prints the offending field and exits. |
 | `no configuration at …` | `config/shutters.toml` is missing, or the unit's `SHUTTERS_CONFIG` points elsewhere. |
-| `bridge.connected` stays `false` | Broker down, wrong credentials, or the app is not on the Pi and Mosquitto is bound to loopback. Reconnect backs off 1 → 30s and logs each attempt. |
-| App works, shutters do not move | Prove the broker path outside the app: `mosquitto_pub -h 127.0.0.1 -u somfy -P '…' -t 'somfy/0x279621/level/cmd' -m 50`. If that moves nothing, it is Pi-Somfy or the radio, not this app. |
+| `Permission denied` on anything in `config/` | A file there was created by you or root instead of `somfy`. `sudo chown -R somfy:somfy /opt/somfy-shutters/config`. |
+| `bridge.connected` stays `false` | Broker down, wrong credentials, the app is not on the Pi and Mosquitto is bound to loopback — or Pi-Somfy is not running: the app counts the bridge reachable only once it announces `online` on `somfy/bridge/availability`. Check with `mosquitto_sub -h 127.0.0.1 -u somfy -P '…' -t somfy/bridge/availability -v`. |
+| App works, shutters do not move | Prove the broker path outside the app: `mosquitto_pub -h 127.0.0.1 -u somfy -P '…' -t 'somfy/0x279621/command' -m CLOSE`. If that moves nothing, it is Pi-Somfy or the radio, not this app. |
 | Positions never become "sicher" | Expected until a shutter reaches an end stop. Only the end stops are certain. |
 | Unknown address warnings | An address in `shutters.toml` does not match `operateShutters.conf`. Copy it again. |
 | Commands land seconds late, live view keeps reconnecting | WiFi power saving is on. `iw dev wlan0 get power_save` — see [WiFi](#wifi-turn-off-power-saving). |

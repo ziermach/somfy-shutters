@@ -92,6 +92,10 @@ async def test_command_all_reports_per_shutter(client) -> None:
 
 async def test_command_all_carries_movements_and_needs_a_target_for_position(client) -> None:
     """Feature 004, T004: "Alle" now goes through apply_many."""
+    for sid in ("wohnzimmer", "kueche", "schlafzimmer"):
+        # All open first: since feature 006 the simulator's retained replay may have
+        # filled some as closed, and "zu" would have nothing to animate for those.
+        await client.post("/api/sim/report", json={"shutter_id": sid, "percent": 100})
     response = await client.post("/api/shutters/command", json={"action": "close"})
     assert all(set(r["movement"]) == MOVEMENT_KEYS for r in response.json()["results"])
     response = await client.post("/api/shutters/command", json={"action": "position"})

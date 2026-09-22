@@ -10,18 +10,28 @@ from __future__ import annotations
 import abc
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
+from typing import Literal
+
+ReportKind = Literal["position", "movement"]
+MovementState = Literal["opening", "closing", "open", "closed", "stopped"]
+MOVEMENT_STATES: frozenset[str] = frozenset({"opening", "closing", "open", "closed", "stopped"})
 
 
 @dataclass(frozen=True)
 class Report:
-    """A position another party claims a shutter is at.
+    """What the bridge says about a shutter: a position, or that it moves or stands.
 
-    Not a measurement. Pi-Somfy computes this from its own configured travel time,
-    so it is a second estimate of unknown quality — see research.md, section 5.
+    Not a measurement. Pi-Somfy computes positions from its own configured travel
+    time, so a position is a second estimate of unknown quality — see feature 001's
+    research, section 5. ``retained`` marks old news: a report the broker kept and
+    delivered on connect, not something that just happened (feature 006).
     """
 
     address: str
-    percent: int
+    percent: int | None = None
+    kind: ReportKind = "position"
+    state: MovementState | None = None
+    retained: bool = False
 
 
 class BridgeUnreachable(RuntimeError):
@@ -47,6 +57,15 @@ class ShutterBridge(abc.ABC):
 
         Success means the message was accepted for delivery — never that a motor
         moved. The radio is one-way; there is nothing to acknowledge.
+        """
+
+    @abc.abstractmethod
+    async def send_stop(self, address: str) -> None:
+        """Ask the shutter to stop where it is. Raises BridgeUnreachable likewise.
+
+        A separate verb, not a position: the bridge ignores a position equal to its
+        own belief, so "go to where you are" would let the shutter run on.
+        Success means handed over — never that the motor stopped.
         """
 
     @abc.abstractmethod

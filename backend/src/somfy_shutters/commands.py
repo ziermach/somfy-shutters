@@ -90,12 +90,9 @@ async def _send(
     getattr(state, "pending_checks", {}).pop(shutter_id, None)
 
     if kind is Action.STOP:
-        # Expressed as a level command at the current position: we only speak
-        # level/cmd. See contracts/mqtt.md — this is an approximation, and
-        # hardware bring-up has to confirm the motor halts crisply.
-        await bridge.send_level(
-            tracker.settings.shutters[shutter_id].address, tracker.halt_level(shutter_id)
-        )
+        # The bridge's explicit stop. Asking for the current position instead would do
+        # nothing on current Pi-Somfy and let the shutter run on (feature 006).
+        await bridge.send_stop(tracker.settings.shutters[shutter_id].address)
         await tracker.stop(shutter_id)
         return {"accepted": True, "movement": None}
 

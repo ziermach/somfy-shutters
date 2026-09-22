@@ -213,3 +213,76 @@ async def test_after_a_restart_the_counter_starts_from_the_stored_position(
     assert revived.bridge_level("wohnzimmer") == 60
     again = await revived.start_movement("wohnzimmer", 80)
     assert again.from_percent == 60
+
+
+# --- feature 006: retained reports and movement reports --------------------------
+
+from somfy_shutters.bridge.base import Report  # noqa: E402
+
+
+async def test_retained_position_leaves_a_known_position_alone(tracker, events) -> None:
+    await tracker._settle("wohnzimmer", 62, Source.COMMAND)
+    events.clear()
+    await tracker.handle(Report(WOHNZIMMER, 40, retained=True))
+    assert tracker.position("wohnzimmer").percent == 62
+    assert events == []
+    assert tracker.bridge_level("wohnzimmer") == 40, "the bridge's counter is still worth knowing"
+
+
+async def test_retained_position_fills_an_unknown_one_as_an_estimate(tracker) -> None:
+    assert tracker.position("wohnzimmer").percent is None
+    await tracker.handle(Report(WOHNZIMMER, 100, retained=True))
+    position = tracker.position("wohnzimmer")
+    assert position.percent == 100
+    assert position.confidence is Confidence.ESTIMATED, "old news is never certain, not even at 100"
+
+
+async def test_retained_movement_is_ignored(tracker, events) -> None:
+    await tracker._settle("wohnzimmer", 62, Source.COMMAND)
+    before = tracker.position("wohnzimmer").certain_at
+    events.clear()
+    await tracker.handle(Report(WOHNZIMMER, kind="movement", state="closing", retained=True))
+    assert events == [] and "wohnzimmer" not in tracker._external_moving
+    await tracker.handle_report(WOHNZIMMER, 50)
+    assert events[-1]["type"] == "correction"
+    assert tracker.position("wohnzimmer").certain_at == before, (
+        "an ordinary correction keeps the age"
+    )
+
+
+async def test_live_opening_we_did_not_cause_is_a_physical_remote(tracker, clock, events) -> None:
+    await tracker._settle("wohnzimmer", 0, Source.COMMAND)
+    before = tracker.position("wohnzimmer").certain_at
+    clock.advance(600)
+    events.clear()
+
+    await tracker.handle(Report(WOHNZIMMER, kind="movement", state="opening"))
+    after_opening = tracker.position("wohnzimmer")
+    assert after_opening.confidence is Confidence.ESTIMATED, "it left the end stop"
+    assert after_opening.certain_at > before, "the bridge heard the command: its clock is fresh"
+
+    # One report is enough now — no two-report guess, no noise filter.
+    await tracker.handle_report(WOHNZIMMER, 2)
+    assert tracker.position("wohnzimmer").percent == 2
+    assert events[-1]["type"] == "correction"
+
+    await tracker.handle(Report(WOHNZIMMER, kind="movement", state="stopped"))
+    assert "wohnzimmer" not in tracker._external_moving
+
+
+async def test_live_opening_during_our_own_travel_is_ours(tracker, events) -> None:
+    await tracker._settle("wohnzimmer", 0, Source.COMMAND)
+    await tracker.start_movement("wohnzimmer", 100)
+    events.clear()
+    await tracker.handle(Report(WOHNZIMMER, kind="movement", state="opening"))
+    assert "wohnzimmer" not in tracker._external_moving
+    assert events == []
+
+
+async def test_live_closing_during_the_bridge_run_is_ours(tracker, clock) -> None:
+    await tracker._settle("wohnzimmer", 100, Source.COMMAND)
+    movement = await tracker.start_movement("wohnzimmer", 0)
+    clock.advance(movement.duration_seconds + 0.5)
+    await tracker.tick()
+    await tracker.handle(Report(WOHNZIMMER, kind="movement", state="closing"))
+    assert "wohnzimmer" not in tracker._external_moving

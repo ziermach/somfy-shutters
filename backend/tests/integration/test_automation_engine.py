@@ -21,6 +21,7 @@ from somfy_shutters.automation.store import AutomationStore
 from somfy_shutters.bridge.sim import SimBridge
 from somfy_shutters.config import Settings
 from somfy_shutters.main import create_app
+from somfy_shutters.models import Source
 from somfy_shutters.store import Store
 
 from ..conftest import CONFIG
@@ -50,7 +51,13 @@ def house(tmp_path):
     settings = Settings.model_validate(CONFIG)
     bridge = SimBridge(addresses=[s.address for s in settings.shutter])
     app = create_app(settings, store=Store(tmp_path / "state.db"), bridge=bridge)
-    with TestClient(app):
+    with TestClient(app) as client:
+        # A known start: every window open, in the app and in the simulator. Since
+        # feature 006 the simulator's retained replay would otherwise fill some
+        # positions as "closed" at an unpredictable moment.
+        for shutter in settings.shutter:
+            bridge.place(shutter.address, 100.0)
+            client.portal.call(app.state.tracker._settle, shutter.id, 100, Source.COMMAND)
         store = AutomationStore(tmp_path / "state.db")
         events: list[dict] = []
 

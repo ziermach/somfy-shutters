@@ -1,5 +1,11 @@
 # Contract: the Pi-Somfy boundary
 
+> **Superseded (2026-09-22).** Pi-Somfy v3.1 (2026-03-27) removed the `level/cmd` and
+> `level/set_state` topics this contract is built on. The current contract is
+> [specs/006-pisomfy-mqtt-topics/contracts/mqtt.md](../../006-pisomfy-mqtt-topics/contracts/mqtt.md).
+> The reasoning below — why a report is a second estimate, why nothing is queued — still
+> holds and is kept for that.
+
 **External contract — not ours to change.** Pi-Somfy defines these topics; this project
 adapts to them. Everything radio-related lives behind this boundary, and nothing on our
 side of it has a concept of RTS, rolling codes, or 433.42 MHz.

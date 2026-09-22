@@ -37,7 +37,7 @@ from .auth.throttle import Throttle
 from .automation.clock import ClockGuard
 from .automation.engine import LOCATION_KEY, AutomationEngine
 from .automation.store import AutomationStore
-from .bridge.base import ShutterBridge
+from .bridge.base import Report, ShutterBridge
 from .bridge.mqtt import MqttBridge
 from .bridge.sim import SimBridge
 from .calibration import (
@@ -93,6 +93,11 @@ def create_app(
 ) -> FastAPI:
     settings = settings or load_settings(os.environ.get("SHUTTERS_CONFIG", DEFAULT_CONFIG))
     bridge = bridge or build_bridge(settings)
+    if settings.bridge.invert_level:
+        log.warning(
+            "bridge.invert_level is set but ignored: current Pi-Somfy declares 100 = open, "
+            "0 = closed, which is what this app uses. Remove it from shutters.toml."
+        )
     store = store or Store(os.environ.get("SHUTTERS_DB", DEFAULT_DB))
     bus = EventBus()
     hub = ws.Hub()
@@ -184,18 +189,25 @@ def create_app(
             }
         )
 
-    async def on_report(address: str, percent: int) -> None:
+    async def on_report(report: Report) -> None:
         """Every report goes through here, from the bridge or from the simulator.
 
         A report for a shutter under measurement is usually the bridge narrating
         the travel we ourselves started. Only motion against the commanded
         direction means somebody else is driving, and only that invalidates the
-        run (FR-029).
+        run (FR-029). Old news from the broker's store says nothing about now, so
+        only live positions count (feature 006).
         """
-        shutter = settings.by_address(address)
-        if shutter is not None and runs.is_measuring(shutter.id):
-            runs.note_report(shutter.id, percent)
-        await tracker.handle_report(address, percent)
+        shutter = settings.by_address(report.address)
+        if (
+            shutter is not None
+            and runs.is_measuring(shutter.id)
+            and report.kind == "position"
+            and not report.retained
+            and report.percent is not None
+        ):
+            runs.note_report(shutter.id, report.percent)
+        await tracker.handle(report)
 
     async def note_observed(event: dict[str, Any]) -> None:
         """Feature 008, FR-016: what the app learned from the shutter layer instead of
@@ -257,7 +269,7 @@ def create_app(
 
         async def pump_reports() -> None:
             async for report in bridge.reports():
-                await on_report(report.address, report.percent)
+                await on_report(report)
 
         async def pump_ticks() -> None:
             while True:
