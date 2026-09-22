@@ -257,3 +257,14 @@ def test_a_pause_change_tells_open_clients(client) -> None:
         client.put("/api/automations/pause", json={"until": None})
         frame = socket.receive_json()
         assert frame["type"] == "automations" and frame["paused"] is True
+
+
+# --- simulator ---------------------------------------------------------------
+
+
+def test_sim_clock_forces_the_verdict_and_returns_to_the_real_check(client) -> None:
+    held = client.post("/api/sim/clock", json={"reliable": False}).json()
+    assert held["clock_reliable"] is False
+    assert client.get("/api/automations").json()["clock"]["reliable"] is False
+    back = client.post("/api/sim/clock", json={"reliable": None}).json()
+    assert back["clock_reliable"] is True

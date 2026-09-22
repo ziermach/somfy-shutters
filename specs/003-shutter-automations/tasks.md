@@ -152,11 +152,11 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T047 [P] Scenario tests E1–E6 of [quickstart.md](./quickstart.md) in `backend/tests/integration/test_automation_quickstart.py`: restart inside and outside the grace, clock held and released, daylight-saving days, double `run_due` and restart right after a firing, bridge offline
-- [ ] T048 [P] `POST /api/sim/clock` in `backend/src/somfy_shutters/api/rest.py` (simulator router only), with a contract test
-- [ ] T049 [P] SC-003 check in `backend/tests/unit/test_planner.py`: for every day of 2026 the preview's `today` equals the instant `next_firing` returns for that day's sun rule
-- [ ] T050 Walk quickstart A1 by hand once in the browser: a rule two minutes ahead with the browser closed
-- [ ] T051 [P] Update `README.md` ("What works today", test counts) and `CLAUDE.md` (timezone and location settings)
+- [X] T047 [P] Scenario tests E1–E6 of [quickstart.md](./quickstart.md) in `backend/tests/integration/test_automation_quickstart.py`: restart inside and outside the grace, clock held and released, daylight-saving days, double `run_due` and restart right after a firing, bridge offline
+- [X] T048 [P] `POST /api/sim/clock` in `backend/src/somfy_shutters/api/rest.py` (simulator router only), with a contract test
+- [X] T049 [P] SC-003 check in `backend/tests/unit/test_planner.py`: for every day of 2026 the preview's `today` equals the instant `next_firing` returns for that day's sun rule
+- [X] T050 Walk quickstart A1 by hand once in the browser: a rule two minutes ahead with the browser closed
+- [X] T051 [P] Update `README.md` ("What works today", test counts) and `CLAUDE.md` (timezone and location settings)
 - [ ] T052 On the Pi, once hardware is paired: confirm `adjtimex` reports unsynchronised after a cold boot without network and synchronised after NTP, and that one automated command drives a real shutter — **the constitution's hardware check for the moved command path** (joins T042–T044 of feature 002)
 
 ---

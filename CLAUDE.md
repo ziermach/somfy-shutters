@@ -1,7 +1,8 @@
 # somfy-shutters
 
 App for controlling SIMU/Somfy RTS roller shutters through Pi-Somfy: live animated
-state, plus user-defined automations. **Greenfield** — no application code exists yet.
+state, plus user-defined automations. Features 001–003 are implemented against a simulated
+house; nothing has run on real hardware yet.
 Development is driven by [GitHub Spec Kit](https://github.com/github/spec-kit):
 specification first, then plan, then tasks, then implementation.
 
@@ -81,6 +82,9 @@ npx svelte-check --tsconfig ./tsconfig.json
 
 `config/shutters.toml` (gitignored) decides which shutters exist. With
 `bridge.kind = "sim"` everything runs without a broker or hardware.
+`general.timezone` (default `Europe/Berlin`) is the wall clock automations follow; an
+optional `[location]` seeds the house coordinates once — after that the app's value wins.
+In the simulator, `POST /api/sim/clock {"reliable": false}` exercises the held path.
 
 ## Non-negotiables
 

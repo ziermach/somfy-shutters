@@ -174,3 +174,19 @@ def test_a_day_without_the_event_yields_no_firing() -> None:
         sun_rule(), local(2026, 6, 20, 0, 0), local(2026, 6, 22, 0, 0), BERLIN, svalbard
     )
     assert got == []
+
+
+def test_sc003_the_preview_matches_the_firing_every_day_of_the_year() -> None:
+    """SC-003: what the form shows as 'heute HH:MM' is the moment the rule fires."""
+    from datetime import date
+
+    from somfy_shutters.automation.planner import today_at
+
+    r = sun_rule(offset=-30, not_after="21:00")
+    day = date(2026, 1, 1)
+    while day.year == 2026:
+        morning = datetime(day.year, day.month, day.day, 0, 1, tzinfo=BERLIN)
+        shown = today_at(r, morning, BERLIN, SUN)
+        fired = next_firing(r, morning, BERLIN, SUN)
+        assert shown is not None and fired.at == shown, day
+        day += timedelta(days=1)

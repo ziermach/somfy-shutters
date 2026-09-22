@@ -5,7 +5,7 @@
 
 # 🚧 WORK IN PROGRESS 🚧
 
-> **It runs, but it has never moved a real shutter.** Features 001 and 002 are
+> **It runs, but it has never moved a real shutter.** Features 001–003 are
 > implemented and tested against a simulated house; no motor in this project has been
 > paired yet, so the MQTT path to Pi-Somfy is written and unit-tested but unproven on
 > hardware.
@@ -33,10 +33,12 @@ shutter stands, and automations that run on the house's own network.
 | ✅ | A midpoint check per direction: one drive, one answer, and it never moves the end points |
 | ✅ | "Drive to 50 %" lands at 50 %: the travel curve converts commands, not just the animation |
 | ✅ | A shutter under measurement says so everywhere and refuses commands — "Alle zu" included |
-| ⬜ | Automations and schedules |
+| ✅ | Automations on a clock time or at sunrise/sunset ± offset, with a "not before / not after" window |
+| ✅ | Every firing recorded per shutter; nothing queued; held while the Pi's clock cannot be trusted |
+| ✅ | Pause all automations, or skip one rule's next firing |
 | ⬜ | Anything confirmed on a real motor |
 
-334 backend and 27 frontend tests, against the real API surface, the tracker's rules,
+457 backend and 41 frontend tests, against the real API surface, the tracker's rules,
 the calibration arithmetic, and the simulated house end to end.
 
 ## The problem this project takes seriously
@@ -177,6 +179,26 @@ silent, the bridge reports its own dead reckoning, and receive mode hears comman
 rather than arrivals. Every number here ultimately comes from somebody looking at a
 window.
 
+### Automations
+
+A rule opens, closes or positions shutters at a clock time or at sunrise/sunset with an
+offset, on chosen weekdays. Sun rules can carry a window — "at sunrise, but not before
+06:30" — because in June the sun rises before five. Sun times are computed on the Pi
+from the house's coordinates; nothing is looked up online. astral's own sunrise leaves
+out atmospheric refraction and was 2.6 minutes off published times, so the standard
+−0.833° horizon is given explicitly and checked against an independent source.
+
+A firing goes through exactly the same function as a button press, so a shutter under
+measurement is skipped and a bridge that does not answer means "failed" — not "later".
+Every firing is recorded per shutter, under a key that makes firing twice impossible:
+after a restart within ten minutes it is carried out late, later than that it is
+recorded as missed.
+
+The Pi has no battery-backed clock. After a power cut it boots with the time it shut
+down at, until the network corrects it. Rules do not fire while the kernel says the
+clock is not synchronised or the time has gone backwards; the overview says so, and
+the history records those firings as held.
+
 ## Development
 
 Work is spec-driven with [GitHub Spec Kit](https://github.com/github/spec-kit):
@@ -194,8 +216,8 @@ recalibration with no user involvement, and
 [CLAUDE.md](CLAUDE.md) for conventions and build commands.
 
 ```bash
-cd backend && .venv/bin/python -m pytest       # 334 tests
-cd frontend && npx vitest run                  # 27 tests
+cd backend && .venv/bin/python -m pytest       # 457 tests
+cd frontend && npx vitest run                  # 41 tests
 cd frontend && npx svelte-check --tsconfig ./tsconfig.json
 ```
 

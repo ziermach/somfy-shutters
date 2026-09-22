@@ -240,3 +240,18 @@ async def sim_report(request: Request, body: ReportBody) -> dict[str, Any]:
         "as_percent": tracker.percent_from_level(body.shutter_id, body.percent),
         "position": shutter_json(body.shutter_id, tracker)["position"],
     }
+
+
+@sim_router.post("/clock")
+async def sim_clock(request: Request) -> dict[str, Any]:
+    """Force the clock guard's verdict (feature 003, FR-013), or hand it back with null.
+
+    Pulling the network cable on a development machine does not make its clock
+    unreliable; this does, so the held path can be walked on purpose.
+    """
+    body = await request.json()
+    reliable = body.get("reliable") if isinstance(body, dict) else None
+    engine = request.app.state.automation
+    engine.guard.override = None if reliable is None else bool(reliable)
+    await engine.check_clock()
+    return engine.state_json()
