@@ -1,6 +1,7 @@
 <script lang="ts">
   import ConfidenceBadge from '../components/ConfidenceBadge.svelte';
   import MeasuringBanner from '../components/MeasuringBanner.svelte';
+  import RemoveShutter from '../components/RemoveShutter.svelte';
   import WindowGraphic from '../components/WindowGraphic.svelte';
   import { percentText } from '../lib/confidence';
   import { shutters } from '../lib/shutters.svelte';
@@ -9,12 +10,13 @@
     id: string;
     onback: () => void;
     oncalibrate: (id: string) => void;
+    onremoved: () => void;
   }
-  let { id, onback, oncalibrate }: Props = $props();
+  let { id, onback, oncalibrate, onremoved }: Props = $props();
 
   const shutter = $derived(shutters.byId(id));
   const live = $derived(shutter ? shutters.livePercent(shutter) : null);
-  const busy = $derived(!shutters.bridge.connected || (shutter?.measuring ?? false));
+  const busy = $derived(!shutters.bridge.connected || (shutter?.measuring ?? false) || (shutter?.forgotten ?? false));
 
   let sliderValue = $state(0);
   let dragging = $state(false);
@@ -47,6 +49,17 @@
 
     {#if shutter.measuring}
       <MeasuringBanner name={shutter.name} />
+    {/if}
+
+    {#if shutter.forgotten}
+      <!-- Feature 005, US4: commands would vanish into the air; say so, keep the settings. -->
+      <div class="forgotten" role="status">
+        <strong>Funkbrücke kennt diesen Rolladen nicht mehr.</strong>
+        <span>
+          Nach ihrem letzten Neustart hat sie ihn nicht mehr gemeldet. Befehle gehen nicht raus;
+          Einstellungen, Gruppen und Automationen bleiben, bis du ihn entfernst.
+        </span>
+      </div>
     {/if}
 
     <div class="stage">
@@ -90,7 +103,7 @@
       <button type="button" class="btn big" disabled={busy || !shutters.canClose(shutter)} onclick={() => shutters.command(shutter.id, 'close')}>zu</button>
     </div>
 
-    <button type="button" class="btn calibrate" disabled={shutter.measuring} onclick={() => oncalibrate(shutter.id)}>
+    <button type="button" class="btn calibrate" disabled={shutter.measuring || shutter.forgotten} onclick={() => oncalibrate(shutter.id)}>
       {shutter.calibrated ? 'Laufzeiten neu messen' : 'Laufzeiten messen'}
     </button>
 
@@ -110,10 +123,22 @@
         </button>
       </div>
     {/if}
+    <RemoveShutter {shutter} onremoved={() => onremoved()} />
   </section>
 {/if}
 
 <style>
+  .forgotten {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: var(--amber-soft);
+    border: 1px solid var(--amber-line);
+    color: var(--amber);
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 13px;
+  }
   .screen {
     display: flex;
     flex-direction: column;

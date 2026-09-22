@@ -15,7 +15,9 @@
   const busy = $derived(!shutters.bridge.connected || shutter.measuring);
 
   const state = $derived(
-    shutter.measuring
+    shutter.forgotten
+      ? 'Funkbrücke kennt ihn nicht mehr'
+      : shutter.measuring
       ? 'wird gemessen …'
       : shutter.movement
       ? shutter.movement.direction === 'up'
@@ -43,7 +45,9 @@
       <button type="button" class="name" onclick={() => onopen(shutter.id)}>{shutter.name}</button>
       <span class="sub">{state}</span>
       <ConfidenceBadge position={shutter.position} moving={shutter.movement !== null} />
-      {#if shutter.measuring}
+      {#if shutter.forgotten}
+        <span class="warn">Befehle gehen nicht mehr raus</span>
+      {:else if shutter.measuring}
         <span class="measuring"><span class="pulse"></span>Messung läuft</span>
       {:else if !shutter.calibrated}
         <span class="warn">Laufzeit nicht gemessen</span>

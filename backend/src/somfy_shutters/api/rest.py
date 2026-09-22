@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from .. import commands
 from ..bridge.base import BridgeUnreachable, Report
-from ..commands import MeasurementInProgress
+from ..commands import MeasurementInProgress, ShutterForgotten
 from ..roster import ConfiguredByHand, NameTaken
 from ..tracker import Tracker, UnknownShutter
 from .serialize import movement_json, shutter_json, snapshot_json
@@ -122,6 +122,16 @@ async def command_one(request: Request, shutter_id: str, body: CommandBody) -> J
                 "accepted": False,
                 "error": "measurement_in_progress",
                 "message": "Für diesen Rolladen läuft gerade eine Messung.",
+                "detail": None,
+            },
+            status_code=409,
+        )
+    except ShutterForgotten:
+        return JSONResponse(
+            {
+                "accepted": False,
+                "error": "forgotten",
+                "message": "Die Funkbrücke kennt diesen Rolladen nicht mehr.",
                 "detail": None,
             },
             status_code=409,

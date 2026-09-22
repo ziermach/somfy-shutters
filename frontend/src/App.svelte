@@ -12,6 +12,7 @@
   import Groups from './routes/Groups.svelte';
   import Overview from './routes/Overview.svelte';
   import Shutters from './routes/Shutters.svelte';
+  import AddShutter from './routes/AddShutter.svelte';
 
   type View =
     | { name: 'overview' }
@@ -22,7 +23,8 @@
     | { name: 'ruleForm'; id?: string }
     | { name: 'groups' }
     | { name: 'groupForm'; id?: string }
-    | { name: 'shutters' };
+    | { name: 'shutters' }
+    | { name: 'addShutter' };
 
   let view = $state<View>({ name: 'overview' });
 
@@ -62,6 +64,7 @@
       id={view.id}
       onback={() => (view = { name: 'overview' })}
       oncalibrate={(id) => (view = { name: 'calibrationRun', id })}
+      onremoved={() => (view = { name: 'shutters' })}
     />
   {:else if view.name === 'calibration'}
     <Calibration
@@ -86,10 +89,15 @@
     {#key view.id}
       <GroupForm id={view.id} onback={() => (view = { name: 'groups' })} />
     {/key}
+  {:else if view.name === 'addShutter'}
+    <AddShutter
+      onback={() => (view = { name: 'shutters' })}
+      oncalibrate={(id) => (view = { name: 'calibrationRun', id })}
+    />
   {:else if view.name === 'shutters'}
     <Shutters
       onback={() => (view = { name: 'overview' })}
-      onadd={() => (view = { name: 'shutters' })}
+      onadd={() => (view = { name: 'addShutter' })}
       onopen={(id) => (view = { name: 'detail', id })}
     />
   {:else}

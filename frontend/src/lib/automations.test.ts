@@ -55,6 +55,9 @@ describe('what happened', () => {
       'übersprungen — Messung läuft'
     );
     expect(outcomeText({ shutter_id: 'x', result: 'failed', reason: 'bridge_unreachable' })).toContain('Funkbrücke');
+    expect(outcomeText({ shutter_id: 'x', result: 'skipped', reason: 'forgotten' })).toBe(
+      'übersprungen — Funkbrücke kennt ihn nicht mehr'
+    );
   });
 });
 

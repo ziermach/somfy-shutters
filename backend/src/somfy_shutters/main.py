@@ -225,6 +225,9 @@ def create_app(
         pending: set[asyncio.Task[None]] = set()
 
         def bridge_changed(connected: bool) -> None:
+            # Feature 005: each return of the bridge opens the window that decides
+            # which shutters it forgot.
+            roster.bridge_availability(connected)
             task = asyncio.create_task(
                 bus.publish({"type": "bridge", "connected": connected, "kind": bridge.kind})
             )

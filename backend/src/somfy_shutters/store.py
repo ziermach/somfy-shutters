@@ -80,6 +80,11 @@ class Store:
         with self._lock:
             self._conn.execute(UPSERT, row)
 
+    def delete(self, shutter_id: str) -> None:
+        """A shutter left the household (feature 005)."""
+        with self._lock:
+            self._conn.execute("DELETE FROM shutter_state WHERE shutter_id = ?", (shutter_id,))
+
     def load_all(self) -> dict[str, PositionEstimate]:
         """Restore positions. A shutter that was travelling comes back unknown."""
         with self._lock:

@@ -117,3 +117,34 @@ def test_settings_round_trip_and_delete(store) -> None:
     assert store.setting("location") == {"latitude": 52.52, "longitude": 13.4}
     store.set_setting("location", None)
     assert store.setting("location") is None
+
+
+def test_remove_shutter_from_every_rule(store) -> None:
+    """Feature 005: a removed shutter leaves every rule's targets; groups stay."""
+    from somfy_shutters.automation.models import Targets
+
+    both = store.create(draft(targets=Targets(shutters=["bad", "kueche"])))
+    only = store.create(draft(targets=Targets(shutters=["bad"])))
+    via_group = store.create(draft(targets=Targets(shutters=["bad"], groups=["g_1"])))
+    everyone = store.create(draft(targets="all"))
+    untouched = store.create(draft(targets=Targets(shutters=["kueche"])))
+
+    emptied = store.remove_shutter("bad")
+
+    assert emptied == [only.id]
+    assert store.rule(both.id).targets.shutters == ["kueche"]
+    assert store.rule(only.id).targets.empty
+    assert store.rule(via_group.id).targets.groups == ["g_1"]
+    assert store.rule(via_group.id).targets.shutters == []
+    assert store.rule(everyone.id).targets == "all"
+    assert store.rule(untouched.id).updated_at == untouched.updated_at
+    assert store.remove_shutter("bad") == []
+
+
+def test_rules_naming_a_shutter(store) -> None:
+    from somfy_shutters.automation.models import Targets
+
+    named = store.create(draft(name="Abends zu", targets=Targets(shutters=["bad"])))
+    store.create(draft(targets=Targets(shutters=["kueche"])))
+    store.create(draft(targets="all"))
+    assert [r.id for r in store.rules_naming("bad")] == [named.id]

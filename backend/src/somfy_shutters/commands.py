@@ -22,13 +22,18 @@ class MeasurementInProgress(RuntimeError):
     """A command was aimed at a shutter that is being measured (FR-028)."""
 
 
+class ShutterForgotten(RuntimeError):
+    """The bridge no longer announces this shutter (feature 005, FR-017). A command
+    would be published to a topic nobody listens to."""
+
+
 async def apply(
     state: Any, shutter_id: str, action: str, target_percent: int | None = None
 ) -> dict[str, Any]:
     """Issue one command.
 
-    Raises MeasurementInProgress, BridgeUnreachable (from the bridge) or
-    UnknownShutter (from the tracker). Nothing is queued: a command that cannot be
+    Raises MeasurementInProgress, ShutterForgotten, BridgeUnreachable (from the
+    bridge) or UnknownShutter (from the tracker). Nothing is queued: a command that cannot be
     handed over now did not happen.
     """
     # Checked here rather than on one route: "Alle zu" reached this function by
@@ -36,6 +41,9 @@ async def apply(
     runs = getattr(state, "runs", None)
     if runs is not None and runs.is_measuring(shutter_id):
         raise MeasurementInProgress(shutter_id)
+    roster = getattr(state, "roster", None)
+    if roster is not None and roster.is_forgotten(shutter_id):
+        raise ShutterForgotten(shutter_id)
 
     tracker = state.tracker
     bridge = state.bridge
@@ -80,6 +88,8 @@ async def apply_many(
             results.append(
                 {"id": shutter_id, "accepted": False, "error": "measurement_in_progress"}
             )
+        except ShutterForgotten:
+            results.append({"id": shutter_id, "accepted": False, "error": "forgotten"})
         except BridgeUnreachable:
             results.append({"id": shutter_id, "accepted": False, "error": "bridge_unreachable"})
     return results

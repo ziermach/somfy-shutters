@@ -12,7 +12,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from ..roster import NameTaken, NotAnnounced, Roster
+from ..roster import ConfiguredByHand, MeasurementInProgress, NameTaken, NotAnnounced, Roster
 from .serialize import shutter_json
 
 router = APIRouter(prefix="/api")
@@ -57,3 +57,49 @@ async def confirm_new(request: Request, address: str, body: NameBody) -> JSONRes
     return JSONResponse(
         shutter_json(shutter.id, state.tracker, getattr(state, "runs", None)), status_code=201
     )
+
+
+UNKNOWN = (404, "unknown_shutter", "Diesen Rolladen gibt es nicht.")
+REFUSED = {
+    "configured_by_hand": (
+        409,
+        "configured_by_hand",
+        "Dieser Rolladen ist in config/shutters.toml eingetragen. Entfernt wird er dort.",
+    ),
+    "measurement_in_progress": (
+        409,
+        "measurement_in_progress",
+        "Für diesen Rolladen läuft gerade eine Messung. Erst beenden oder abbrechen.",
+    ),
+}
+
+
+@router.get("/shutters/{shutter_id}/removal")
+async def removal_preview(request: Request, shutter_id: str) -> JSONResponse:
+    try:
+        return JSONResponse(_roster(request).removal_preview(shutter_id))
+    except KeyError:
+        return error(*UNKNOWN)
+
+
+@router.delete("/shutters/{shutter_id}")
+async def remove(request: Request, shutter_id: str) -> JSONResponse:
+    """Sends nothing to the bridge (FR-015)."""
+    try:
+        set_aside = await _roster(request).remove(shutter_id)
+    except KeyError:
+        return error(*UNKNOWN)
+    except ConfiguredByHand:
+        return error(*REFUSED["configured_by_hand"])
+    except MeasurementInProgress:
+        return error(*REFUSED["measurement_in_progress"])
+    return JSONResponse({"removed": shutter_id, "set_aside": set_aside})
+
+
+@router.post("/roster/set-aside/{address}/restore")
+async def restore(request: Request, address: str) -> JSONResponse:
+    try:
+        await _roster(request).restore(address.strip().lower())
+    except KeyError:
+        return error(404, "unknown_address", "Unter dieser Adresse liegt nichts beiseite.")
+    return JSONResponse(_roster(request).wire())

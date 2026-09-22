@@ -134,3 +134,94 @@ async def test_configured_web_url_wins(client) -> None:
     client.app.state.settings.bridge.web_url = "http://pi-somfy.fritz.box/"
     body = (await client.get("/api/roster")).json()
     assert body["bridge"]["web_url"] == "http://pi-somfy.fritz.box/"
+
+
+# --- US3: removal -----------------------------------------------------------------
+
+
+async def bridge_shutter(client, address: str = "0x279630", name: str = "Bad") -> dict:
+    await announced(client, 3)
+    return await confirm(client, address, name)
+
+
+def start_measuring(client, shutter_id: str) -> None:
+    import time
+
+    from somfy_shutters.calibration import ActiveRun, Direction, RunKind
+
+    client.app.state.runs.start(
+        ActiveRun(
+            shutter_id=shutter_id,
+            direction=Direction.UP,
+            started_monotonic=time.monotonic(),
+            expected_total=20.0,
+            kind=RunKind.GUIDED,
+        )
+    )
+
+
+async def test_removal_preview_shape(client) -> None:
+    await bridge_shutter(client)
+    group = (await client.post("/api/groups", json={"name": "Oben", "members": ["bad"]})).json()
+    rule = {
+        "name": "Abends zu",
+        "days": [True] * 7,
+        "trigger": {"kind": "time", "time": "21:00"},
+        "targets": {"shutters": ["bad"], "groups": []},
+        "action": {"kind": "close"},
+    }
+    created = (await client.post("/api/automations", json=rule)).json()
+    body = (await client.get("/api/shutters/bad/removal")).json()
+    assert body == {
+        "removable": True,
+        "groups": [{"id": group["id"], "name": "Oben"}],
+        "rules": [{"id": created["id"], "name": "Abends zu", "left_without_target": True}],
+        "calibrated": False,
+        "still_announced": True,
+        "reason": None,
+    }
+
+
+async def test_removal_preview_refusals(client) -> None:
+    body = (await client.get("/api/shutters/wohnzimmer/removal")).json()
+    assert (body["removable"], body["reason"]) == (False, "configured_by_hand")
+    await bridge_shutter(client)
+    start_measuring(client, "bad")
+    body = (await client.get("/api/shutters/bad/removal")).json()
+    assert (body["removable"], body["reason"]) == (False, "measurement_in_progress")
+    assert (await client.get("/api/shutters/nope/removal")).status_code == 404
+
+
+async def test_delete(client) -> None:
+    await bridge_shutter(client)
+    response = await client.delete("/api/shutters/bad")
+    assert response.status_code == 200
+    assert response.json() == {"removed": "bad", "set_aside": True}
+    assert (await client.get("/api/shutters/bad")).status_code == 404
+    body = (await client.get("/api/roster")).json()
+    assert body["set_aside"] == [{"address": "0x279630", "name": "Bad"}]
+    assert "0x279630" not in [n["address"] for n in body["new"]]
+
+
+async def test_delete_refusals(client) -> None:
+    response = await client.delete("/api/shutters/wohnzimmer")
+    assert response.status_code == 409
+    assert set(response.json()) == ERROR_KEYS
+    assert response.json()["error"] == "configured_by_hand"
+    await bridge_shutter(client)
+    start_measuring(client, "bad")
+    response = await client.delete("/api/shutters/bad")
+    assert response.status_code == 409
+    assert response.json()["error"] == "measurement_in_progress"
+    assert (await client.delete("/api/shutters/nope")).status_code == 404
+
+
+async def test_restore(client) -> None:
+    await bridge_shutter(client)
+    await client.delete("/api/shutters/bad")
+    response = await client.post("/api/roster/set-aside/0x279630/restore")
+    assert response.status_code == 200
+    body = (await client.get("/api/roster")).json()
+    assert body["set_aside"] == []
+    assert "0x279630" in [n["address"] for n in body["new"]]
+    assert (await client.post("/api/roster/set-aside/0x279630/restore")).status_code == 404

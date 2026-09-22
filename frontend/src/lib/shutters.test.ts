@@ -52,6 +52,13 @@ describe('which buttons make sense', () => {
     expect(shutters.canStop(shutter(0, opening))).toBe(true);
   });
 
+  it('offers nothing for a shutter the bridge forgot (feature 005)', () => {
+    const gone = { ...shutter(40, opening), forgotten: true };
+    expect(shutters.canOpen(gone)).toBe(false);
+    expect(shutters.canClose(gone)).toBe(false);
+    expect(shutters.canStop(gone)).toBe(false);
+  });
+
   it('an unknown position leaves both on offer — that is how it becomes known', () => {
     expect(shutters.canOpen(shutter(null))).toBe(true);
     expect(shutters.canClose(shutter(null))).toBe(true);

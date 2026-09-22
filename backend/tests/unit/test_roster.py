@@ -165,3 +165,97 @@ async def test_slug_avoids_configured_and_stored_ids(roster: Roster, rows: Roste
 async def test_unique_name_suggestion(roster: Roster) -> None:
     assert roster.unique_name("Küche") == "Küche 2"
     assert roster.unique_name("Bad") == "Bad"
+
+
+# --- US4: the bridge forgets ------------------------------------------------------
+
+
+async def bridge_shutter(roster: Roster, address: str = "0x279630", name: str = "Bad") -> str:
+    await roster.handle(announce(address, name))
+    return (await roster.confirm(address, name)).id
+
+
+async def restart_with(roster: Roster, *addresses: str) -> None:
+    """The bridge restarts and announces these, live, inside the window."""
+    roster.bridge_availability(False)
+    roster.bridge_availability(True)
+    for address in addresses:
+        await roster.handle(announce(address, "x", retained=False))
+    await roster.close_window()
+
+
+async def test_missing_after_a_restart_is_forgotten(roster: Roster) -> None:
+    bad = await bridge_shutter(roster)
+    other = await bridge_shutter(roster, "0x279631", "Gäste")
+    await restart_with(roster, "0x279631", "0x279621")
+    assert roster.is_forgotten(bad)
+    assert not roster.is_forgotten(other)
+
+
+async def test_retained_announcements_do_not_count(roster: Roster) -> None:
+    bad = await bridge_shutter(roster)
+    await bridge_shutter(roster, "0x279631", "Gäste")
+    roster.bridge_availability(False)
+    roster.bridge_availability(True)
+    await roster.handle(announce("0x279630", "Bad", retained=True))
+    await roster.handle(announce("0x279631", "Gäste", retained=False))
+    await roster.close_window()
+    assert roster.is_forgotten(bad)
+
+
+async def test_a_later_live_announcement_clears_it(roster: Roster) -> None:
+    bad = await bridge_shutter(roster)
+    await restart_with(roster, "0x279621")
+    assert roster.is_forgotten(bad)
+    await roster.handle(announce("0x279630", "Bad", retained=False))
+    assert not roster.is_forgotten(bad)
+
+
+async def test_hand_configured_shutters_are_never_forgotten(roster: Roster) -> None:
+    await bridge_shutter(roster)
+    await restart_with(roster, "0x279630")
+    assert roster.forgotten == set()
+
+
+async def test_offline_alone_forgets_nothing(roster: Roster) -> None:
+    bad = await bridge_shutter(roster)
+    roster.bridge_availability(True)
+    roster.bridge_availability(False)
+    await roster.close_window()
+    assert not roster.is_forgotten(bad)
+
+
+async def test_a_window_without_any_live_announcement_decides_nothing(roster: Roster) -> None:
+    """The app connecting to a bridge that has been up for hours: only old news arrives."""
+    bad = await bridge_shutter(roster)
+    roster.bridge_availability(True)
+    await roster.handle(announce("0x279621", "Wohnzimmer", retained=True))
+    await roster.close_window()
+    assert not roster.is_forgotten(bad)
+
+
+async def test_forgotten_changes_are_published(settings: Settings, rows: RosterStore) -> None:
+    events: list[dict] = []
+
+    async def publish(event: dict) -> None:
+        events.append(event)
+
+    roster = Roster(settings, rows, publish=publish)
+    await roster.handle(announce("0x279630", "Bad"))
+    await roster.confirm("0x279630", "Bad")
+    events.clear()
+    await restart_with(roster, "0x279621")
+    assert events[-1]["type"] == "roster"
+    assert events[-1]["forgotten"] == ["bad"]
+
+
+async def test_the_window_closes_by_itself(settings: Settings, rows: RosterStore) -> None:
+    import asyncio
+
+    roster = Roster(settings, rows, window_seconds=0.05)
+    bad = await bridge_shutter(roster)
+    roster.bridge_availability(False)
+    roster.bridge_availability(True)
+    await roster.handle(announce("0x279621", "Wohnzimmer", retained=False))
+    await asyncio.sleep(0.15)
+    assert roster.is_forgotten(bad)

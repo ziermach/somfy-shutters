@@ -56,17 +56,20 @@ class ShutterState {
 
   /** "auf" does nothing for a shutter that is open or already opening. */
   canOpen(shutter: Shutter): boolean {
-    return this.#endsAt(shutter) !== 100;
+    return !shutter.forgotten && this.#endsAt(shutter) !== 100;
   }
 
   /** "zu" does nothing for a shutter that is closed or already closing. */
   canClose(shutter: Shutter): boolean {
-    return this.#endsAt(shutter) !== 0;
+    return !shutter.forgotten && this.#endsAt(shutter) !== 0;
   }
 
-  /** "stop" only means something while a travel is under way. */
+  /**
+   * "stop" only means something while a travel is under way. A shutter the bridge
+   * forgot (feature 005) takes no command at all: it would vanish into the air.
+   */
   canStop(shutter: Shutter): boolean {
-    return shutter.movement !== null;
+    return !shutter.forgotten && shutter.movement !== null;
   }
 
   /** Advance the animation clock; called once per frame. */
@@ -121,6 +124,10 @@ class ShutterState {
         break;
       case 'roster':
         roster.setCounts({ new: frame.new, forgotten: frame.forgotten });
+        // Forgotten is decided without a snapshot; the buttons must follow at once.
+        this.shutters = this.shutters.map((s) =>
+          s.forgotten === frame.forgotten.includes(s.id) ? s : { ...s, forgotten: !s.forgotten }
+        );
         break;
       case 'groups':
         groups.set(frame.groups);
