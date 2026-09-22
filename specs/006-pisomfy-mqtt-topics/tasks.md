@@ -26,8 +26,8 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`. Frontend untou
 
 ## Phase 1: Setup — governance first
 
-- [ ] T001 Amend `.specify/memory/constitution.md` principle II: replace `somfy/<address>/level/cmd` outbound and `somfy/<address>/level/set_state` inbound with `somfy/<id>/command` and `somfy/<id>/set_position` outbound, `somfy/<id>/position`, `somfy/<id>/state` and `somfy/bridge/availability` inbound; keep the rule ("the only integration boundary; Flask routes, HTML, database and config files MUST NOT be scraped, called, or written") and the rationale verbatim; bump **1.0.0 → 1.1.0**, set Last Amended to 2026-09-22, prepend a Sync Impact Report naming feature 006 and the dependent files (CLAUDE.md, README.md, specs/001 contract)
-- [ ] T002 [P] Mark `specs/001-mqtt-live-position/contracts/mqtt.md` as superseded at the top, linking to [contracts/mqtt.md](./contracts/mqtt.md), without deleting its reasoning
+- [X] T001 Amend `.specify/memory/constitution.md` principle II: replace `somfy/<address>/level/cmd` outbound and `somfy/<address>/level/set_state` inbound with `somfy/<id>/command` and `somfy/<id>/set_position` outbound, `somfy/<id>/position`, `somfy/<id>/state` and `somfy/bridge/availability` inbound; keep the rule ("the only integration boundary; Flask routes, HTML, database and config files MUST NOT be scraped, called, or written") and the rationale verbatim; bump **1.0.0 → 1.1.0**, set Last Amended to 2026-09-22, prepend a Sync Impact Report naming feature 006 and the dependent files (CLAUDE.md, README.md, specs/001 contract)
+- [X] T002 [P] Mark `specs/001-mqtt-live-position/contracts/mqtt.md` as superseded at the top, linking to [contracts/mqtt.md](./contracts/mqtt.md), without deleting its reasoning
 
 ---
 

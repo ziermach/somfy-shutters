@@ -1,3 +1,20 @@
+<!--
+Sync Impact Report
+Version change: 1.0.0 → 1.1.0 (MINOR — materially updated guidance, no principle removed or redefined)
+Modified principles:
+  - II. MQTT Is the Only Integration Boundary: topic names updated to Pi-Somfy's current
+    interface (v3.1, 2026-03-27). The removed `level/cmd` / `level/set_state` topics are
+    replaced by `command`, `set_position`, `position`, `state` and `bridge/availability`.
+    Rule and rationale unchanged.
+  - Interface rules: "subscribes to set_state" → position, state and availability topics;
+    "must not wait for a set_state message" → a position report.
+Added sections: none. Removed sections: none.
+Driven by: specs/006-pisomfy-mqtt-topics.
+Templates requiring updates: none (.specify/templates/* do not name topics).
+Follow-up updates: CLAUDE.md (non-negotiables, open question 1), README.md (architecture),
+  specs/001-mqtt-live-position/contracts/mqtt.md (marked superseded by specs/006 contract).
+-->
+
 # somfy-shutters Constitution
 
 somfy-shutters is a self-hosted app that controls SIMU/Somfy RTS roller shutters through
@@ -17,9 +34,10 @@ its own counter desynchronizes the motors and requires physical re-pairing at ev
 
 ### II. MQTT Is the Only Integration Boundary
 
-This project MUST talk to the shutter layer exclusively over MQTT topics — `somfy/<address>/level/cmd`
-outbound, `somfy/<address>/level/set_state` inbound. Pi-Somfy's Flask routes, its HTML, its
-database, and its config files MUST NOT be scraped, called, or written by this project.
+This project MUST talk to the shutter layer exclusively over MQTT topics — `somfy/<id>/command`
+and `somfy/<id>/set_position` outbound; `somfy/<id>/position`, `somfy/<id>/state` and
+`somfy/bridge/availability` inbound. Pi-Somfy's Flask routes, its HTML, its database, and its
+config files MUST NOT be scraped, called, or written by this project.
 
 Rationale: MQTT is Pi-Somfy's documented, supported interface; the web UI is not. Holding this
 boundary keeps the transmitter swappable — moving to ESPSomfy-RTS changes an endpoint, not the app.
@@ -76,10 +94,10 @@ Hardware rules:
 Interface rules:
 
 - RTS addresses live in `operateShutters.conf` and are referenced by the app, never invented.
-- The backend subscribes to `set_state` for all shutters and pushes changes to clients over
+- The backend subscribes to the position, state and availability topics for all shutters and pushes changes to clients over
   WebSocket; clients MUST NOT connect to MQTT directly.
 - Command animation starts on send and runs for the configured travel time; it MUST NOT wait
-  for a `set_state` message, which arrives sparsely.
+  for a position report, which arrives sparsely.
 
 ## Development Workflow
 
@@ -109,4 +127,4 @@ conflicts with it, the constitution wins.
   fixed or recorded with an explicit justification in the plan's complexity tracking.
 - Runtime development guidance lives in `CLAUDE.md` and must stay consistent with this document.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-21 | **Last Amended**: 2026-09-21
+**Version**: 1.1.0 | **Ratified**: 2026-09-21 | **Last Amended**: 2026-09-22
