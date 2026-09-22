@@ -128,7 +128,7 @@ or plain storage, which is why the tests below are cheap.
 - [X] T037 Walk quickstart **C4.2**: a manual value in `shutters.toml` overrides a measurement, the interface says so, and the measurement is not discarded
 - [X] T038 [P] Add `GET /api/sim/truth` in `backend/src/somfy_shutters/api/rest.py`, registered only for the simulator, so convergence can be checked by hand as the quickstart describes
 - [X] T039 [P] Document calibration in `backend/README.md` and add `config/calibration.example.toml`; add `config/calibration.toml` to `.gitignore`
-- [ ] T040 Run the whole of [quickstart.md](./quickstart.md) against the simulator and fix what it surfaces
+- [X] T040 Run the whole of [quickstart.md](./quickstart.md) against the simulator and fix what it surfaces
 - [X] T041 Update root `README.md` once the feature works: calibration moves from the "not yet" column to what works today
 
 ---

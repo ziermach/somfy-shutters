@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import time
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,12 @@ from .api import calibration_routes, rest, ws
 from .bridge.base import ShutterBridge
 from .bridge.mqtt import MqttBridge
 from .bridge.sim import SimBridge
-from .calibration import PendingConfirmation, RunRegistry, may_ask_for_confirmation
+from .calibration import (
+    PendingConfirmation,
+    RejectionReason,
+    RunRegistry,
+    may_ask_for_confirmation,
+)
 from .calibration_store import CalibrationService, CalibrationStore
 from .config import Settings, load_settings
 from .events import EventBus
@@ -173,6 +179,20 @@ def create_app(
         async def pump_ticks() -> None:
             while True:
                 await tracker.tick()
+                for stale in runs.sweep(time.monotonic()):
+                    # FR-009: nobody pressed "arrived". Record why, and let go of
+                    # the shutter — a measurement must never leave a window stuck.
+                    run = stale.finish(
+                        time.monotonic(),
+                        calibration.established_total(stale.shutter_id, stale.direction),
+                    )
+                    calibration.record(
+                        run.model_copy(update={"rejected": RejectionReason.ABANDONED})
+                    )
+                    log.info(
+                        "calibration run on %s abandoned, nobody confirmed arrival",
+                        stale.shutter_id,
+                    )
                 await asyncio.sleep(TICK_SECONDS)
 
         tasks = [asyncio.create_task(pump_reports()), asyncio.create_task(pump_ticks())]

@@ -258,6 +258,18 @@ class RunRegistry:
     def is_measuring(self, shutter_id: str) -> bool:
         return shutter_id in self._active
 
+    def sweep(self, now_monotonic: float) -> list[ActiveRun]:
+        """Give up on runs nobody finished, and release their shutters.
+
+        Without this a run where the second press never comes stays open for
+        good, and the shutter it holds refuses every command — the app would
+        have made a window unusable by offering to measure it.
+        """
+        stale = [run for run in self._active.values() if run.is_abandoned(now_monotonic)]
+        for run in stale:
+            del self._active[run.shutter_id]
+        return stale
+
 
 # --- the one-tap confirmation ------------------------------------------------
 

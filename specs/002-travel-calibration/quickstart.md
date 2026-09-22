@@ -7,6 +7,18 @@ feature: the simulator's per-window dead time and travel curve are exactly what 
 calibration has to discover, and the app cannot see them. Convergence on values it was
 never told is the whole proof.
 
+**Most of this is now automated.** `backend/tests/integration/test_quickstart.py` walks
+C1.1 to C1.8 and C3.1 to C3.4 against the running app, comparing against the simulator's
+hidden truth where this document says to. Run it with:
+
+```bash
+cd backend && .venv/bin/python -m pytest tests/integration/test_quickstart.py
+```
+
+The scenarios below remain worth doing by hand the first time, and **C4.1 has to be
+done by eye whatever the tests say** — colour and wording can imply certainty without a
+single field changing.
+
 Setup as in [feature 001's quickstart](../001-mqtt-live-position/quickstart.md).
 
 ---
@@ -48,8 +60,12 @@ stored value unchanged.
 
 Start a run, press "moving", then abort. The shutter's position must become uncertain,
 and the calibration screen must offer the drive to an end stop before the next run.
+
 Separately: start a run and press nothing. After twice the expected travel the run must
-abandon itself rather than wait forever.
+abandon itself, record the reason, and **let go of the shutter** — until T040 this was
+not implemented at all, and an unfinished run held the window hostage: every command
+came back `measurement_in_progress` for good. Note that "expected travel" means the
+app's current estimate, so an uncalibrated shutter waits twice the stated default.
 
 **C1.7 It takes effect at once (FR-017)**
 
@@ -97,12 +113,35 @@ is reached, and the interface must stop inviting an answer that changes nothing.
 
 ---
 
-## Not in this feature
+## Story 2 — staying accurate with one tap
 
-**Story 2 is not implemented.** Passive recalibration cannot be built: nothing observes
-when a travel ends, so the "measurement" would be the number we already had. See
-[research.md §1](./research.md) for the full argument and the one-tap replacement it
-proposes. Do not write a test for FR-018 to FR-020 — they need a spec amendment first.
+The story was amended before implementation. Passive recalibration cannot be built:
+nothing observes when a travel ends, so the "measurement" would be the number we already
+had — [research.md §1](./research.md) has the argument. What exists instead is a single
+question after an ordinary travel.
+
+**C2.1 The question appears after an end-to-end travel**
+
+Drive a shutter fully open from fully closed with the app in the foreground. Once the
+app believes it has arrived, it asks once whether it really has.
+
+**C2.2 A partial travel asks nothing (FR-019)**
+
+Drive to 60 %. No question, and nothing recorded — a travel on its own is not evidence.
+
+**C2.3 The tap is the measurement**
+
+Answer **Ja** a second or two after the question appears. The recorded run is longer
+than the app's own estimate by roughly that delay, because the moment of the tap is what
+counts, not the moment the app guessed.
+
+**C2.4 Silence records nothing (FR-018a)**
+
+Ignore the question. Nothing appears in the runs list, and nothing is inferred.
+
+**C2.5 It does not nag**
+
+Drive end to end again the same day. No second question for that shutter.
 
 ---
 
@@ -129,9 +168,14 @@ being overridden, and must not silently discard the measurement.
 ## Automated suite
 
 ```bash
-cd backend && pytest -k calibration
+cd backend && .venv/bin/python -m pytest      # includes the quickstart walkthrough
+cd frontend && npm test                       # the wording in front of the user
 ```
 
-The tests must press with **jittered** reaction times, not at the exact right instant.
+The tests press with **jittered** reaction times, not at the exact right instant.
 Pressing perfectly proves a precision no person will reproduce, and would hide the
 whole reason the median is there.
+
+What the frontend tests cover is narrow and deliberate: the phrases a person reads, and
+a structural check that no screen shows a percentage without the confidence beside it.
+They do not render anything.
