@@ -92,36 +92,48 @@ a UI exists to inspect it, and makes a backup useless without the app.
 
 ## 3. Verification without moving the end points (FR-024 and FR-025)
 
-**Decision**: one shape parameter `k` per shutter and direction, applied as
+**Decision**: one shape parameter `a` per shutter and direction, applied as
 
 ```
-position(p) = p − k · sin(2πp) / 2π        p = elapsed / travel_time, k ∈ [−0.8, 0.8]
+position(p) = p ** a        p = elapsed / travel_time, a ∈ [0.7, 1.4]
 ```
 
-`k = 0` is the linear behaviour of feature 001. For any `k`, `position(0) = 0` and
+`a = 1` is the linear behaviour of feature 001. For any `a > 0`, `position(0) = 0` and
 `position(1) = 1` **exactly** — the end points are invariant by construction, not by a
-clamp that could be forgotten. The maximum deviation sits at the quarter points and is
-`k / 2π`, so `k = 0.55` moves mid-travel by about 8.8 points.
+clamp that could be forgotten. The deviation is largest around the middle: `a = 1.25`
+moves mid-travel by about 8 points.
 
-Each "zu hoch" or "zu tief" nudges `k` by 0.1, which moves mid-travel by 1.6 points —
-verified, along with the invariants: for every `k` in the band, `f(0)` is exactly 0,
-`f(1)` is exactly 1, and the curve stays monotonic, so the displayed position never runs
-backwards. Three or four answers cover the roughly 5 points needed to get from what two
-presses leave to what SC-003 asks for; the bound at 0.8 is reached after eight, and
-caps the whole control at 12.7 points.
+**Corrected 2026-09-22.** This first said `p − k·sin(2πp)/2π`, which has the same two
+properties and one fatal extra one: it is antisymmetric about the midpoint, so it passes
+through exactly (0.5, 0.5) for *every* k. Since the check drives to the midpoint and
+asks how it looks, it would never have had anything to see — the same trap as the third
+calibration press, in the requirement this time. Found by fixing the simulator and
+measuring: the error sat at the quarter points, ±8 pp, and was exactly zero at 50 %.
+
+Judging "is it about half open" is something a person can do; judging "is it about a
+quarter" is not, so the curve moved rather than the question.
+
+Each "zu hoch" or "zu tief" nudges `a` by 0.05, which moves mid-travel by 1.7 points —
+verified, along with the invariants: across the whole band `f(0)` is exactly 0, `f(1)` is
+exactly 1, and the curve stays monotonic, so the displayed position never runs backwards.
+Three or four answers cover the roughly 5 points needed to get from what two presses
+leave to what SC-003 asks for; the bounds cap the control at about 12 points either way.
+
+"Too high" means the shutter sits lower than the display claims, so the display has to
+show *less* at the same point in the travel — `a` grows, because `p**a < p` for `a > 1`.
 
 This is the same curve family the simulator uses for its hidden truth. That is a
-convenience, not cheating — the simulator's `k` is per window and unknown to the app,
+convenience, not cheating — the simulator's `a` is per window and unknown to the app,
 and a correct implementation has to converge on it from answers alone.
 
 **What it must not become**: a curve adjustment changes the *shape* of the estimate. It
 does not make the position better known. Confidence stays `estimated` and `certain_at`
 is untouched — the same rule feature 001 applies to bridge reports.
 
-**Alternatives considered**: piecewise-linear through a measured midpoint — needs a
-third press, which makes accuracy worse here (the curve is symmetric, so a halfway mark
-lands where the error is already zero). A polynomial fit — more parameters than three
-taps can support.
+**Alternatives considered**: `p − k·sin(2πp)/2π`, rejected above for putting zero error
+exactly where the check looks. Piecewise-linear through a measured midpoint — needs a
+third press, which makes calibration accuracy worse. A polynomial fit — more parameters
+than three taps can support.
 
 ---
 

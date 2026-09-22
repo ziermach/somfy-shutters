@@ -5,7 +5,7 @@
 // here computes a duration — a clock on a phone is not something a measurement
 // should depend on.
 
-export type DirectionValue = { travel_seconds: number; dead_seconds: number; runs: number; curve_k: number; source: 'manual' | 'measured' | 'default'; updated_at: string | null };
+export type DirectionValue = { travel_seconds: number; dead_seconds: number; runs: number; curve_a: number; source: 'manual' | 'measured' | 'default'; updated_at: string | null };
 
 export interface CalibrationShutter {
   id: string;

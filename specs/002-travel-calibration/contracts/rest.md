@@ -15,9 +15,9 @@ One row per shutter, both directions, for the overview screen.
       "name": "Wohnzimmer",
       "state": "calibrated",
       "up":   { "travel_seconds": 18.12, "dead_seconds": 0.74, "runs": 3,
-                "curve_k": 0.2, "source": "measured", "updated_at": "2026-09-21T19:14:02Z" },
+                "curve_a": 1.15, "source": "measured", "updated_at": "2026-09-21T19:14:02Z" },
       "down": { "travel_seconds": 16.04, "dead_seconds": 0.69, "runs": 3,
-                "curve_k": 0.2, "source": "measured", "updated_at": "2026-09-21T19:16:41Z" }
+                "curve_a": 1.15, "source": "measured", "updated_at": "2026-09-21T19:16:41Z" }
     }
   ]
 }
@@ -106,14 +106,14 @@ Starts verification: drives to the displayed midpoint (FR-023).
 { "answer": "too_high" }
 ```
 
-**200** `{ "curve_k": 0.3, "shift_pp": 1.6, "at_limit": false }`
+**200** `{ "curve_a": 1.1, "shift_pp": 3.4, "at_limit": false }`
 
 `at_limit` is true once the bound is reached, so the interface can stop offering more
 of something that will not move.
 
 ## `DELETE /api/calibration/{id}/check`
 
-Undoes every verification answer (FR-026): `curve_k` returns to 0, measurements stay.
+Undoes every verification answer (FR-026): `curve_a` returns to 1, measurements stay.
 
 ## WebSocket
 

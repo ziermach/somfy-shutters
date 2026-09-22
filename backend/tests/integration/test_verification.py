@@ -6,7 +6,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from somfy_shutters.bridge.sim import SimBridge
-from somfy_shutters.calibration import CURVE_BOUND, CURVE_STEP
+from somfy_shutters.calibration import CURVE_MAX, CURVE_MIN, CURVE_NEUTRAL, CURVE_STEP
 from somfy_shutters.config import Settings
 from somfy_shutters.main import create_app
 from somfy_shutters.models import Direction, MeasurementRun, RunKind, utcnow
@@ -67,24 +67,30 @@ async def test_the_check_drives_to_the_displayed_midpoint(client) -> None:
 async def test_answers_move_the_curve_in_the_direction_reported(client) -> None:
     calibrate(client.app)
     lower = await answer(client, "too_high")
-    assert lower["curve_k"] == -CURVE_STEP
+    assert lower["curve_a"] == CURVE_NEUTRAL + CURVE_STEP
     assert lower["shift_pp"] > 1.0
 
     back = await answer(client, "too_low")
-    assert back["curve_k"] == 0.0
+    assert back["curve_a"] == CURVE_NEUTRAL
 
 
 async def test_about_right_changes_nothing(client) -> None:
     calibrate(client.app)
-    assert (await answer(client, "about_right"))["curve_k"] == 0.0
+    assert (await answer(client, "about_right"))["curve_a"] == CURVE_NEUTRAL
 
 
-async def test_the_bound_is_reported(client) -> None:
+async def test_the_bounds_are_reported(client) -> None:
+    """Each direction has its own limit, and the response says when it is reached."""
     calibrate(client.app)
     last = {}
-    for _ in range(12):
+    for _ in range(20):
         last = await answer(client, "too_low")
-    assert last["curve_k"] == CURVE_BOUND
+    assert last["curve_a"] == CURVE_MIN
+    assert last["at_limit"] is True
+
+    for _ in range(40):
+        last = await answer(client, "too_high")
+    assert last["curve_a"] == CURVE_MAX
     assert last["at_limit"] is True
 
 
@@ -94,11 +100,11 @@ async def test_undo_restores_the_curve_and_keeps_the_measurements(client) -> Non
     for _ in range(3):
         await answer(client, "too_high")
     before = (await client.get("/api/calibration/flink")).json()
-    assert before["up"]["curve_k"] != 0
+    assert before["up"]["curve_a"] != CURVE_NEUTRAL
     assert before["up"]["runs"] == 3
 
     after = (await client.delete("/api/calibration/flink/check")).json()
-    assert after["up"]["curve_k"] == 0
+    assert after["up"]["curve_a"] == CURVE_NEUTRAL
     assert after["up"]["runs"] == 3, "the measurements must survive an undo"
     assert after["up"]["travel_seconds"] == 12.0
 
@@ -114,11 +120,11 @@ async def test_the_end_points_are_untouched_by_any_number_of_answers(client) -> 
 
     tracker = client.app.state.tracker
     movement = tracker.movement("flink")
-    k = client.app.state.calibration.curve_k("flink", Direction.UP)
-    assert k != 0, "the curve is actually bent for this assertion to mean anything"
-    assert movement.position_at(movement.started_monotonic, curve_k=k) == 0
+    a = client.app.state.calibration.curve_a("flink", Direction.UP)
+    assert a != 1.0, "the curve is actually bent for this assertion to mean anything"
+    assert movement.position_at(movement.started_monotonic, curve_a=a) == 0
     assert (
-        movement.position_at(movement.started_monotonic + movement.duration_seconds, curve_k=k)
+        movement.position_at(movement.started_monotonic + movement.duration_seconds, curve_a=a)
         == 100
     )
 

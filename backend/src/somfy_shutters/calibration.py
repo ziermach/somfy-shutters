@@ -12,7 +12,6 @@ known (constitution III).
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from statistics import median
@@ -29,8 +28,10 @@ RETAIN_RUNS = 10
 """How many recent valid runs feed the median. Bounded so a genuine change in
 the shutter is followed, while a single outlier is not (FR-021)."""
 
-CURVE_STEP = 0.1
-CURVE_BOUND = 0.8
+CURVE_STEP = 0.05
+CURVE_NEUTRAL = 1.0
+CURVE_MIN = 0.7
+CURVE_MAX = 1.4
 CONFIRM_COOLDOWN_HOURS = 24
 
 CONTRARY_DELTA = 3
@@ -49,38 +50,50 @@ class RejectionReason:
 # --- the curve ---------------------------------------------------------------
 
 
-def travel_curve(progress: float, k: float) -> float:
+def travel_curve(progress: float, a: float) -> float:
     """Map linear progress to displayed progress.
 
-    ``k = 0`` is the linear behaviour of feature 001. For every ``k`` within
-    ±1 this passes through exactly 0 and 1 and stays monotonic, so end points
-    cannot drift and the display never runs backwards — by construction, not by
-    a clamp somebody could forget (FR-025).
+    ``a = 1`` is the linear behaviour of feature 001. For every ``a > 0`` this
+    passes through exactly 0 and 1 and stays monotonic, so end points cannot
+    drift and the display never runs backwards — by construction, not by a clamp
+    somebody could forget (FR-025).
+
+    The first version of this used ``p - k·sin(2πp)/2π``, which has the same two
+    properties and one fatal extra one: it is antisymmetric about the midpoint,
+    so it passes through exactly (0.5, 0.5) for every k. The check drives to the
+    midpoint and asks how it looks, which would have been the one place where
+    there was never anything to see.
     """
-    return progress - (k * math.sin(2 * math.pi * progress)) / (2 * math.pi)
+    return progress**a
 
 
-def clamp_curve(k: float) -> float:
-    return max(-CURVE_BOUND, min(CURVE_BOUND, k))
+def clamp_curve(a: float) -> float:
+    return max(CURVE_MIN, min(CURVE_MAX, a))
 
 
 def curve_from_answers(answers: list[CheckAnswer]) -> float:
     """Accumulate check answers into one shape parameter.
 
-    "Too high" means the shutter is lower than shown, so the displayed middle
-    has to come down: k decreases.
+    "Too high" means the shutter sits lower than the display says, so the
+    display has to show less at the same point in the travel: a grows, because
+    p**a is smaller than p for a > 1.
     """
-    k = 0.0
+    a = CURVE_NEUTRAL
     for answer in answers:
         if answer.answer == "too_high":
-            k -= CURVE_STEP
+            a += CURVE_STEP
         elif answer.answer == "too_low":
-            k += CURVE_STEP
-    return clamp_curve(k)
+            a -= CURVE_STEP
+    return clamp_curve(a)
 
 
-def at_curve_limit(k: float) -> bool:
-    return abs(k) >= CURVE_BOUND - 1e-9
+def at_curve_limit(a: float) -> bool:
+    return a <= CURVE_MIN + 1e-9 or a >= CURVE_MAX - 1e-9
+
+
+def midpoint_shift(a: float) -> float:
+    """How far the middle of the travel moves, in percentage points."""
+    return (0.5**a - 0.5) * 100
 
 
 # --- judging a run -----------------------------------------------------------

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-DIRECTION_KEYS = {"travel_seconds", "dead_seconds", "runs", "curve_k", "source", "updated_at"}
+DIRECTION_KEYS = {"travel_seconds", "dead_seconds", "runs", "curve_a", "source", "updated_at"}
 
 
 async def park(client, shutter_id: str, percent: int) -> None:

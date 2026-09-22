@@ -21,6 +21,7 @@ from ..calibration import (
     ActiveRun,
     CalibrationError,
     at_curve_limit,
+    midpoint_shift,
     nearest_end_stop,
     plan_run,
     rejection_for,
@@ -73,7 +74,7 @@ def _direction_state(service: Any, shutter_id: str, direction: Direction) -> dic
         "travel_seconds": value.travel_seconds,
         "dead_seconds": value.dead_seconds,
         "runs": value.runs,
-        "curve_k": round(value.curve_k, 3),
+        "curve_a": round(value.curve_a, 3),
         "source": value.source,
         "updated_at": value.updated_at.isoformat() if value.updated_at else None,
     }
@@ -404,9 +405,9 @@ async def answer_check(request: Request, shutter_id: str, body: AnswerBody) -> d
     direction = Direction(body.direction)
     value = service.answer_check(shutter_id, direction, CheckReply(body.answer))
     return {
-        "curve_k": round(value.curve_k, 3),
-        "shift_pp": round(abs(value.curve_k) / (2 * 3.141592653589793) * 100, 1),
-        "at_limit": at_curve_limit(value.curve_k),
+        "curve_a": round(value.curve_a, 3),
+        "shift_pp": round(abs(midpoint_shift(value.curve_a)), 1),
+        "at_limit": at_curve_limit(value.curve_a),
     }
 
 

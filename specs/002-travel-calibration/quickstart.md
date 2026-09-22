@@ -103,7 +103,7 @@ if it fails, the feature is dangerous, not just imprecise.
 
 **C3.3 Undo (FR-026)**
 
-Discard the verification. `curve_k` returns to 0 and the measured travel times are
+Discard the verification. `curve_a` returns to 1 and the measured travel times are
 unchanged.
 
 **C3.4 The limit**

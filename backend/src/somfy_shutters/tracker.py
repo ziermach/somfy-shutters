@@ -90,9 +90,9 @@ class Tracker:
         # it started. Clients animate themselves, this is for late joiners.
         # The curve bends the middle of the travel and leaves the ends exact,
         # so a verified shutter still arrives at 0 % and 100 % on the dot.
-        k = self._curve_k(shutter_id, movement.direction)
+        a = self._curve_a(shutter_id, movement.direction)
         return PositionEstimate(
-            percent=movement.position_at(self._monotonic(), curve_k=k),
+            percent=movement.position_at(self._monotonic(), curve_a=a),
             confidence=Confidence.ESTIMATED,
             certain_at=self._positions[shutter_id].certain_at,
             source=Source.COMMAND,
@@ -107,11 +107,11 @@ class Tracker:
             return self._calibration.travel_seconds(shutter_id, direction)
         return self._settings.travel_seconds(shutter_id, direction.value)
 
-    def _curve_k(self, shutter_id: str, direction: Direction) -> float:
-        """The verification shape. Zero means the linear travel of feature 001."""
+    def _curve_a(self, shutter_id: str, direction: Direction) -> float:
+        """The verification shape. One means the linear travel of feature 001."""
         if self._calibration is not None:
-            return self._calibration.curve_k(shutter_id, direction)
-        return 0.0
+            return self._calibration.curve_a(shutter_id, direction)
+        return 1.0
 
     def _require(self, shutter_id: str) -> None:
         if shutter_id not in self._settings.shutters:

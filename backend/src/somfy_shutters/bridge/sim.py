@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import math
 import random
 import time
 from collections.abc import AsyncIterator, Callable
@@ -39,26 +38,18 @@ REPORT_INTERVAL = 1.0
 """Pi-Somfy publishes sparsely; once a second while travelling is generous."""
 
 
-def travel_curve(progress: float, k: float) -> float:
-    """Slats stack at the top and tilt at the bottom, so travel is not linear in time."""
-    return progress - (k * math.sin(2 * math.pi * progress)) / (2 * math.pi)
+def travel_curve(progress: float, a: float) -> float:
+    """Slats stack at the top and tilt at the bottom, so travel is not linear in time.
 
-
-def inverse_travel_curve(fraction: float, k: float) -> float:
-    """How much motor time a given position corresponds to.
-
-    The curve is monotonic for |k| < 1, so a bisection is exact enough and needs
-    no algebra that could be got subtly wrong.
+    The app uses the same family (calibration.travel_curve) but has to discover
+    the exponent; here it is a property of the window that nothing reveals.
     """
-    fraction = min(1.0, max(0.0, fraction))
-    low, high = 0.0, 1.0
-    for _ in range(40):
-        middle = (low + high) / 2
-        if travel_curve(middle, k) < fraction:
-            low = middle
-        else:
-            high = middle
-    return (low + high) / 2
+    return progress**a
+
+
+def inverse_travel_curve(fraction: float, a: float) -> float:
+    """How much motor time a given position corresponds to."""
+    return min(1.0, max(0.0, fraction)) ** (1 / a)
 
 
 @dataclass
@@ -67,7 +58,7 @@ class SimShutter:
     dead_time: float = 0.6
     travel_up: float = 17.4
     travel_down: float = 15.5
-    curve_k: float = 0.55
+    curve_a: float = 1.25
 
     percent: float = 100.0
     """Where the shutter physically is. Nothing outside this module may read it."""
@@ -90,12 +81,12 @@ class SimShutter:
     def _motor_time_of(self, percent: float, direction: int) -> float:
         """Seconds of travel in this direction between the end stop and `percent`."""
         fraction = percent / 100 if direction > 0 else 1 - percent / 100
-        return inverse_travel_curve(fraction, self.curve_k) * self._full_time(direction)
+        return inverse_travel_curve(fraction, self.curve_a) * self._full_time(direction)
 
     def _percent_at(self, motor_time: float, direction: int) -> float:
         full = self._full_time(direction)
         progress = min(1.0, max(0.0, motor_time / full)) if full else 1.0
-        fraction = travel_curve(progress, self.curve_k)
+        fraction = travel_curve(progress, self.curve_a)
         return 100 * fraction if direction > 0 else 100 * (1 - fraction)
 
     # --- being commanded -----------------------------------------------------
@@ -158,7 +149,7 @@ class SimBridge(ShutterBridge):
                 dead_time=0.5 + spread * 0.08,
                 travel_up=12.0 + spread * 2.1,
                 travel_down=10.8 + spread * 1.8,
-                curve_k=0.40 + spread * 0.05,
+                curve_a=1.1 + spread * 0.12,
                 percent=start,
                 believed=start,
                 start_believed=start,

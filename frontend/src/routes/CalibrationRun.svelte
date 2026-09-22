@@ -152,7 +152,7 @@
             Auf die Mitte fahren
           </button>
         {/if}
-        {#if detail.up.curve_k !== 0 || detail.down.curve_k !== 0}
+        {#if detail.up.curve_a !== 1 || detail.down.curve_a !== 1}
           <button type="button" class="btn wide undo" disabled={running} onclick={() => calibration.undoCheck(id)}>
             Prüfungen zurücknehmen
           </button>

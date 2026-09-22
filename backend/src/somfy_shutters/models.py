@@ -129,13 +129,13 @@ class Movement(BaseModel):
             return 1.0
         return min(1.0, max(0.0, (now_monotonic - self.started_monotonic) / self.duration_seconds))
 
-    def position_at(self, now_monotonic: float, curve_k: float = 0.0) -> int:
+    def position_at(self, now_monotonic: float, curve_a: float = 1.0) -> int:
         span = self.target_percent - self.from_percent
         progress = self.progress(now_monotonic)
-        if curve_k:
+        if curve_a != 1.0:
             from .calibration import travel_curve
 
-            progress = travel_curve(progress, curve_k)
+            progress = travel_curve(progress, curve_a)
         return round(self.from_percent + span * progress)
 
     def is_done(self, now_monotonic: float) -> bool:
@@ -205,7 +205,8 @@ class Calibration(BaseModel):
     travel_seconds: float = Field(ge=1, le=600)
     dead_seconds: float = Field(default=0.0, ge=0)
     runs: int = Field(default=0, ge=0)
-    curve_k: float = Field(default=0.0, ge=-0.8, le=0.8)
+    curve_a: float = Field(default=1.0, ge=0.7, le=1.4)
+    """Shape of the travel: 1 is linear, above 1 shows less mid-travel."""
     updated_at: datetime | None = None
     source: Literal["manual", "measured", "default"] = "default"
 

@@ -224,7 +224,7 @@ async def sim_truth(request: Request) -> dict[str, Any]:
             "dead_seconds": round(sim.dead_time, 2),
             "travel_up_seconds": round(sim.travel_up, 2),
             "travel_down_seconds": round(sim.travel_down, 2),
-            "curve_k": sim.curve_k,
+            "curve_a": sim.curve_a,
             "percent_now": round(sim.percent, 1),
             "command_to_arrival_up": round(sim.dead_time + sim.travel_up, 2),
             "command_to_arrival_down": round(sim.dead_time + sim.travel_down, 2),

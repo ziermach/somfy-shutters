@@ -17,6 +17,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from somfy_shutters.bridge.sim import SimBridge
+from somfy_shutters.calibration import CURVE_NEUTRAL
 from somfy_shutters.config import Settings
 from somfy_shutters.main import create_app
 from somfy_shutters.store import Store
@@ -204,11 +205,11 @@ async def test_c3_2_end_points_are_untouchable(client) -> None:
     await client.post("/api/shutters/flink/command", json={"action": "open"})
     tracker = client.app.state.tracker
     movement = tracker.movement("flink")
-    k = client.app.state.calibration.curve_k("flink", "up")
-    assert k != 0
-    assert movement.position_at(movement.started_monotonic, curve_k=k) == 0
+    a = client.app.state.calibration.curve_a("flink", "up")
+    assert a != 1.0
+    assert movement.position_at(movement.started_monotonic, curve_a=a) == 0
     assert (
-        movement.position_at(movement.started_monotonic + movement.duration_seconds, curve_k=k)
+        movement.position_at(movement.started_monotonic + movement.duration_seconds, curve_a=a)
         == 100
     )
 
@@ -221,7 +222,7 @@ async def test_c3_3_undo_keeps_the_measurements(client) -> None:
 
     before = (await client.get("/api/calibration/flink")).json()["up"]["travel_seconds"]
     after = (await client.delete("/api/calibration/flink/check")).json()
-    assert after["up"]["curve_k"] == 0
+    assert after["up"]["curve_a"] == CURVE_NEUTRAL
     assert after["up"]["travel_seconds"] == before
 
 
