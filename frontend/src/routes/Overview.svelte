@@ -1,7 +1,10 @@
 <script lang="ts">
   import AutomationBanner from '../components/AutomationBanner.svelte';
+  import GroupSection from '../components/GroupSection.svelte';
   import MeasuringBanner from '../components/MeasuringBanner.svelte';
   import ShutterCard from '../components/ShutterCard.svelte';
+  import { loadView, saveView, sections, type View } from '../lib/groups';
+  import { groups } from '../lib/groups.svelte';
   import { shutters } from '../lib/shutters.svelte';
 
   interface Props {
@@ -11,6 +14,25 @@
     ongroups: () => void;
   }
   let { onopen, oncalibration, onautomations, ongroups }: Props = $props();
+
+  // Per device (FR-014): grouped or flat, and which groups are folded away.
+  let view = $state<View>(loadView());
+  const hasGroups = $derived(groups.groups.length > 0);
+  const grouped = $derived(hasGroups && view.mode !== 'flat');
+  const parts = $derived(sections(groups.groups, shutters.shutters));
+
+  function setMode(mode: 'grouped' | 'flat') {
+    view = { ...view, mode };
+    saveView(view);
+  }
+
+  function toggle(groupId: string) {
+    const collapsed = view.collapsed.includes(groupId)
+      ? view.collapsed.filter((id) => id !== groupId)
+      : [...view.collapsed, groupId];
+    view = { ...view, collapsed };
+    saveView(view);
+  }
 </script>
 
 <section class="screen">
@@ -34,11 +56,43 @@
     </button>
   </div>
 
-  <div class="cards">
-    {#each shutters.shutters as shutter (shutter.id)}
-      <ShutterCard {shutter} {onopen} />
+  {#if hasGroups}
+    <div class="seg" role="radiogroup" aria-label="Ansicht">
+      <button type="button" class="seg-btn" aria-pressed={grouped} onclick={() => setMode('grouped')}>Gruppen</button>
+      <button type="button" class="seg-btn" aria-pressed={!grouped} onclick={() => setMode('flat')}>Liste</button>
+    </div>
+  {/if}
+
+  {#if grouped}
+    {#each parts.grouped as part (part.group.id)}
+      <GroupSection
+        group={part.group}
+        members={part.members}
+        collapsed={view.collapsed.includes(part.group.id)}
+        ontoggle={() => toggle(part.group.id)}
+        {onopen}
+      />
     {/each}
-  </div>
+    {#if parts.ungrouped.length}
+      <section class="ungrouped" aria-label="Ohne Gruppe">
+        <h2>Ohne Gruppe</h2>
+        <div class="cards">
+          {#each parts.ungrouped as shutter (shutter.id)}
+            <ShutterCard {shutter} {onopen} />
+          {/each}
+        </div>
+      </section>
+    {/if}
+  {:else}
+    <div class="cards">
+      {#each shutters.shutters as shutter (shutter.id)}
+        <ShutterCard {shutter} {onopen} />
+      {/each}
+    </div>
+    {#if !hasGroups && shutters.shutters.length > 1}
+      <button type="button" class="hint" onclick={ongroups}>Rolladen zu Gruppen zusammenfassen →</button>
+    {/if}
+  {/if}
 
   <div class="row">
     <button type="button" class="btn ghost" onclick={ongroups}>Gruppen</button>
@@ -86,6 +140,51 @@
   .btn:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+  .seg {
+    display: flex;
+    gap: 6px;
+    background: var(--surface);
+    border: 1px solid var(--surface-2);
+    border-radius: 12px;
+    padding: 4px;
+  }
+  .seg-btn {
+    flex: 1 1 0;
+    height: 36px;
+    border-radius: 9px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .seg-btn[aria-pressed='true'] {
+    background: var(--surface-2);
+    border-color: var(--line);
+    color: var(--text);
+  }
+  .ungrouped {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  h2 {
+    margin: 0;
+    font-family: var(--display);
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--muted);
+  }
+  .hint {
+    all: unset;
+    cursor: pointer;
+    align-self: flex-start;
+    font-size: 13px;
+    color: var(--muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
   .cards {
     display: flex;

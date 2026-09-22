@@ -7,7 +7,8 @@
 import { interpolate } from './animate';
 import { automations } from './automations.svelte';
 import { groups } from './groups.svelte';
-import type { Action, BridgeStatus, Frame, Movement, Shutter } from './types';
+import { commandText } from './groups';
+import type { Action, BridgeStatus, CommandResult, Frame, Movement, Shutter } from './types';
 
 const BACKOFF_START = 1000;
 const BACKOFF_MAX = 30000;
@@ -195,14 +196,33 @@ class ShutterState {
     return null;
   }
 
+  /** Every configured shutter ("Alle auf/zu"). Null, or what to tell the person. */
   async commandAll(action: Action): Promise<string | null> {
-    const response = await fetch('/api/shutters/command', {
+    return this.#commandMany('/api/shutters/command', action);
+  }
+
+  /** Every member of a group (feature 004). Null, or who was not reached and why. */
+  async commandGroup(groupId: string, action: Action, targetPercent?: number): Promise<string | null> {
+    return this.#commandMany(`/api/groups/${groupId}/command`, action, targetPercent);
+  }
+
+  async #commandMany(url: string, action: Action, targetPercent?: number): Promise<string | null> {
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action })
+      body: JSON.stringify({ action, target_percent: targetPercent ?? null })
     });
-    if (response.status === 503) return 'Kein Rolladen konnte erreicht werden.';
-    return null;
+    const body = await response.json().catch(() => ({}));
+    const results: CommandResult[] | undefined = body.results;
+    if (!results) return body.message ?? 'Der Befehl ist fehlgeschlagen.';
+    // Each member animates from its own movement at once, as a single command does.
+    for (const result of results) {
+      if (result.movement) {
+        const movement = result.movement;
+        this.#patch(result.id, (s) => ({ ...s, movement }));
+      }
+    }
+    return commandText(results, (id) => this.byId(id)?.name ?? id);
   }
 
   async confirmArrival(): Promise<void> {

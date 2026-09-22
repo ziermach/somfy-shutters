@@ -79,13 +79,13 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ### Tests for User Story 2
 
-- [ ] T016 [P] [US2] Vitest in `frontend/src/lib/groups.test.ts`: `summarize` — all open → "offen", all closed → "zu", mixed → "1 von 2 offen · 1 zu", any member moving counted as "fährt", unknown percent → "Position unbekannt" bucket, **never a percent in the text**, tone = **lowest member tone** (`sure` < `estimated` < `unsure`); counts in the **fixed order offen, zu, dazwischen, fährt, unbekannt**, empty buckets left out; `sections` — group order, member order, shared shutter in both, ungrouped last, empty group kept with no members; view preference — read/write through a storage that throws, unknown collapsed ids ignored
+- [X] T016 [P] [US2] Vitest in `frontend/src/lib/groups.test.ts`: `summarize` — all open → "offen", all closed → "zu", mixed → "1 von 2 offen · 1 zu", any member moving counted as "fährt", unknown percent → "Position unbekannt" bucket, **never a percent in the text**, tone = **lowest member tone** (`sure` < `estimated` < `unsure`); counts in the **fixed order offen, zu, dazwischen, fährt, unbekannt**, empty buckets left out; `sections` — group order, member order, shared shutter in both, ungrouped last, empty group kept with no members; view preference — read/write through a storage that throws, unknown collapsed ids ignored
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] Implement `frontend/src/lib/groups.ts` (pure): `summarize(members, livePercent) -> {text, tone}` with the buckets of [data-model.md](./data-model.md) (moving / unknown / open 100 / closed 0 / between); `sections(groups, shutters) -> {group, members}[]` plus `ungrouped`; `loadView()`/`saveView()` on **`localStorage["somfy.view"]` = `{"mode": "grouped"|"flat", "collapsed": [...]}`**, every access in try/catch, default grouped when any group exists (research §9, §10)
-- [ ] T018 [US2] `frontend/src/components/GroupSection.svelte`: header with name, summary text in the tone's colour from `ConfidenceBadge`, collapse chevron; the members' existing `ShutterCard`s below when expanded; "leer" and no cards for an empty group. Command buttons come in US3
-- [ ] T019 [US2] Rework `frontend/src/routes/Overview.svelte`: *Gruppen / Liste* switch persisted via `saveView`; grouped mode renders `GroupSection` per section then "Ohne Gruppe"; flat mode and the no-groups case render exactly the current list, the latter with the hint "Rolladen zu Gruppen zusammenfassen" linking to Groups; "Alle auf/zu" stays at the top in both modes
+- [X] T017 [US2] Implement `frontend/src/lib/groups.ts` (pure): `summarize(members, livePercent) -> {text, tone}` with the buckets of [data-model.md](./data-model.md) (moving / unknown / open 100 / closed 0 / between); `sections(groups, shutters) -> {group, members}[]` plus `ungrouped`; `loadView()`/`saveView()` on **`localStorage["somfy.view"]` = `{"mode": "grouped"|"flat", "collapsed": [...]}`**, every access in try/catch, default grouped when any group exists (research §9, §10)
+- [X] T018 [US2] `frontend/src/components/GroupSection.svelte`: header with name, summary text in the tone's colour from `ConfidenceBadge`, collapse chevron; the members' existing `ShutterCard`s below when expanded; "leer" and no cards for an empty group. Command buttons come in US3
+- [X] T019 [US2] Rework `frontend/src/routes/Overview.svelte`: *Gruppen / Liste* switch persisted via `saveView`; grouped mode renders `GroupSection` per section then "Ohne Gruppe"; flat mode and the no-groups case render exactly the current list, the latter with the hint "Rolladen zu Gruppen zusammenfassen" linking to Groups; "Alle auf/zu" stays at the top in both modes
 
 **Checkpoint**: quickstart B passes. With US1 this is the MVP: the house is readable by room.
 
@@ -100,13 +100,13 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 ### Tests for User Story 3
 
 - [X] T020 [P] [US3] Contract tests for `POST /api/groups/{id}/command` in `backend/tests/contract/test_groups_rest.py`: **200 / 207 / 503** as for "Alle"; accepted results carry `movement`; **`409 empty_group`**; **`404 unknown_group`**; **`422 target_required`**; members commanded in configuration order, not member order
-- [ ] T021 [P] [US3] Timing test in `backend/tests/integration/test_groups_quickstart.py` (C6): a 12-shutter simulated config, one group of all 12, the last member's `movement.started_at` within **5 s** of the request (FR-021)
+- [X] T021 [P] [US3] Timing test in `backend/tests/integration/test_groups_quickstart.py` (C6): a 12-shutter simulated config, one group of all 12, the last member's `movement.started_at` within **5 s** of the request (FR-021)
 
 ### Implementation for User Story 3
 
 - [X] T022 [US3] Add `POST /api/groups/{id}/command` to `backend/src/somfy_shutters/api/group_routes.py`: members sorted into configuration order, `commands.apply_many`, status 200/207/503 by accepted count
-- [ ] T023 [P] [US3] `command(groupId, action, percent?)` in `frontend/src/lib/groups.svelte.ts`: patches each accepted `movement` into the shutters store immediately (as `shutters.command` does); returns `null`, or a German line naming the members not reached and why ("Küche: Messung läuft"), or "Kein Rolladen konnte erreicht werden." on 503
-- [ ] T024 [US3] Buttons *auf / zu / stopp* and *Position…* in `frontend/src/components/GroupSection.svelte`: *Position…* opens the slider used in `frontend/src/routes/Detail.svelte` with the estimate note; disabled when the bridge is disconnected or no member would move (`canOpen`/`canClose`/`canStop`, skipping measuring members); the returned notice shown inline under the header until the next command
+- [X] T023 [P] [US3] `command(groupId, action, percent?)` in `frontend/src/lib/groups.svelte.ts`: patches each accepted `movement` into the shutters store immediately (as `shutters.command` does); returns `null`, or a German line naming the members not reached and why ("Küche: Messung läuft"), or "Kein Rolladen konnte erreicht werden." on 503
+- [X] T024 [US3] Buttons *auf / zu / stopp* and *Position…* in `frontend/src/components/GroupSection.svelte`: *Position…* opens the slider used in `frontend/src/routes/Detail.svelte` with the estimate note; disabled when the bridge is disconnected or no member would move (`canOpen`/`canClose`/`canStop`, skipping measuring members); the returned notice shown inline under the header until the next command
 
 **Checkpoint**: quickstart C passes in the simulator.
 
