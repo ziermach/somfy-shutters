@@ -151,7 +151,7 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`. Frontend untou
 - [X] T027 [P] Update `CLAUDE.md` non-negotiables and open hardware question 1 (answered by the bridge: 100 = open), and the MQTT line, to the current topics
 - [X] T028 [P] Update `README.md`: architecture paragraph (topics), "What works today", the `stop` open question (now an explicit STOP; hardware verification pending), the bugs-found paragraph
 - [X] T029 Run [quickstart.md](./quickstart.md) A1–A5 against the simulator in the browser
-- [ ] T030 Run quickstart B1–B5 against a local Mosquitto impersonating Pi-Somfy with `mosquitto_pub`/`mosquitto_sub`, if Mosquitto can be installed on the development machine; otherwise record that it was skipped — **not run yet (2026-09-22): Mosquitto is not installed on the development machine; waiting for the owner's go-ahead to `brew install mosquitto`.**
+- [X] T030 Run quickstart B1–B5 against a local Mosquitto impersonating Pi-Somfy with `mosquitto_pub`/`mosquitto_sub` — done 2026-09-22 against Mosquitto 2.1.2 (Homebrew): unreachable until `online` (503), `CLOSE`/`STOP`/`set_position 30`/`OPEN` on the wire exactly, live 100 → certain, `offline` → 503, `0X279622` matched and answered in that spelling, retained replay fills a fresh app as estimates and leaves a known position alone, zero corrections either way
 - [X] T031 Full backend suite, ruff, frontend checks; every feature 001–004 scenario green (SC-006)
 - [ ] T032 On the Pi with current Pi-Somfy: quickstart C — one shutter, commands, stop, a physical remote press with the receiver enabled (joins the pending hardware tasks)
 
