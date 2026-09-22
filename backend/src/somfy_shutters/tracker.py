@@ -44,6 +44,13 @@ EXTERNAL_MIN_DELTA = 2
 
 CORRECTION_EASE_MS = 400
 
+BRIDGE_RUN_SLACK = 1.5
+"""How much longer than our full travel time the bridge may take for one command
+before its reports stop counting as that command."""
+
+BRIDGE_RUN_TOLERANCE = 2
+"""Level points either side of the bridge's run that still count as on the way."""
+
 
 class UnknownShutter(KeyError):
     pass
@@ -84,7 +91,17 @@ class Tracker:
         # sent relative to it, because the bridge runs the motor for the
         # difference between its counter and the new level — not for the
         # distance the curve of the new direction would compute.
-        self._bridge_level: dict[str, float] = {}
+        self._bridge_level: dict[str, float] = {
+            # After a restart the best guess is the stored position. Exact at the
+            # end stops, where Pi-Somfy's counter is reset too.
+            sid: to_level(position.percent, self._curve_a(sid, Direction.UP))
+            for sid, position in self._positions.items()
+            if position.percent is not None
+        }
+        # The bridge's own run for our last command: counter at the start, level
+        # sent, and when it must be over. Its reports along that way are it doing
+        # what we asked, on its own clock — not somebody else moving the shutter.
+        self._bridge_runs: dict[str, tuple[float, float, float]] = {}
 
     # --- reading -------------------------------------------------------------
 
@@ -173,12 +190,24 @@ class Tracker:
         start_level = to_level(from_percent, curve_a)
         end_level = to_level(target, curve_a)
         duration = full_travel * abs(end_level - start_level) / 100.0
-        if bridge_from is not None:
-            # The bridge times the motor on its own counter. Sent to an end stop
-            # from a counter that lags, it keeps its timer running after the
-            # shutter has hit the stop — and a command inside that window starts
-            # from a counter that is wrong. The travel is over when both agree.
-            duration = max(duration, full_travel * abs(level - bridge_from) / 100.0)
+        if bridge_from is None:
+            # Nothing is known about the counter, so assume the far end, as for
+            # an unknown position: the bridge may run the whole window.
+            bridge_from = 0.0 if direction is Direction.UP else 100.0
+            bridge_known = False
+            # And the percentage came from the same guess. Animating a crawl from
+            # an assumed 96 % to 100 % for a whole window's time is worse than
+            # admitting the start is the far end.
+            from_percent = 0 if direction is Direction.UP else 100
+            start_level = to_level(from_percent, curve_a)
+            duration = full_travel * abs(end_level - start_level) / 100.0
+        else:
+            bridge_known = True
+        # The bridge times the motor on its own counter. Sent to an end stop from
+        # a counter that lags, it keeps its timer running after the shutter has
+        # hit the stop — and a command inside that window starts from a counter
+        # that is wrong. The travel is over when both agree.
+        duration = max(duration, full_travel * abs(level - bridge_from) / 100.0)
         started = self._clock()
         movement = Movement(
             shutter_id=shutter_id,
@@ -189,13 +218,22 @@ class Tracker:
             expected_arrival=started + timedelta(seconds=duration),
             origin=Origin.LOCAL,
             curve_a=curve_a,
-            bridge_from=bridge_from if bridge_from is not None else start_level,
+            bridge_from=bridge_from,
             bridge_to=float(level),
+            bridge_known=bridge_known,
             started_monotonic=self._monotonic(),
             duration_seconds=duration,
         )
         self._movements[shutter_id] = movement
         self._last_direction[shutter_id] = direction
+        # The bridge may well run longer than we do: its travel time is its own,
+        # and after an unknown start its counter and ours need not agree. Long
+        # enough for a whole window, with room for a slow bridge.
+        self._bridge_runs[shutter_id] = (
+            bridge_from,
+            float(level),
+            movement.started_monotonic + full_travel * BRIDGE_RUN_SLACK + 2.0,
+        )
         # Recorded now, so an interruption mid-travel is recoverable as unknown.
         self._store.save(shutter_id, self._positions[shutter_id], was_moving=True, now=started)
         await self._emit({"type": "movement", "shutter_id": shutter_id, "movement": movement})
@@ -209,7 +247,7 @@ class Tracker:
         """The bridge's counter right now, if we have any idea of it."""
         movement = self._movements.get(shutter_id)
         if movement is not None:
-            return movement.level_at(self._monotonic())
+            return movement.level_at(self._monotonic()) if movement.bridge_known else None
         return self._bridge_level.get(shutter_id)
 
     def level_for(self, shutter_id: str, target_percent: int) -> int:
@@ -283,6 +321,26 @@ class Tracker:
                 return Direction.DOWN
         return self._last_direction.get(shutter_id, Direction.UP)
 
+    def forget_bridge_run(self, shutter_id: str) -> None:
+        """For the simulator's injected reports, which stand for "this happened"
+        rather than for the bridge still counting through our last command."""
+        self._bridge_runs.pop(shutter_id, None)
+
+    def _is_our_bridge_run(self, shutter_id: str, level: int) -> bool:
+        run = self._bridge_runs.get(shutter_id)
+        if run is None:
+            return False
+        start, end, deadline = run
+        if self._monotonic() > deadline:
+            del self._bridge_runs[shutter_id]
+            return False
+        low, high = min(start, end), max(start, end)
+        if not low - BRIDGE_RUN_TOLERANCE <= level <= high + BRIDGE_RUN_TOLERANCE:
+            return False
+        if abs(level - end) <= BRIDGE_RUN_TOLERANCE:
+            del self._bridge_runs[shutter_id]  # it has arrived at what we sent
+        return True
+
     def percent_from_level(self, shutter_id: str, level: int) -> int:
         """A report arrives in the bridge's coordinate; this is what it means."""
         direction = self._report_direction(shutter_id, level)
@@ -292,8 +350,12 @@ class Tracker:
         """Halt where it is — not at the original target (FR-016)."""
         self._require(shutter_id)
         movement = self._movements.pop(shutter_id, None)
+        self._bridge_runs.pop(shutter_id, None)
         if movement is not None:
-            self._bridge_level[shutter_id] = movement.level_at(self._monotonic())
+            if movement.bridge_known:
+                self._bridge_level[shutter_id] = movement.level_at(self._monotonic())
+            else:
+                self._bridge_level.pop(shutter_id, None)
             percent = movement.position_at(self._monotonic())
             await self._settle(shutter_id, percent, Source.COMMAND)
         return self._positions[shutter_id]
@@ -372,6 +434,13 @@ class Tracker:
         # Idle, the report is the bridge's counter itself — the best reading of
         # it there is.
         self._bridge_level[shutter_id] = float(level)
+
+        if self._is_our_bridge_run(shutter_id, level):
+            # Our travel has ended by our clock, and the bridge is still working
+            # through the same command. Taking these as corrections made the card
+            # jump back and climb in one-second steps, and read the bridge's own
+            # progress as a physical remote — refreshing a certainty nobody had.
+            return
         previous = self._positions[shutter_id]
         last = self._last_report.get(shutter_id)
         now_mono = self._monotonic()

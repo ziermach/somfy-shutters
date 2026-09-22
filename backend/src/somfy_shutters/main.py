@@ -92,6 +92,15 @@ def create_app(
     runs = RunRegistry()
 
     tracker = Tracker(settings, store, emit=emit, calibration=calibration)
+    if isinstance(bridge, SimBridge):
+        # A real house does not move while the server restarts. A simulated one
+        # that snapped back to its defaults instead made every restart look like
+        # somebody had driven the shutters, and the app correct itself in steps.
+        for shutter in settings.shutter:
+            position = tracker.position(shutter.id)
+            counter = tracker.bridge_level(shutter.id)
+            if position.percent is not None and counter is not None:
+                bridge.place(shutter.address, position.percent, believed=counter)
 
     pending: dict[str, PendingConfirmation] = {}
 

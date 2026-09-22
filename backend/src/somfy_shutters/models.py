@@ -127,6 +127,10 @@ class Movement(BaseModel):
     """The bridge's own level counter at the start and the level it was sent.
     Pi-Somfy keeps one linear counter, so after a reversal mid-window it is
     not what the curve of the new direction would make of the percentage."""
+    bridge_known: bool = True
+    """False when the travel started without any idea of the bridge's counter —
+    an unknown position. bridge_from is then an assumption, and nothing may be
+    derived from it until the travel completes."""
     # Monotonic clock, so a daylight-saving jump mid-travel cannot distort the
     # animation. The wall-clock fields above are what clients render.
     started_monotonic: float

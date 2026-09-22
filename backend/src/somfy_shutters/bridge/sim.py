@@ -93,6 +93,10 @@ class SimShutter:
 
     def command(self, percent: int, now: float) -> None:
         if percent == round(self.believed):
+            # Already there by the bridge's count. If the motor is running — even
+            # still in its dead time — that is a halt, not nothing: "auf" right
+            # after "zu" used to let the close run all the way down.
+            self.started_at = None
             return
         self.direction = 1 if percent > self.believed else -1
         # The bridge runs the motor for as long as *its* estimate says it should.
@@ -221,11 +225,15 @@ class SimBridge(ShutterBridge):
         """Only for tests and the quickstart — never reachable through the port."""
         return self._shutters[address].percent
 
-    def place(self, address: str, percent: float) -> None:
-        """Put a simulated window somewhere, for tests that need a known start."""
-        shutter = self._shutters[address]
+    def place(self, address: str, percent: float, believed: float | None = None) -> None:
+        """Put a simulated window somewhere: for tests that need a known start, and
+        on startup, where the house stays where the app last knew it."""
+        shutter = self._shutters.get(address)
+        if shutter is None:
+            return
+        counter = percent if believed is None else believed
         shutter.percent = percent
-        shutter.believed = percent
-        shutter.start_believed = percent
-        shutter.target_believed = percent
+        shutter.believed = counter
+        shutter.start_believed = counter
+        shutter.target_believed = counter
         shutter.started_at = None

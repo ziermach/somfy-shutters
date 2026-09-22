@@ -117,3 +117,99 @@ async def test_reports_during_travel_do_not_poison_the_next_decision(tracker, cl
 
     assert tracker.position("wohnzimmer").confidence is Confidence.CERTAIN
     assert tracker.position("wohnzimmer").percent == 100
+
+
+async def test_the_bridge_finishing_our_command_is_not_a_correction(tracker, clock, events) -> None:
+    """Our travel ended by our clock; the bridge is still counting through the same
+    command. Found clicking "auf" on the overview: the card jumped back and climbed
+    in one-second steps, and the bridge's progress read as a physical remote."""
+    await tracker._settle("wohnzimmer", 0, Source.COMMAND)
+    await tracker.start_movement("wohnzimmer", 100)
+    clock.advance(18.5)
+    await tracker.tick()
+    settled = tracker.position("wohnzimmer")
+    events.clear()
+
+    for level in (60, 75, 90, 100):
+        await tracker.handle_report(WOHNZIMMER, level)
+        clock.advance(1.0)
+
+    assert events == []
+    assert tracker.position("wohnzimmer") == settled, "certain_at must not be refreshed"
+    assert tracker.bridge_level("wohnzimmer") == 100
+
+
+async def test_once_the_bridge_has_arrived_a_report_is_news_again(tracker, clock, events) -> None:
+    await tracker._settle("wohnzimmer", 0, Source.COMMAND)
+    await tracker.start_movement("wohnzimmer", 100)
+    clock.advance(18.5)
+    await tracker.tick()
+    await tracker.handle_report(WOHNZIMMER, 100)  # the bridge's run ends here
+    events.clear()
+
+    await tracker.handle_report(WOHNZIMMER, 40)
+    assert [e["type"] for e in events] == ["correction"]
+
+
+async def test_after_the_window_a_report_is_news_again(tracker, clock, events) -> None:
+    await tracker._settle("wohnzimmer", 0, Source.COMMAND)
+    await tracker.start_movement("wohnzimmer", 100)
+    clock.advance(18.0 * 1.5 + 3)
+    await tracker.tick()
+    events.clear()
+
+    await tracker.handle_report(WOHNZIMMER, 60)
+    assert [e["type"] for e in events] == ["correction"]
+
+
+async def test_a_report_off_the_bridges_way_is_still_news(tracker, clock, events) -> None:
+    await tracker._settle("wohnzimmer", 100, Source.COMMAND)
+    await tracker.start_movement("wohnzimmer", 50)
+    clock.advance(10.0)
+    await tracker.tick()
+    events.clear()
+
+    await tracker.handle_report(WOHNZIMMER, 20)  # below where we sent it
+    assert [e["type"] for e in events] == ["correction"]
+
+
+async def test_an_unknown_counter_stays_unknown_through_a_reversal(tracker, clock, events) -> None:
+    """Unknown position, "zu", then "auf" half a second later. The first travel's
+    start was assumed, so the counter derived from it is too — the bridge may
+    well be climbing from the bottom. Its reports on the way up are its own run."""
+    assert tracker.position("wohnzimmer").percent is None
+    await tracker.start_movement("wohnzimmer", 0)
+    clock.advance(0.5)
+    assert tracker.bridge_level("wohnzimmer") is None
+    up = await tracker.start_movement("wohnzimmer", 100)
+    assert up.duration_seconds == 18.0, "a whole window, since the bridge may run one"
+    assert up.from_percent == 0, "the 96 % it had reached was part of the same guess"
+    clock.advance(18.5)
+    await tracker.tick()
+    events.clear()
+
+    for level in (4, 30, 70):
+        await tracker.handle_report(WOHNZIMMER, level)
+        clock.advance(1.0)
+    assert events == []
+
+
+async def test_after_a_restart_the_counter_starts_from_the_stored_position(
+    tracker, settings, store, clock
+) -> None:
+    """Otherwise every first command after a restart would count as unknown and
+    animate from the far end, however well the position was known."""
+    from somfy_shutters.tracker import Tracker
+
+    await tracker._settle("wohnzimmer", 0, Source.COMMAND)
+    movement = await tracker.start_movement("wohnzimmer", 60)
+    clock.advance(movement.duration_seconds + 0.1)
+    await tracker.tick()
+
+    async def emit(event: dict) -> None:
+        pass
+
+    revived = Tracker(settings, store, emit=emit, monotonic=clock.monotonic, clock=clock.now)
+    assert revived.bridge_level("wohnzimmer") == 60
+    again = await revived.start_movement("wohnzimmer", 80)
+    assert again.from_percent == 60

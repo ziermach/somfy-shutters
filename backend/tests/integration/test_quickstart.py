@@ -276,3 +276,26 @@ async def test_c3_5_a_reversal_mid_window_waits_for_the_motor(client) -> None:
     a_up = client.app.state.calibration.curve_a("flink", "up")
     distance = to_level(80, a_up) - to_level(50, a_up)
     assert sim.target_believed - sim.start_believed == pytest.approx(distance, abs=1.5)
+
+
+async def test_the_simulated_house_stays_put_across_a_restart(tmp_path) -> None:
+    """Otherwise every dev restart looks like somebody drove the shutters."""
+    settings = Settings.model_validate(CONFIG)
+    store = Store(tmp_path / "state.db")
+    first = create_app(settings, store=store, bridge=SimBridge(addresses=["0x279631"]))
+    await first.state.tracker._settle("flink", 100, first.state.tracker.position("flink").source)
+
+    bridge = SimBridge(addresses=["0x279631"])
+    bridge._shutters["0x279631"].percent = 0.0  # the simulator's own default
+    create_app(settings, store=store, bridge=bridge)
+    assert bridge.truth("0x279631") == 100
+
+
+def test_a_command_to_where_the_bridge_already_counts_halts_the_motor() -> None:
+    bridge = SimBridge(addresses=["0x279631"])
+    shutter = bridge._shutters["0x279631"]
+    shutter.command(0, now=100.0)  # from 100, down
+    assert shutter.started_at is not None
+    shutter.command(100, now=100.3)  # still in the dead time, counter still 100
+    shutter.advance(130.0)
+    assert bridge.truth("0x279631") == 100, "the close must not run on"

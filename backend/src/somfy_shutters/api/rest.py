@@ -265,6 +265,7 @@ async def sim_report(request: Request, body: ReportBody) -> dict[str, Any]:
     address = tracker.settings.shutters[body.shutter_id].address
     # the same entry point the bridge's reports use, so a report injected here
     # disturbs a measurement exactly as a real one would
+    tracker.forget_bridge_run(body.shutter_id)
     await request.app.state.on_report(address, body.percent)
     return {
         "applied": True,
