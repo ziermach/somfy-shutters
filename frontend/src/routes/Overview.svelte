@@ -8,8 +8,9 @@
     onopen: (id: string) => void;
     oncalibration: () => void;
     onautomations: () => void;
+    ongroups: () => void;
   }
-  let { onopen, oncalibration, onautomations }: Props = $props();
+  let { onopen, oncalibration, onautomations, ongroups }: Props = $props();
 </script>
 
 <section class="screen">
@@ -40,6 +41,7 @@
   </div>
 
   <div class="row">
+    <button type="button" class="btn ghost" onclick={ongroups}>Gruppen</button>
     <button type="button" class="btn ghost" onclick={onautomations}>Automationen</button>
     <button type="button" class="btn ghost" onclick={oncalibration}>Kalibrierung</button>
   </div>

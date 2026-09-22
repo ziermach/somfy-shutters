@@ -8,6 +8,8 @@ import type { CommandResult, Group, GroupConflict } from './types';
 /** The server's message when a call failed, null when it went through. */
 export type CallResult = string | null;
 
+export type SaveResult = { ok: true; conflicts: GroupConflict[] } | { ok: false; message: string };
+
 interface Reply {
   message?: string;
   results?: CommandResult[];
@@ -34,14 +36,14 @@ class Groups {
     return this.groups.find((g) => g.id === id);
   }
 
-  async create(name: string, members: string[]): Promise<CallResult> {
-    const { response, body } = await call('/api/groups', 'POST', { name, members });
-    return response.ok ? null : (body.message ?? 'Die Gruppe konnte nicht angelegt werden.');
-  }
-
-  async update(id: string, name: string, members: string[]): Promise<CallResult> {
-    const { response, body } = await call(`/api/groups/${id}`, 'PUT', { name, members });
-    return response.ok ? null : (body.message ?? 'Die Gruppe konnte nicht gespeichert werden.');
+  /** Create (no id) or replace. A saved group may bring rule conflicts it created (FR-028). */
+  async save(name: string, members: string[], id?: string): Promise<SaveResult> {
+    const { response, body } = await call(id ? `/api/groups/${id}` : '/api/groups', id ? 'PUT' : 'POST', {
+      name,
+      members
+    });
+    if (!response.ok) return { ok: false, message: body.message ?? 'Die Gruppe konnte nicht gespeichert werden.' };
+    return { ok: true, conflicts: body.conflicts ?? [] };
   }
 
   async remove(id: string): Promise<CallResult> {

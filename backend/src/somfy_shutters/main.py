@@ -19,7 +19,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import automation_routes, calibration_routes, rest, ws
+from .api import automation_routes, calibration_routes, group_routes, rest, ws
 from .automation.clock import ClockGuard
 from .automation.engine import LOCATION_KEY, AutomationEngine
 from .automation.store import AutomationStore
@@ -306,6 +306,7 @@ def create_app(
     app.include_router(rest.router)
     app.include_router(calibration_routes.router)
     app.include_router(automation_routes.router)
+    app.include_router(group_routes.router)
     app.include_router(ws.router)
     if settings.bridge.kind == "sim":
         app.include_router(rest.sim_router)

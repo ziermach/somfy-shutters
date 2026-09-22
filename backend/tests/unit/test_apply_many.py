@@ -54,7 +54,11 @@ async def test_one_being_measured_does_not_stop_the_others(state) -> None:
     state.runs = Runs("kueche")
     results = await commands.apply_many(state, IDS, "open")
     by_id = {r["id"]: r for r in results}
-    assert by_id["kueche"] == {"id": "kueche", "accepted": False, "error": "measurement_in_progress"}
+    assert by_id["kueche"] == {
+        "id": "kueche",
+        "accepted": False,
+        "error": "measurement_in_progress",
+    }
     assert by_id["wohnzimmer"]["accepted"] and by_id["schlafzimmer"]["accepted"]
     assert address(state, "kueche") not in state.bridge.sent
 
@@ -62,7 +66,9 @@ async def test_one_being_measured_does_not_stop_the_others(state) -> None:
 async def test_bridge_offline_reports_every_one_and_queues_nothing(state) -> None:
     state.bridge.set_connected(False)
     results = await commands.apply_many(state, IDS, "close")
-    assert all(r == {"id": r["id"], "accepted": False, "error": "bridge_unreachable"} for r in results)
+    assert all(
+        r == {"id": r["id"], "accepted": False, "error": "bridge_unreachable"} for r in results
+    )
     state.bridge.set_connected(True)
     assert state.bridge.sent == []
     assert all(state.tracker.movement(sid) is None for sid in IDS)

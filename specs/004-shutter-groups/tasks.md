@@ -58,14 +58,14 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ### Tests for User Story 1
 
-- [ ] T011 [P] [US1] Contract tests in `backend/tests/contract/test_groups_rest.py` for `GET/POST/PUT/DELETE /api/groups` and `PUT /api/groups/order` per [contracts/rest.md](./contracts/rest.md): `201` appended last; **`409 name_taken` with `detail.group_id`**; **`422 invalid_group` with `detail.field`/`detail.problem`** for empty name, 41 chars, no members, duplicate member; **`422 unknown_shutter` with `detail.shutters`**; `404 unknown_group`; **`422 invalid_order`** for a non-permutation; each mutation publishes one `groups` frame
+- [X] T011 [P] [US1] Contract tests in `backend/tests/contract/test_groups_rest.py` for `GET/POST/PUT/DELETE /api/groups` and `PUT /api/groups/order` per [contracts/rest.md](./contracts/rest.md): `201` appended last; **`409 name_taken` with `detail.group_id`**; **`422 invalid_group` with `detail.field`/`detail.problem`** for empty name, 41 chars, no members, duplicate member; **`422 unknown_shutter` with `detail.shutters`**; `404 unknown_group`; **`422 invalid_order`** for a non-permutation; each mutation publishes one `groups` frame
 
 ### Implementation for User Story 1
 
-- [ ] T012 [US1] Implement `backend/src/somfy_shutters/api/group_routes.py` (CRUD + order, not yet `command`) with the shared error shape and German messages ("Diesen Namen gibt es schon.", "Diese Gruppe gibt es nicht."); publish `{"type": "groups", "groups": [...]}` after every change; register in `backend/src/somfy_shutters/main.py`. `DELETE` calls a no-op hook for rule cleanup that US4 fills in (T029)
-- [ ] T013 [P] [US1] CRUD calls in `frontend/src/lib/groups.svelte.ts`: `create`, `update`, `remove`, `reorder` returning the server's message on failure, `null` on success; state itself only ever comes from the frame
-- [ ] T014 [P] [US1] `frontend/src/routes/GroupForm.svelte`: name field (**max 40**), member chips for every configured shutter in configuration order, the chosen members listed below with ↑/↓ to order them, save disabled until name and ≥ 1 member, server errors shown inline
-- [ ] T015 [US1] `frontend/src/routes/Groups.svelte`: list of groups with member count, ↑/↓ to reorder (calls `reorder`; on `invalid_order` re-fetch and say so), edit, delete with an inline confirm (no browser dialog), floating "+ Neue Gruppe"; navigation entry "Gruppen" in `frontend/src/App.svelte` and on `frontend/src/routes/Overview.svelte`
+- [X] T012 [US1] Implement `backend/src/somfy_shutters/api/group_routes.py` (CRUD + order, not yet `command`) with the shared error shape and German messages ("Diesen Namen gibt es schon.", "Diese Gruppe gibt es nicht."); publish `{"type": "groups", "groups": [...]}` after every change; register in `backend/src/somfy_shutters/main.py`. `DELETE` calls a no-op hook for rule cleanup that US4 fills in (T029)
+- [X] T013 [P] [US1] CRUD calls in `frontend/src/lib/groups.svelte.ts`: `create`, `update`, `remove`, `reorder` returning the server's message on failure, `null` on success; state itself only ever comes from the frame
+- [X] T014 [P] [US1] `frontend/src/routes/GroupForm.svelte`: name field (**max 40**), member chips for every configured shutter in configuration order, the chosen members listed below with ↑/↓ to order them, save disabled until name and ≥ 1 member, server errors shown inline
+- [X] T015 [US1] `frontend/src/routes/Groups.svelte`: list of groups with member count, ↑/↓ to reorder (calls `reorder`; on `invalid_order` re-fetch and say so), edit, delete with an inline confirm (no browser dialog), floating "+ Neue Gruppe"; navigation entry "Gruppen" in `frontend/src/App.svelte` and on `frontend/src/routes/Overview.svelte`
 
 **Checkpoint**: quickstart A passes. Groups exist and sync, but the overview is still flat.
 
@@ -99,12 +99,12 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ### Tests for User Story 3
 
-- [ ] T020 [P] [US3] Contract tests for `POST /api/groups/{id}/command` in `backend/tests/contract/test_groups_rest.py`: **200 / 207 / 503** as for "Alle"; accepted results carry `movement`; **`409 empty_group`**; **`404 unknown_group`**; **`422 target_required`**; members commanded in configuration order, not member order
+- [X] T020 [P] [US3] Contract tests for `POST /api/groups/{id}/command` in `backend/tests/contract/test_groups_rest.py`: **200 / 207 / 503** as for "Alle"; accepted results carry `movement`; **`409 empty_group`**; **`404 unknown_group`**; **`422 target_required`**; members commanded in configuration order, not member order
 - [ ] T021 [P] [US3] Timing test in `backend/tests/integration/test_groups_quickstart.py` (C6): a 12-shutter simulated config, one group of all 12, the last member's `movement.started_at` within **5 s** of the request (FR-021)
 
 ### Implementation for User Story 3
 
-- [ ] T022 [US3] Add `POST /api/groups/{id}/command` to `backend/src/somfy_shutters/api/group_routes.py`: members sorted into configuration order, `commands.apply_many`, status 200/207/503 by accepted count
+- [X] T022 [US3] Add `POST /api/groups/{id}/command` to `backend/src/somfy_shutters/api/group_routes.py`: members sorted into configuration order, `commands.apply_many`, status 200/207/503 by accepted count
 - [ ] T023 [P] [US3] `command(groupId, action, percent?)` in `frontend/src/lib/groups.svelte.ts`: patches each accepted `movement` into the shutters store immediately (as `shutters.command` does); returns `null`, or a German line naming the members not reached and why ("Küche: Messung läuft"), or "Kein Rolladen konnte erreicht werden." on 503
 - [ ] T024 [US3] Buttons *auf / zu / stopp* and *Position…* in `frontend/src/components/GroupSection.svelte`: *Position…* opens the slider used in `frontend/src/routes/Detail.svelte` with the estimate note; disabled when the bridge is disconnected or no member would move (`canOpen`/`canClose`/`canStop`, skipping measuring members); the returned notice shown inline under the header until the next command
 
