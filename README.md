@@ -5,9 +5,10 @@
 
 # 🚧 WORK IN PROGRESS 🚧
 
-> **It runs, but it has never moved a real shutter.** Feature 001 is implemented and
-> tested against a simulated house; no motor in this project has been paired yet, so
-> the MQTT path to Pi-Somfy is written and unit-tested but unproven on hardware.
+> **It runs, but it has never moved a real shutter.** Features 001 and 002 are
+> implemented and tested against a simulated house; no motor in this project has been
+> paired yet, so the MQTT path to Pi-Somfy is written and unit-tested but unproven on
+> hardware.
 >
 > Clone it to read it or to try the simulator. Do not put it in front of your windows
 > and expect it to be right yet.
@@ -27,11 +28,14 @@ shutter stands, and automations that run on the house's own network.
 | ✅ | Every position states whether it is certain, estimated or unknown, and how old that is |
 | ✅ | Live updates to every open client; reconnect with backoff after any interruption |
 | ✅ | A simulated house with soft start and non-linear travel, so it develops without hardware |
-| ⬜ | **Travel-time calibration** — feature 002, currently the times come from configuration |
+| ✅ | Guided travel-time calibration: two presses per trip, median over runs, per direction |
+| ✅ | One-tap confirmation after an ordinary trip, so the times stay true without a wizard |
+| ✅ | A midpoint check that bends the middle of a travel and never its end points |
 | ⬜ | Automations and schedules |
 | ⬜ | Anything confirmed on a real motor |
 
-74 tests, all against the real API surface or the tracker's rules.
+469 tests, against the real API surface, the tracker's rules, or the calibration
+arithmetic.
 
 ## The problem this project takes seriously
 
@@ -106,7 +110,8 @@ cd ../frontend && npm install && npm run dev     # proxies /api to the backend
 ```
 
 Point `bridge.kind` at `"mqtt"` and nothing else changes. Details in
-[`backend/README.md`](backend/README.md); the validation scenarios, including the
+[`backend/README.md`](backend/README.md); putting it on the Pi, with broker, service
+unit and backups, is [`deploy/README.md`](deploy/README.md); the validation scenarios, including the
 reconciliation cases, are in
 [`specs/001-mqtt-live-position/quickstart.md`](specs/001-mqtt-live-position/quickstart.md).
 
@@ -121,10 +126,11 @@ Four screens in German: overview, detail, automations, and calibration, includin
 adding and removing a shutter and the power-cycle reset for when every remote is lost.
 
 It predates the real frontend and is **throwaway**. Where the two disagree, the code
-wins. It survives for one reason: it holds the calibration flow that feature 002 will
-build, which is not implemented yet.
+wins — calibration now exists for real, and the app is the reference for how it works.
+The mock still holds two flows the app does not: adding or removing a shutter, and the
+power-cycle reset.
 
-### Calibration, once it exists
+### Calibration
 
 Travel times cannot be read off the motor, so the user is the sensor: two button presses
 per trip, one when the shutter starts moving, one when it arrives. Runs alternate
@@ -150,14 +156,16 @@ Work is spec-driven with [GitHub Spec Kit](https://github.com/github/spec-kit):
 /speckit-constitution → /speckit-specify → /speckit-plan → /speckit-tasks → /speckit-implement
 ```
 
-Feature code is not written before its spec exists. Feature 001 is specified, planned,
-broken into tasks and implemented under
-[`specs/001-mqtt-live-position/`](specs/001-mqtt-live-position/) — the plan's
-[research.md](specs/001-mqtt-live-position/research.md) is where the non-obvious
-decisions are argued. See [CLAUDE.md](CLAUDE.md) for conventions and build commands.
+Feature code is not written before its spec exists. Both features are specified,
+planned, broken into tasks and implemented under
+[`specs/`](specs/) — each plan's `research.md` is where the non-obvious decisions are
+argued, including the one that killed a user story: feature 002 originally asked for
+recalibration with no user involvement, and
+[that is not possible here](specs/002-travel-calibration/research.md). See
+[CLAUDE.md](CLAUDE.md) for conventions and build commands.
 
 ```bash
-cd backend && .venv/bin/python -m pytest       # 74 tests
+cd backend && .venv/bin/python -m pytest       # 469 tests
 cd frontend && npx svelte-check --tsconfig ./tsconfig.json
 ```
 

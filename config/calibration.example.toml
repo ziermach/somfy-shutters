@@ -1,0 +1,20 @@
+# Written by somfy-shutters, not by hand. Shown here so you know what to expect
+# in config/calibration.toml after the first measurement.
+#
+# To override a value, put travel_up_seconds or travel_down_seconds into
+# shutters.toml instead: a number you type there wins, and this file is never
+# consulted for it. The measurement is kept, just not used.
+
+[wohnzimmer.up]
+travel_seconds = 18.12   # command to arrival, as measured
+dead_seconds = 0.74      # command to first movement
+runs = 3                 # how many valid runs the median rests on
+curve_k = 0.2            # verification adjustment, ±0.8, 0 means linear
+updated_at = "2026-09-22T09:14:02+00:00"
+
+[wohnzimmer.down]
+travel_seconds = 16.04
+dead_seconds = 0.69
+runs = 3
+curve_k = 0.2
+updated_at = "2026-09-22T09:16:41+00:00"

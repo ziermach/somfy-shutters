@@ -29,3 +29,8 @@ operateShutters.conf
 
 # runtime config holds real RTS addresses — never commit
 config/shutters.toml
+# written by the app: measured travel times, not source
+config/calibration.toml
+
+# written by the app, holds measured travel times
+config/calibration.toml

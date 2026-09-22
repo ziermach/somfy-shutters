@@ -18,6 +18,9 @@ With `bridge.kind = "sim"` in the config this needs no broker and no hardware �
 it runs a simulated house with soft-start, non-linear travel and per-direction
 speeds the app cannot see. Point `kind` at `"mqtt"` to talk to Pi-Somfy.
 
+Running this on the Pi as a service — broker, systemd unit, backups — is
+[`deploy/README.md`](../deploy/README.md).
+
 ## Test
 
 ```bash
@@ -35,6 +38,7 @@ broker nor a clock.
 |---|---|---|
 | `SHUTTERS_CONFIG` | `../config/shutters.toml` | which shutters exist |
 | `SHUTTERS_DB` | `../config/state.db` | persisted positions |
+| `SHUTTERS_CALIBRATION` | `calibration.toml` beside the database | measured travel times, written by the app |
 | `LOG_LEVEL` | `INFO` | |
 
 ## Simulator-only endpoints

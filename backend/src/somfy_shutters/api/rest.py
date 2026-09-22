@@ -205,6 +205,33 @@ async def sim_bridge(request: Request, state: Literal["offline", "online"]) -> d
     return {"connected": bridge.connected}
 
 
+@sim_router.get("/truth")
+async def sim_truth(request: Request) -> dict[str, Any]:
+    """What the simulated windows actually do.
+
+    Only reachable with the simulator, and never through the bridge port the app
+    talks to — calibration has to find these numbers by measuring, or it proves
+    nothing.
+    """
+    tracker = _tracker(request)
+    bridge = request.app.state.bridge
+    out = {}
+    for shutter_id, config in tracker.settings.shutters.items():
+        sim = bridge._shutters.get(config.address)
+        if sim is None:
+            continue
+        out[shutter_id] = {
+            "dead_seconds": round(sim.dead_time, 2),
+            "travel_up_seconds": round(sim.travel_up, 2),
+            "travel_down_seconds": round(sim.travel_down, 2),
+            "curve_k": sim.curve_k,
+            "percent_now": round(sim.percent, 1),
+            "command_to_arrival_up": round(sim.dead_time + sim.travel_up, 2),
+            "command_to_arrival_down": round(sim.dead_time + sim.travel_down, 2),
+        }
+    return out
+
+
 @sim_router.post("/report")
 async def sim_report(request: Request, body: ReportBody) -> dict[str, Any]:
     tracker = _tracker(request)

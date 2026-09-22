@@ -80,7 +80,7 @@ python3.11 -m venv .venv          # or: uv venv --python 3.11 .venv
 ```
 
 The unit file expects exactly `/home/pi/somfy-shutters`. A different path means
-editing the four places it appears in `somfy-shutters.service`.
+editing the five places it appears in `somfy-shutters.service`.
 
 ## 3. Build the frontend
 
