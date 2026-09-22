@@ -1,9 +1,20 @@
 # Contract: WebSocket — automations
 
 New frames on the existing channel from
-[feature 001](../../001-mqtt-live-position/contracts/websocket.md). The snapshot is
-unchanged: automations have their own screen and fetch over REST, so a client that
-never opens it pays nothing.
+[feature 001](../../001-mqtt-live-position/contracts/websocket.md), and one addition to
+its snapshot. Rules themselves are fetched over REST by the automations screen, so a
+client that never opens it pays nothing for them.
+
+## Snapshot addition
+
+```json
+{ "type": "snapshot", "seq": 1, "data": { "shutters": [ "…" ], "bridge": { "…": "" },
+  "automations": { "paused": false, "until": null, "clock_reliable": true, "clock_reason": null } } }
+```
+
+So the overview's banner (FR-026) is right from the first frame. An earlier draft sent
+this as a separate frame right after the snapshot; that shifted the frame order every
+existing client and test relies on, for no gain.
 
 A rule firing needs **no** new frame to be visible: its commands produce the ordinary
 `movement` frames, so every open client animates it like a button press (FR-009).
@@ -12,12 +23,12 @@ A rule firing needs **no** new frame to be visible: its commands produce the ord
 
 ```json
 { "type": "automations", "seq": 2210, "paused": true, "until": "2026-09-29T00:00:00+02:00",
-  "clock_reliable": true }
+  "clock_reliable": true, "clock_reason": null }
 ```
 
-Sent on every change of either, and once right after the snapshot on every connect, so
-the overview's banner (FR-026) is right from the first frame. Clients show a banner
-when `paused` or when `clock_reliable` is false.
+Sent on every change of either; same shape as the snapshot's `automations`. Clients
+show a banner when `paused` or when `clock_reliable` is false (`clock_reason`:
+`not_synchronised` | `went_backwards`).
 
 ## `automation_fired` — a firing was dealt with
 

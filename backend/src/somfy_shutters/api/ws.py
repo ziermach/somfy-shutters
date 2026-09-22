@@ -103,6 +103,12 @@ def frame_for_event(event: dict[str, Any], tracker: Any) -> dict[str, Any] | Non
             "travel_seconds": event["travel_seconds"],
             "runs": event["runs"],
         }
+    if kind in ("automations", "automation_fired"):
+        # Feature 003. Already in wire shape: the engine builds them.
+        return {k: v for k, v in event.items()}
+    if kind == "rules_changed":
+        # No payload: a client showing the rules re-fetches them.
+        return {"type": "rules_changed"}
     return None
 
 
@@ -114,7 +120,13 @@ async def websocket_endpoint(socket: WebSocket) -> None:
     bridge = app.state.bridge
 
     runs = getattr(app.state, "runs", None)
-    await hub.join(socket, snapshot_json(tracker, bridge.kind, bridge.connected, runs))
+    snapshot = snapshot_json(tracker, bridge.kind, bridge.connected, runs)
+    engine = getattr(app.state, "automation", None)
+    if engine is not None:
+        # In the snapshot rather than a frame after it, so the overview's banner
+        # is right from the first frame (feature 003, FR-026).
+        snapshot["automations"] = engine.state_json()
+    await hub.join(socket, snapshot)
     try:
         while True:
             # Nothing is expected from the client; this keeps the socket open and

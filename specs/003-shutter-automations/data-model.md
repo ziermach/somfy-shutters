@@ -12,14 +12,9 @@ strings; wall-clock values (a rule's time of day, bounds) as `HH:MM` local.
 | `name` | text | 1–60 characters, trimmed |
 | `enabled` | bool | |
 | `days` | int | bitmask, bit 0 = Monday … bit 6 = Sunday; 0 allowed (never fires, FR-007 edge case) |
-| `trigger_kind` | text | `time` \| `sunrise` \| `sunset` |
-| `time_of_day` | text, nullable | `HH:MM`; required for `time`, null otherwise |
-| `offset_minutes` | int | −360…360; must be 0 for `time` |
-| `not_before` | text, nullable | `HH:MM`; sun triggers only |
-| `not_after` | text, nullable | `HH:MM`; sun triggers only; if both set, `not_before` < `not_after` |
+| `trigger` | text (JSON) | `{kind: "time", time: "HH:MM"}` or `{kind: "sunrise"\|"sunset", offset_minutes: −360…360, not_before: "HH:MM"\|null, not_after: "HH:MM"\|null}`; if both bounds set, `not_before` < `not_after` |
 | `targets` | text (JSON) | `"all"` or a non-empty list of shutter ids |
-| `action_kind` | text | `open` \| `close` \| `position` |
-| `action_percent` | int, nullable | 0–100, required for `position` only |
+| `action` | text (JSON) | `{kind: "open"\|"close"}` or `{kind: "position", percent: 0–100}` |
 | `skip_planned_at` | text, nullable | UTC instant of the one firing to skip (FR-025) |
 | `created_at` | text | UTC; with `id`, the tie-break for FR-011 |
 | `updated_at` | text | UTC |

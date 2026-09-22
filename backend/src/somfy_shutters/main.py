@@ -19,7 +19,10 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import calibration_routes, rest, ws
+from .api import automation_routes, calibration_routes, rest, ws
+from .automation.clock import ClockGuard
+from .automation.engine import LOCATION_KEY, AutomationEngine
+from .automation.store import AutomationStore
 from .bridge.base import ShutterBridge
 from .bridge.mqtt import MqttBridge
 from .bridge.sim import SimBridge
@@ -39,6 +42,8 @@ from .tracker import Tracker
 log = logging.getLogger(__name__)
 
 TICK_SECONDS = 0.2
+AUTOMATION_CHECK_SECONDS = 30
+"""Clock check and a backstop run_due; the timer itself is APScheduler's."""
 """How often settled movements are noticed. The animation runs client-side, so
 this only decides when the model catches up — not how smooth anything looks."""
 
@@ -89,6 +94,15 @@ def create_app(
         )
         calibration_store = CalibrationStore(db_path, toml_path)
     calibration = CalibrationService(settings, calibration_store)
+
+    automation_store = AutomationStore(store.path)
+    if automation_store.setting(LOCATION_KEY) is None and settings.location is not None:
+        # Seeds once. From then on the app is where the location is changed.
+        automation_store.set_setting(LOCATION_KEY, settings.location.model_dump())
+    guard = ClockGuard()
+    # `state` is set to app.state below, once it exists: the engine commands
+    # shutters through the same function a button press uses (commands.apply).
+    engine = AutomationEngine(automation_store, state=None, publish=bus.publish, guard=guard)
     runs = RunRegistry()
 
     tracker = Tracker(settings, store, emit=emit, calibration=calibration)
@@ -212,7 +226,44 @@ def create_app(
                     )
                 await asyncio.sleep(TICK_SECONDS)
 
-        tasks = [asyncio.create_task(pump_reports()), asyncio.create_task(pump_ticks())]
+        async def pump_automations() -> None:
+            last_beat = 0.0
+            last_day = None
+            while True:
+                try:
+                    await engine.check_clock()
+                    # A backstop for the timer: idempotent, since every firing is
+                    # recorded before it is carried out.
+                    await engine.run_due()
+                    if time.monotonic() - last_beat >= 60:
+                        engine.beat()
+                        last_beat = time.monotonic()
+                    today = utcnow().astimezone(settings.general.tz).date()
+                    if today != last_day:
+                        # Sun times move every day; firings older than 90 days go.
+                        engine.reschedule()
+                        engine.purge()
+                        last_day = today
+                except Exception:
+                    log.exception("automation loop")
+                await asyncio.sleep(AUTOMATION_CHECK_SECONDS)
+
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+        # Started here, on uvicorn's loop; started at import it would bind to another.
+        scheduler = AsyncIOScheduler(timezone="UTC")
+        scheduler.start()
+        engine.scheduler = scheduler
+        engine.verdict = guard.check(utcnow(), engine.heartbeat())
+        if engine.verdict.reliable:
+            await engine.catch_up()
+        engine.reschedule()
+
+        tasks = [
+            asyncio.create_task(pump_reports()),
+            asyncio.create_task(pump_ticks()),
+            asyncio.create_task(pump_automations()),
+        ]
         log.info("ready: %d shutters, bridge=%s", len(settings.shutters), bridge.kind)
         try:
             yield
@@ -220,9 +271,11 @@ def create_app(
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+            scheduler.shutdown(wait=False)
             await bridge.stop()
             store.close()
             calibration_store.close()
+            automation_store.close()
 
     app = FastAPI(title="somfy-shutters", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
@@ -238,9 +291,13 @@ def create_app(
     app.state.pending_confirmations = pending
     # shutter id -> the direction its check drive went. One answer per drive.
     app.state.pending_checks = {}
+    app.state.automation = engine
+    app.state.clock_guard = guard
+    engine.state = app.state
 
     app.include_router(rest.router)
     app.include_router(calibration_routes.router)
+    app.include_router(automation_routes.router)
     app.include_router(ws.router)
     if settings.bridge.kind == "sim":
         app.include_router(rest.sim_router)

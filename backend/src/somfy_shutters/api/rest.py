@@ -14,8 +14,9 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from .. import commands
 from ..bridge.base import BridgeUnreachable
-from ..models import Action
+from ..commands import MeasurementInProgress
 from ..tracker import Tracker, UnknownShutter
 from .serialize import movement_json, shutter_json, snapshot_json
 
@@ -39,42 +40,9 @@ def _tracker(request: Request) -> Tracker:
     return request.app.state.tracker
 
 
-class MeasurementInProgress(RuntimeError):
-    """A command was aimed at a shutter that is being measured (FR-028)."""
-
-
 async def _apply(request: Request, shutter_id: str, body: CommandBody) -> dict[str, Any]:
-    """Issue one command. Raises BridgeUnreachable if it could not be handed over."""
-    # Checked here rather than on one route: "Alle zu" reached this function by
-    # another path and drove straight through a running measurement.
-    runs = getattr(request.app.state, "runs", None)
-    if runs is not None and runs.is_measuring(shutter_id):
-        raise MeasurementInProgress(shutter_id)
-
-    tracker: Tracker = request.app.state.tracker
-    bridge = request.app.state.bridge
-    action = Action(body.action)
-    # Driven somewhere else, the shutter no longer shows the check's midpoint;
-    # an answer now would describe a position nobody asked about.
-    getattr(request.app.state, "pending_checks", {}).pop(shutter_id, None)
-
-    if action is Action.STOP:
-        # Expressed as a level command at the current position: we only speak
-        # level/cmd. See contracts/mqtt.md — this is an approximation, and
-        # hardware bring-up has to confirm the motor halts crisply.
-        await bridge.send_level(
-            tracker.settings.shutters[shutter_id].address, tracker.halt_level(shutter_id)
-        )
-        await tracker.stop(shutter_id)
-        return {"accepted": True, "movement": None}
-
-    target = tracker.plan(shutter_id, action, body.target_percent)
-    assert target is not None
-    level = tracker.level_for(shutter_id, target)
-    await bridge.send_level(tracker.settings.shutters[shutter_id].address, level)
-    movement = await tracker.start_movement(shutter_id, target, level)
-    log.info("command %s on %s -> %s%%", body.action, shutter_id, target)
-    return {"accepted": True, "movement": movement_json(movement)}
+    """Issue one command through the shared path (commands.apply)."""
+    return await commands.apply(request.app.state, shutter_id, body.action, body.target_percent)
 
 
 @router.get("/shutters")
