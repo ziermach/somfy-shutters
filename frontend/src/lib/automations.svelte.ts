@@ -4,6 +4,12 @@
 
 import type { AutomationState, Conflict, Firing, HomeLocation, Rule, RuleDraft } from './automations';
 
+export interface Preview {
+  next: { at: string | null; reason: string | null };
+  today: string | null;
+  conflicts: Conflict[];
+}
+
 export type SaveResult = { ok: true; rule: Rule; conflicts: Conflict[] } | { ok: false; message: string };
 
 class Automations {
@@ -63,6 +69,27 @@ class Automations {
   async remove(id: string): Promise<void> {
     await fetch(`/api/automations/${id}`, { method: 'DELETE' });
     await this.load();
+  }
+
+  async setLocation(latitude: number, longitude: number): Promise<string | null> {
+    const response = await fetch('/api/location', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ latitude, longitude })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) return body.message ?? 'Standort nicht gespeichert.';
+    this.location = body;
+    return null;
+  }
+
+  async preview(draft: RuleDraft, id?: string): Promise<Preview | null> {
+    const response = await fetch('/api/automations/preview', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(id ? { ...draft, id } : draft)
+    });
+    return response.ok ? response.json() : null;
   }
 
   async firings(id: string): Promise<Firing[]> {

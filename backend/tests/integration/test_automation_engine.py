@@ -80,7 +80,7 @@ def add(house, time="06:45", targets="all", action=None, **over):
     body = {
         "name": over.pop("name", "Test"),
         "days": over.pop("days", [True] * 7),
-        "trigger": {"kind": "time", "time": time},
+        "trigger": over.pop("trigger", {"kind": "time", "time": time}),
         "targets": targets,
         "action": action or {"kind": "close"},
     }
@@ -205,3 +205,15 @@ def test_reschedule_points_at_the_earliest_next_firing(house) -> None:
     add(house, time="07:30")
     add(house, time="06:45")
     assert house.engine.reschedule(TUESDAY_0645 - timedelta(hours=1)) == TUESDAY_0645
+
+
+async def test_a_day_without_sunset_is_recorded_not_silent(house) -> None:
+    """Only possible far north — but a rule that silently never fires is worse."""
+    house.store.set_setting("location", {"latitude": 78.22, "longitude": 15.65})
+    rule = add(house, trigger={"kind": "sunset", "offset_minutes": 0})
+    midsummer_noon = datetime(2026, 6, 21, 12, 0, tzinfo=BERLIN)
+    await house.engine.run_due(midsummer_noon)
+    last = house.store.last_firing(rule.id)
+    assert last is not None and last.status is FiringStatus.NO_SUN
+    await house.engine.run_due(midsummer_noon + timedelta(hours=1))
+    assert len(house.store.firings(rule.id)) == 1, "once per day, not once per wake-up"

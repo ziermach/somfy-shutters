@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
+  import LocationCard from '../components/LocationCard.svelte';
   import RuleCard from '../components/RuleCard.svelte';
   import { automations } from '../lib/automations.svelte';
   import { shutters } from '../lib/shutters.svelte';
@@ -40,6 +41,10 @@
   </div>
 
   <button type="button" class="add" onclick={() => onedit()}>+ Neue Regel</button>
+
+  {#if automations.loaded}
+    <LocationCard />
+  {/if}
 
   <p class="note">
     Eine Regel schickt Befehle — ob der Rolladen angekommen ist, kann niemand melden. Zwischenpositionen bleiben

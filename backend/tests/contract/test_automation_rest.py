@@ -97,3 +97,44 @@ def test_every_change_tells_open_clients(client) -> None:
         assert socket.receive_json()["type"] == "rules_changed"
         client.delete(f"/api/automations/{rule['id']}")
         assert socket.receive_json()["type"] == "rules_changed"
+
+
+# --- US2 ---------------------------------------------------------------------
+
+SUN_TRIGGER = {"kind": "sunset", "offset_minutes": -30, "not_before": None, "not_after": None}
+
+
+def test_location_round_trip_with_todays_sun_times(client) -> None:
+    assert client.get("/api/location").json() is None
+    got = client.put("/api/location", json={"latitude": 52.52, "longitude": 13.40}).json()
+    assert got["latitude"] == 52.52 and got["longitude"] == 13.40
+    assert len(got["sunrise"]) == 5 and len(got["sunset"]) == 5
+    assert client.get("/api/automations").json()["location"]["sunset"] == got["sunset"]
+
+
+@pytest.mark.parametrize(
+    "where", [{"latitude": 91, "longitude": 0}, {"latitude": 0, "longitude": 181}, {}]
+)
+def test_location_out_of_range_is_422(client, where) -> None:
+    response = client.put("/api/location", json=where)
+    assert response.status_code == 422
+    assert set(response.json()) == {"error", "message", "detail"}
+
+
+def test_a_sun_rule_needs_a_location(client) -> None:
+    response = client.post("/api/automations", json=body(trigger=SUN_TRIGGER))
+    assert response.status_code == 409
+    assert response.json()["error"] == "no_location"
+
+
+def test_preview_says_what_today_resolves_to(client) -> None:
+    client.put("/api/location", json={"latitude": 52.52, "longitude": 13.40})
+    got = client.post("/api/automations/preview", json=body(trigger=SUN_TRIGGER)).json()
+    assert set(got) == {"next", "today", "conflicts"}
+    assert len(got["today"]) == 5
+    assert got["next"]["at"] is not None
+
+
+def test_preview_of_an_invalid_rule_is_422(client) -> None:
+    response = client.post("/api/automations/preview", json=body(targets=[]))
+    assert response.status_code == 422

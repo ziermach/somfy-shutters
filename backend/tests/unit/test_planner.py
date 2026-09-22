@@ -108,3 +108,69 @@ def test_wall_clock_round_trips_on_ordinary_days(hhmm: str) -> None:
 
     at = wall_clock(date(2026, 7, 1), time(h, m), BERLIN)
     assert at.astimezone(UTC).astimezone(BERLIN).strftime("%H:%M") == hhmm
+
+
+# --- sun (US2) -----------------------------------------------------------------
+
+from somfy_shutters.automation.sun import sun_lookup  # noqa: E402
+
+SUN = sun_lookup(52.52, 13.40, BERLIN)
+
+
+def sun_rule(kind="sunset", offset=0, not_before=None, not_after=None, days=EVERY_DAY):
+    return rule(
+        days=days,
+        trigger={
+            "kind": kind,
+            "offset_minutes": offset,
+            "not_before": not_before,
+            "not_after": not_after,
+        },
+    )
+
+
+def test_sunset_minus_thirty() -> None:
+    got = next_firing(sun_rule(offset=-30), local(2026, 9, 23, 12, 0), BERLIN, SUN)
+    # published sunset 19:05:03 -> 18:35
+    assert got.at is not None
+    assert abs(got.at - local(2026, 9, 23, 18, 35)) <= timedelta(minutes=2)
+    assert got.at.second == 0
+
+
+def test_not_before_holds_a_june_sunrise_back() -> None:
+    got = next_firing(
+        sun_rule("sunrise", not_before="06:30"), local(2026, 6, 21, 0, 0), BERLIN, SUN
+    )
+    assert got.at == local(2026, 6, 21, 6, 30)
+
+
+def test_not_after_pulls_a_june_sunset_forward() -> None:
+    got = next_firing(sun_rule(not_after="21:00"), local(2026, 6, 21, 12, 0), BERLIN, SUN)
+    assert got.at == local(2026, 6, 21, 21, 0)
+
+
+def test_an_offset_past_midnight_belongs_to_the_selected_day() -> None:
+    """Friday only, sunset +5 h: fires early Saturday, and not on Saturday evening."""
+    friday = [False, False, False, False, True, False, False]
+    got = firings_between(
+        sun_rule(offset=300, days=friday),
+        local(2026, 9, 25, 0, 0),
+        local(2026, 9, 28, 0, 0),
+        BERLIN,
+        SUN,
+    )
+    assert len(got) == 1
+    assert got[0].astimezone(BERLIN).date().isoformat() == "2026-09-26"
+
+
+def test_no_location_says_so() -> None:
+    got = next_firing(sun_rule(), local(2026, 9, 23, 12, 0), BERLIN, None)
+    assert got.at is None and got.reason == "no_location"
+
+
+def test_a_day_without_the_event_yields_no_firing() -> None:
+    svalbard = sun_lookup(78.22, 15.65, BERLIN)
+    got = firings_between(
+        sun_rule(), local(2026, 6, 20, 0, 0), local(2026, 6, 22, 0, 0), BERLIN, svalbard
+    )
+    assert got == []

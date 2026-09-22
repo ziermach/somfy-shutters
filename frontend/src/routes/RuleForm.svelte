@@ -9,9 +9,10 @@
     WEEKEND,
     type RuleAction,
     type RuleDraft,
-    type Trigger
+    type Trigger,
+    nextText
   } from '../lib/automations';
-  import { automations } from '../lib/automations.svelte';
+  import { automations, type Preview } from '../lib/automations.svelte';
   import { shutters } from '../lib/shutters.svelte';
 
   interface Props {
@@ -32,17 +33,63 @@
   let saving = $state(false);
 
   onMount(async () => {
-    if (id && !automations.loaded) await automations.load();
+    if (!automations.loaded) await automations.load();
     const rule = id ? automations.byId(id) : undefined;
     if (rule) {
       name = rule.name;
       days = [...rule.days];
       trigger = { ...rule.trigger };
+      if (rule.trigger.kind !== 'time') {
+        offsetAbs = Math.abs(rule.trigger.offset_minutes);
+        offsetSign = rule.trigger.offset_minutes < 0 ? -1 : 1;
+        showBounds = !!(rule.trigger.not_before || rule.trigger.not_after);
+      }
       targets = rule.targets === 'all' ? 'all' : [...rule.targets];
       action = { ...rule.action } as RuleAction;
       enabled = rule.enabled;
     }
   });
+
+  // --- trigger ---------------------------------------------------------------
+
+  let lastTime = '06:45';
+  let offsetAbs = $state(30);
+  let offsetSign = $state<-1 | 1>(-1);
+  let showBounds = $state(false);
+
+  function setTrigger(kind: Trigger['kind']) {
+    if (trigger.kind === 'time') lastTime = trigger.time;
+    if (kind === 'time') {
+      trigger = { kind, time: lastTime };
+      return;
+    }
+    const bounds = trigger.kind === 'time' ? { not_before: null, not_after: null } : trigger;
+    trigger = { kind, offset_minutes: offsetSign * offsetAbs, not_before: bounds.not_before, not_after: bounds.not_after };
+  }
+
+  $effect(() => {
+    // keep the stored offset in step with the two controls
+    if (trigger.kind !== 'time') trigger.offset_minutes = offsetSign * Math.min(360, Math.max(0, offsetAbs || 0));
+  });
+
+  // --- live preview ------------------------------------------------------------
+
+  let preview = $state<Preview | null>(null);
+  let previewTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const draft: RuleDraft = { name: name.trim() || 'Vorschau', enabled: true, days: [...days], trigger: cleanTrigger(trigger), targets: targets === 'all' ? 'all' : [...targets], action: { ...action } as RuleAction };
+    if (draft.targets !== 'all' && draft.targets.length === 0) return;
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(async () => (preview = await automations.preview(draft, id)), 250);
+  });
+
+  /** An emptied time field reads as "", which is not a time; the server wants null. */
+  function cleanTrigger(t: Trigger): Trigger {
+    if (t.kind === 'time') return { ...t };
+    return { ...t, not_before: t.not_before || null, not_after: t.not_after || null };
+  }
+
+  const noLocation = $derived(trigger.kind !== 'time' && !automations.location);
 
   const toggleDay = (i: number) => (days = days.map((on, j) => (j === i ? !on : on)));
 
@@ -71,7 +118,7 @@
       return;
     }
     saving = true;
-    const draft: RuleDraft = { name: name.trim(), enabled, days, trigger, targets, action };
+    const draft: RuleDraft = { name: name.trim(), enabled, days, trigger: cleanTrigger(trigger), targets, action };
     const result = await automations.save(draft, id);
     saving = false;
     if (!result.ok) {
@@ -104,11 +151,52 @@
   </label>
 
   <div class="field">
-    <span class="label">Uhrzeit</span>
-    {#if trigger.kind === 'time'}
-      <input type="time" bind:value={trigger.time} required />
-    {/if}
+    <span class="label">Auslöser</span>
+    <div class="seg" role="radiogroup" aria-label="Auslöser">
+      <button type="button" class="seg-btn" aria-pressed={trigger.kind === 'time'} onclick={() => setTrigger('time')}>Uhrzeit</button>
+      <button type="button" class="seg-btn" aria-pressed={trigger.kind === 'sunrise'} onclick={() => setTrigger('sunrise')}>Sonnenauf</button>
+      <button type="button" class="seg-btn" aria-pressed={trigger.kind === 'sunset'} onclick={() => setTrigger('sunset')}>Sonnenunter</button>
+    </div>
   </div>
+
+  {#if trigger.kind === 'time'}
+    <label class="field">
+      <span class="label">Uhrzeit</span>
+      <input type="time" bind:value={trigger.time} required />
+    </label>
+  {:else}
+    <div class="field">
+      <span class="label">Versatz</span>
+      <div class="inline">
+        <input type="number" min="0" max="360" step="5" bind:value={offsetAbs} aria-label="Versatz in Minuten" />
+        <span class="unit">Min</span>
+        <div class="seg small" role="radiogroup" aria-label="Vor oder nach">
+          <button type="button" class="seg-btn" aria-pressed={offsetSign === -1} onclick={() => (offsetSign = -1)}>vorher</button>
+          <button type="button" class="seg-btn" aria-pressed={offsetSign === 1} onclick={() => (offsetSign = 1)}>danach</button>
+        </div>
+      </div>
+      {#if noLocation}
+        <span class="warn">Für den Sonnenstand braucht die App den Standort des Hauses — unter Automationen → Standort.</span>
+      {/if}
+      <button type="button" class="linkish" onclick={() => (showBounds = !showBounds)}>
+        {showBounds ? 'Zeitfenster ausblenden' : 'Zeitfenster (nicht vor / nicht nach)'}
+      </button>
+      {#if showBounds}
+        <div class="bounds">
+          <label>nicht vor <input type="time" bind:value={trigger.not_before} /></label>
+          <label>nicht nach <input type="time" bind:value={trigger.not_after} /></label>
+        </div>
+        <span class="note">Im Juni geht die Sonne vor fünf auf. „Nicht vor 06:30“ hält das Schlafzimmer zu.</span>
+      {/if}
+    </div>
+  {/if}
+
+  {#if preview}
+    <p class="preview">
+      {#if preview.today}heute {preview.today}{/if}
+      {#if preview.next.at}· nächste Ausführung {nextText(preview.next)}{:else if preview.next.reason}· {nextText(preview.next)}{/if}
+    </p>
+  {/if}
 
   <div class="field">
     <span class="label">Wochentage</span>
@@ -207,7 +295,8 @@
     color: var(--muted);
   }
   input[type='text'],
-  input[type='time'] {
+  input[type='time'],
+  input[type='number'] {
     height: 44px;
     border-radius: 12px;
     border: 1px solid var(--line);
@@ -277,6 +366,53 @@
     background: var(--surface-2);
     border-color: var(--line);
     color: var(--text);
+  }
+  .inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .inline input {
+    width: 80px;
+  }
+  .unit {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .seg.small {
+    padding: 3px;
+    margin-left: auto;
+  }
+  .seg.small .seg-btn {
+    height: 34px;
+    font-size: 13px;
+    padding: 0 12px;
+    flex: 0 0 auto;
+  }
+  .bounds {
+    display: flex;
+    gap: 10px;
+  }
+  .bounds label {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .warn {
+    font-size: 12px;
+    color: var(--amber);
+  }
+  .preview {
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+  .linkish {
+    align-self: flex-start;
   }
   .note {
     font-size: 12px;

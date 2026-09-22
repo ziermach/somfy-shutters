@@ -88,18 +88,18 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ### Tests for User Story 2
 
-- [ ] T025 [P] [US2] Collect published sunrise/sunset times for Berlin (52.52, 13.40) on 2026-03-20, 2026-06-21, 2026-09-23 and 2026-12-21 into `backend/tests/fixtures/sun_berlin.json`, noting the source; unit-test `backend/tests/unit/test_sun.py` **within ±2 minutes (FR-018)**
-- [ ] T026 [P] [US2] Extend `backend/tests/unit/test_planner.py`: sunset −30 min, sunrise **"nicht vor 06:30" on 2026-06-21 → 06:30**, sunset "nicht nach 21:00" in June → 21:00, sunset +300 min lands on the next calendar day but belongs to the selected weekday, no location → `no_location`, a day without the event yields no firing
-- [ ] T027 [P] [US2] Extend `backend/tests/contract/test_automation_rest.py`: `GET/PUT /api/location` with today's sunrise/sunset, **422** out of range, sun rule without location → **409 `no_location`**, `POST /api/automations/preview` returns `today`
+- [X] T025 [P] [US2] Collect published sunrise/sunset times for Berlin (52.52, 13.40) on 2026-03-20, 2026-06-21, 2026-09-23 and 2026-12-21 into `backend/tests/fixtures/sun_berlin.json`, noting the source; unit-test `backend/tests/unit/test_sun.py` **within ±2 minutes (FR-018)**
+- [X] T026 [P] [US2] Extend `backend/tests/unit/test_planner.py`: sunset −30 min, sunrise **"nicht vor 06:30" on 2026-06-21 → 06:30**, sunset "nicht nach 21:00" in June → 21:00, sunset +300 min lands on the next calendar day but belongs to the selected weekday, no location → `no_location`, a day without the event yields no firing
+- [X] T027 [P] [US2] Extend `backend/tests/contract/test_automation_rest.py`: `GET/PUT /api/location` with today's sunrise/sunset, **422** out of range, sun rule without location → **409 `no_location`**, `POST /api/automations/preview` returns `today`
 
 ### Implementation for User Story 2
 
-- [ ] T028 [P] [US2] Implement `backend/src/somfy_shutters/automation/sun.py`: `sun_times(date, location, tz)` via `astral` with the standard −0.833° depression, `None` for an event that does not occur
-- [ ] T029 [US2] Add sun triggers to `backend/src/somfy_shutters/automation/planner.py`: event + offset, then moved into `[not_before, not_after]` on the base date; `today_at(rule, now, …)` for the preview
-- [ ] T030 [US2] Engine: record `no_sun` for a selected day whose event does not occur, in `backend/src/somfy_shutters/automation/engine.py`
-- [ ] T031 [US2] Location in `backend/src/somfy_shutters/automation/store.py` (`app_setting.location`, seeded once from `[location]` in config) and `GET/PUT /api/location` plus `POST /api/automations/preview` (`next`, `today`) in `backend/src/somfy_shutters/api/automation_routes.py`; location change reschedules
-- [ ] T032 [US2] Location card in `frontend/src/routes/Automations.svelte`: latitude/longitude inputs, today's sunrise and sunset, *Standort dieses Geräts verwenden* **shown only where `navigator.geolocation` exists and the context is secure**
-- [ ] T033 [US2] Sun triggers in `frontend/src/routes/RuleForm.svelte`: *Sonnenaufgang / Sonnenuntergang*, offset with −/+ sign, collapsible *Zeitfenster* for *nicht vor / nicht nach*, the live *heute HH:MM* line from `/preview`, and the no-location explanation with a link to the location card
+- [X] T028 [P] [US2] Implement `backend/src/somfy_shutters/automation/sun.py`: `sun_times(date, location, tz)` via `astral` with the standard −0.833° depression, `None` for an event that does not occur
+- [X] T029 [US2] Add sun triggers to `backend/src/somfy_shutters/automation/planner.py`: event + offset, then moved into `[not_before, not_after]` on the base date; `today_at(rule, now, …)` for the preview
+- [X] T030 [US2] Engine: record `no_sun` for a selected day whose event does not occur, in `backend/src/somfy_shutters/automation/engine.py`
+- [X] T031 [US2] Location in `backend/src/somfy_shutters/automation/store.py` (`app_setting.location`, seeded once from `[location]` in config) and `GET/PUT /api/location` plus `POST /api/automations/preview` (`next`, `today`) in `backend/src/somfy_shutters/api/automation_routes.py`; location change reschedules
+- [X] T032 [US2] Location card in `frontend/src/routes/Automations.svelte`: latitude/longitude inputs, today's sunrise and sunset, *Standort dieses Geräts verwenden* **shown only where `navigator.geolocation` exists and the context is secure**
+- [X] T033 [US2] Sun triggers in `frontend/src/routes/RuleForm.svelte`: *Sonnenaufgang / Sonnenuntergang*, offset with −/+ sign, collapsible *Zeitfenster* for *nicht vor / nicht nach*, the live *heute HH:MM* line from `/preview`, and the no-location explanation with a link to the location card
 
 **Checkpoint**: sun rules follow the seasons; time rules unaffected.
 

@@ -58,9 +58,12 @@ The constitution fixes APScheduler for time triggers. The obvious use — one
 
 ## 3. Sun times, offline
 
-- **Decision**: `astral` 3.x, `sun.sunrise/sunset(observer, date, tzinfo)` with the
-  standard −0.833° depression (refraction plus solar radius), which is what published
-  tables use. Accuracy is well inside FR-018's 2 minutes at German latitudes.
+- **Decision**: `astral` 3.x, `sun.time_at_elevation(observer, −0.833, date, direction)`
+  — the standard definition published tables use (refraction plus solar radius).
+- **Found during implementation**: astral's own `sunrise()`/`sunset()` use
+  `90° + solar radius` and leave the refraction out. Against published times for Berlin
+  that is 2.6 minutes late at sunrise and early at sunset — outside FR-018. With the
+  elevation given explicitly the worst of eight reference times is 78 s.
 - **Verification**: a fixture of published sunrise/sunset times for the configured test
   location on four dates (both solstices, both equinoxes), collected once during
   implementation and committed; the test asserts ±2 min. No network at test time.

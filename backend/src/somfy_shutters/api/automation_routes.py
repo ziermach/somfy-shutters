@@ -155,3 +155,70 @@ async def delete_rule(request: Request, rule_id: str) -> Any:
         return error(404, "unknown_rule", "Diese Regel gibt es nicht.")
     await changed(request)
     return Response(status_code=204)
+
+
+@router.post("/automations/preview")
+async def preview(request: Request) -> Any:
+    """The form's live line: next firing, what the trigger means today, conflicts.
+
+    Saves nothing. A sun trigger without a location still previews — as "no
+    location" — so the form can explain rather than fail.
+    """
+    engine = _engine(request)
+    raw = await request.json()
+    editing = raw.pop("id", None) if isinstance(raw, dict) else None
+    try:
+        draft = RuleDraft.model_validate(raw)
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        return error(
+            422,
+            "invalid_rule",
+            "Die Regel ist so nicht gültig.",
+            {"field": ".".join(str(p) for p in first["loc"]), "problem": first["msg"]},
+        )
+    from ..automation.planner import next_firing, today_at
+
+    now = engine.clock()
+    sun = engine.sun()
+    present = [
+        sid for sid in engine.settings.shutters if draft.targets == "all" or sid in draft.targets
+    ]
+    nxt = next_firing(draft, now, engine.tz, sun, has_targets=bool(present))
+    today = today_at(draft, now, engine.tz, sun) if (not draft.is_sun or sun) else None
+    return {
+        "next": {"at": _local(engine, nxt.at), "reason": nxt.reason},
+        "today": today.astimezone(engine.tz).strftime("%H:%M") if today else None,
+        "conflicts": conflicts_json(engine, draft, editing),
+    }
+
+
+def conflicts_json(engine: AutomationEngine, draft: RuleDraft, editing: str | None) -> list:
+    """Filled in with US3 (automation/conflicts.py)."""
+    return []
+
+
+@router.get("/location")
+async def get_location(request: Request) -> Any:
+    engine = _engine(request)
+    return _location_json(engine, engine.clock())
+
+
+@router.put("/location")
+async def put_location(request: Request) -> Any:
+    from ..config import LocationConfig
+
+    engine = _engine(request)
+    try:
+        where = LocationConfig.model_validate(await request.json())
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        return error(
+            422,
+            "invalid_location",
+            "Breite muss zwischen -90 und 90 liegen, Länge zwischen -180 und 180.",
+            {"field": ".".join(str(p) for p in first["loc"]), "problem": first["msg"]},
+        )
+    engine.store.set_setting("location", where.model_dump())
+    await changed(request)  # sun rules move, and so does the timer
+    return _location_json(engine, engine.clock())

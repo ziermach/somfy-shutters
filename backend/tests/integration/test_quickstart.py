@@ -257,12 +257,24 @@ async def test_c3_5_a_reversal_mid_window_waits_for_the_motor(client) -> None:
 
     tracker = client.app.state.tracker
 
+    async def motor_stopped() -> None:
+        # The simulator steps once a second on its own; ask it directly instead of
+        # guessing how long to sleep. Sleeping was what made this test flaky.
+        for _ in range(200):
+            sim.advance(time.monotonic())
+            if sim.started_at is None:
+                return
+            await asyncio.sleep(0.05)
+        raise AssertionError("the simulated motor never stopped")
+
     async def drive(**body) -> None:
+        await motor_stopped()
         await client.post("/api/shutters/flink/command", json=body)
         movement = tracker.movement("flink")
         if movement is not None:
-            await asyncio.sleep(movement.duration_seconds + SIM_DEAD + 0.3)
+            await asyncio.sleep(movement.duration_seconds + 0.05)
         await tracker.tick()
+        await motor_stopped()
 
     await drive(action="open")
     await drive(action="position", target_percent=50)  # down, on the bent curve
