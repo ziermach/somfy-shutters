@@ -33,6 +33,7 @@ from .auth.audit import AuditLog
 from .auth.gate import Gate, Refused, caller_of, change_of
 from .auth.models import BRIDGE, SYSTEM, Actor
 from .auth.store import AuthStore
+from .auth.throttle import Throttle
 from .automation.clock import ClockGuard
 from .automation.engine import LOCATION_KEY, AutomationEngine
 from .automation.store import AutomationStore
@@ -381,6 +382,13 @@ def create_app(
         settings.auth.required,
         auth_store,
         audit,
+        throttle=Throttle(
+            failed_attempts=settings.auth.failed_attempts,
+            failed_window=settings.auth.failed_window_minutes * 60,
+            lockout=settings.auth.lockout_minutes * 60,
+            burst=settings.auth.command_burst,
+            per_second=settings.auth.command_per_second,
+        ),
         trusted_proxy=settings.auth.trusted_proxy,
         clock_ok=lambda: engine.verdict.reliable,
     )

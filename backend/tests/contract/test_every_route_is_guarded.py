@@ -19,7 +19,14 @@ UNAUTHORIZED = {
     "message": "Dieses Gerät ist nicht angemeldet.",
     "detail": None,
 }
-PARAMS = {"shutter_id": "wohnzimmer", "group_id": "g_x", "rule_id": "r_x", "state": "online"}
+PARAMS = {
+    "shutter_id": "wohnzimmer",
+    "group_id": "g_x",
+    "rule_id": "r_x",
+    "state": "online",
+    "credential_id": "c_x",
+    "code_id": "p_x",
+}
 
 
 def abilities_of(route: APIRoute) -> list:
@@ -74,6 +81,9 @@ async def test_every_guarded_route_refuses_an_anonymous_caller(locked) -> None: 
         if (method, path) in EXEMPT:
             continue
         url = re.sub(r"\{(\w+)\}", lambda m: PARAMS[m.group(1)], path)
+        # Forty refusals from one address would lock it out; this test is about the
+        # door, not the lock (that is test_throttle / test_auth_rest).
+        locked.app.state.gate.throttle.reset()
         response = await locked.request(method, url, json={})
         assert response.status_code == 401, (method, path, response.text)
         assert response.json() == UNAUTHORIZED, (method, path)

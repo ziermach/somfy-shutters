@@ -84,6 +84,8 @@ async def test_ten_wrong_codes_cancel_the_outstanding_one(locked) -> None:  # no
     minted = await mint(locked, headers)
     for i in range(10):
         await locked.post("/api/auth/pair", json={"code": f"00000{i}", "name": "x"})
+    # The guesser's address is now locked out too; the owner is reading from it here.
+    locked.app.state.gate.throttle.reset()
     assert (await locked.get("/api/auth/pairing", headers=headers)).json()["codes"] == []
     assert (
         await locked.post("/api/auth/pair", json={"code": minted["code"], "name": "x"})

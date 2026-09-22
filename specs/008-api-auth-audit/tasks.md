@@ -186,12 +186,12 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ### Tests for User Story 7
 
-- [ ] T043 [P] [US7] `backend/tests/unit/test_throttle.py` on an injected monotonic clock: **10 failures in 5 minutes lock the source for 15 minutes**, the window slides, other sources unaffected; bucket **burst 10, refill 1/s**; a wall-clock jump of −6 h changes nothing
-- [ ] T044 [P] [US7] Extend `backend/tests/contract/test_auth_rest.py`: an eleventh failure → **`429` with `Retry-After`**, even with a valid token from that source; another source is fine; thirty commands in two seconds → about ten accepted, the rest `429` recorded `refused_throttle`, and the simulated bridge received only the accepted ones; `X-Forwarded-For` ignored unless `trusted_proxy` matches the peer; a throttled WebSocket closes `4429`
+- [X] T043 [P] [US7] `backend/tests/unit/test_throttle.py` on an injected monotonic clock: **10 failures in 5 minutes lock the source for 15 minutes**, the window slides, other sources unaffected; bucket **burst 10, refill 1/s**; a wall-clock jump of −6 h changes nothing
+- [X] T044 [P] [US7] Extend `backend/tests/contract/test_auth_rest.py`: an eleventh failure → **`429` with `Retry-After`**, even with a valid token from that source; another source is fine; thirty commands in two seconds → about ten accepted, the rest `429` recorded `refused_throttle`, and the simulated bridge received only the accepted ones; `X-Forwarded-For` ignored unless `trusted_proxy` matches the peer; a throttled WebSocket closes `4429`
 
 ### Implementation for User Story 7
 
-- [ ] T045 [US7] `backend/src/somfy_shutters/auth/throttle.py` (failure windows per source, token buckets per credential, injected `monotonic`) and its use in `auth/gate.py`: a locked source is answered `429` **before** any lookup; `command` routes draw from the bucket **after** the ability check — a `403` does not consume a token; both recorded `throttled`; source address = socket peer, or the first `X-Forwarded-For` hop only when the peer equals `trusted_proxy`
+- [X] T045 [US7] `backend/src/somfy_shutters/auth/throttle.py` (failure windows per source, token buckets per credential, injected `monotonic`) and its use in `auth/gate.py`: a locked source is answered `429` **before** any lookup; `command` routes draw from the bucket **after** the ability check — a `403` does not consume a token; both recorded `throttled`; source address = socket peer, or the first `X-Forwarded-For` hop only when the peer equals `trusted_proxy`
 
 **Checkpoint**: quickstart G passes.
 
