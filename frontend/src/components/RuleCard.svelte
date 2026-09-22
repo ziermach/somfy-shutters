@@ -1,5 +1,7 @@
 <script lang="ts">
   import { actionText, daysText, lastText, nextText, targetsText, triggerText, type Rule } from '../lib/automations';
+  import { automations } from '../lib/automations.svelte';
+  import FiringHistory from './FiringHistory.svelte';
 
   interface Props {
     rule: Rule;
@@ -9,6 +11,12 @@
   let { rule, names, onedit }: Props = $props();
 
   const last = $derived(lastText(rule.last));
+  let showHistory = $state(false);
+  let message = $state<string | null>(null);
+
+  async function toggle() {
+    message = await automations.patch(rule.id, { enabled: !rule.enabled });
+  }
 </script>
 
 <div class="rule" class:off={!rule.enabled}>
@@ -21,13 +29,29 @@
       </div>
       <div class="what">{targetsText(rule.targets, names)} → {actionText(rule.action)}</div>
     </div>
+    <button
+      type="button"
+      class="switch"
+      role="switch"
+      aria-checked={rule.enabled}
+      aria-label="{rule.name} ein- oder ausschalten"
+      onclick={toggle}
+    ></button>
   </div>
   <div class="foot">
     <span class="next" class:none={!rule.next.at}>Nächste: {nextText(rule.next)}</span>
     {#if last}
-      <span class="last">Zuletzt {last}</span>
+      <button type="button" class="last" onclick={() => (showHistory = !showHistory)}>
+        Zuletzt {last} {showHistory ? '▴' : '▾'}
+      </button>
     {/if}
   </div>
+  {#if message}
+    <p class="error" role="alert">{message}</p>
+  {/if}
+  {#if showHistory}
+    <FiringHistory ruleId={rule.id} {names} />
+  {/if}
 </div>
 
 <style>
@@ -40,7 +64,8 @@
     flex-direction: column;
     gap: 10px;
   }
-  .rule.off {
+  .rule.off .meta,
+  .rule.off .foot {
     opacity: 0.55;
   }
   .top {
@@ -79,6 +104,33 @@
     font-size: 13px;
     color: var(--faint);
   }
+  .switch {
+    width: 52px;
+    height: 30px;
+    flex-shrink: 0;
+    border-radius: 15px;
+    padding: 2px;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+  .switch::after {
+    content: '';
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--grey-dot);
+  }
+  .switch[aria-checked='true'] {
+    background: var(--amber);
+    border-color: var(--amber-line);
+    justify-content: flex-end;
+  }
+  .switch[aria-checked='true']::after {
+    background: var(--ink);
+  }
   .foot {
     display: flex;
     flex-direction: column;
@@ -90,6 +142,13 @@
     color: var(--amber);
   }
   .last {
+    all: unset;
+    cursor: pointer;
     color: var(--faint);
+  }
+  .error {
+    margin: 0;
+    font-size: 12px;
+    color: var(--amber);
   }
 </style>

@@ -138,3 +138,71 @@ def test_preview_says_what_today_resolves_to(client) -> None:
 def test_preview_of_an_invalid_rule_is_422(client) -> None:
     response = client.post("/api/automations/preview", json=body(targets=[]))
     assert response.status_code == 422
+
+
+# --- US3 ---------------------------------------------------------------------
+
+
+def test_put_replaces_and_404_for_unknown(client) -> None:
+    rule = client.post("/api/automations", json=body()).json()
+    got = client.put(
+        f"/api/automations/{rule['id']}",
+        json=body(name="Später", trigger={"kind": "time", "time": "07:30"}),
+    )
+    assert got.status_code == 200
+    assert got.json()["name"] == "Später" and got.json()["trigger"]["time"] == "07:30"
+    assert got.json()["id"] == rule["id"]
+    assert client.put("/api/automations/r_nope", json=body()).status_code == 404
+
+
+def test_patch_enabled_keeps_everything_else(client) -> None:
+    rule = client.post("/api/automations", json=body(targets=["kueche"])).json()
+    off = client.patch(f"/api/automations/{rule['id']}", json={"enabled": False}).json()
+    assert off["enabled"] is False
+    assert off["next"] == {"at": None, "reason": "disabled"}
+    assert off["targets"] == ["kueche"] and off["trigger"] == rule["trigger"]
+    on = client.patch(f"/api/automations/{rule['id']}", json={"enabled": True}).json()
+    assert on["next"]["at"] is not None
+
+
+def test_firings_are_listed_newest_first_with_outcomes(client) -> None:
+    rule = client.post("/api/automations", json=body(targets=["kueche"])).json()
+    engine = client.app.state.automation
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    monday = datetime(2026, 9, 21, 6, 45, tzinfo=ZoneInfo("Europe/Berlin"))
+    client.portal.call(engine.run_due, monday)
+    client.portal.call(engine.run_due, monday + timedelta(days=1))
+    got = client.get(f"/api/automations/{rule['id']}/firings").json()["firings"]
+    assert [f["planned_at"][:10] for f in got] == ["2026-09-22", "2026-09-21"]
+    assert got[0]["outcomes"] == [{"shutter_id": "kueche", "result": "commanded", "reason": None}]
+    assert client.get("/api/automations").json()["rules"][0]["last"]["status"] == "fired"
+    assert client.get("/api/automations/r_nope/firings").status_code == 404
+
+
+def test_create_and_preview_report_conflicts(client) -> None:
+    first = client.post("/api/automations", json=body(name="Auf")).json()
+    clash = body(name="Zu", action={"kind": "close"})
+    preview = client.post("/api/automations/preview", json=clash).json()
+    assert [c["rule_id"] for c in preview["conflicts"]] == [first["id"]]
+    assert preview["conflicts"][0]["winner"] == "this"
+    created = client.post("/api/automations", json=clash)
+    assert created.status_code == 201, "a conflict warns; it does not refuse"
+    assert created.json()["conflicts"][0]["rule_name"] == "Auf"
+    assert created.json()["conflicts"][0]["winner"] == created.json()["id"]
+
+
+def test_rules_are_listed_by_next_firing(client) -> None:
+    late = client.post(
+        "/api/automations",
+        json=body(name="spät", days=[True] * 7, trigger={"kind": "time", "time": "23:58"}),
+    ).json()
+    early = client.post(
+        "/api/automations",
+        json=body(name="früh", days=[True] * 7, trigger={"kind": "time", "time": "23:59"}),
+    ).json()
+    off = client.post("/api/automations", json=body(name="aus", enabled=False)).json()
+    ids = [r["id"] for r in client.get("/api/automations").json()["rules"]]
+    assert ids[-1] == off["id"], "rules that never fire go last"
+    assert ids.index(late["id"]) < ids.index(early["id"])

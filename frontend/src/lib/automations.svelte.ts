@@ -92,6 +92,18 @@ class Automations {
     return response.ok ? response.json() : null;
   }
 
+  async patch(id: string, change: { enabled?: boolean; skip_next?: boolean }): Promise<string | null> {
+    const response = await fetch(`/api/automations/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(change)
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) return body.message ?? 'Änderung fehlgeschlagen.';
+    this.rules = this.rules.map((r) => (r.id === id ? body : r));
+    return null;
+  }
+
   async firings(id: string): Promise<Firing[]> {
     const response = await fetch(`/api/automations/${id}/firings`);
     if (!response.ok) return [];

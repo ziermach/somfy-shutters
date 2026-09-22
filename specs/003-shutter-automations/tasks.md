@@ -113,16 +113,16 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ### Tests for User Story 3
 
-- [ ] T034 [P] [US3] Unit-test `backend/tests/unit/test_conflicts.py`: two rules on one shutter in the same minute with different actions conflict and the winner follows FR-011; same action is no conflict; **two sun rules that meet only in June are found** over 366 days; a rule never conflicts with itself when editing
-- [ ] T035 [P] [US3] Extend `backend/tests/contract/test_automation_rest.py`: `PUT` replace (**404** unknown), `PATCH {enabled}` keeps every other field, `GET /api/automations/{id}/firings` newest first with outcomes, `conflicts` in create/preview responses, `last` on each rule, rules listed in FR-011 order
+- [X] T034 [P] [US3] Unit-test `backend/tests/unit/test_conflicts.py`: two rules on one shutter in the same minute with different actions conflict and the winner follows FR-011; same action is no conflict; **two sun rules that meet only in June are found** over 366 days; a rule never conflicts with itself when editing
+- [X] T035 [P] [US3] Extend `backend/tests/contract/test_automation_rest.py`: `PUT` replace (**404** unknown), `PATCH {enabled}` keeps every other field, `GET /api/automations/{id}/firings` newest first with outcomes, `conflicts` in create/preview responses, `last` on each rule, rules listed in FR-011 order
 
 ### Implementation for User Story 3
 
-- [ ] T036 [P] [US3] Implement `backend/src/somfy_shutters/automation/conflicts.py` over 366 days of planned firings (research §8)
-- [ ] T037 [US3] Add `PUT`, `PATCH {enabled}`, `GET /api/automations/{id}/firings` and `conflicts` / `last` to `backend/src/somfy_shutters/api/automation_routes.py`
-- [ ] T038 [US3] `frontend/src/components/RuleCard.svelte`: switch for enabled, *Zuletzt* line with status and "3 von 4", next firing or the reason it will not fire; open the form for editing
-- [ ] T039 [US3] Create `frontend/src/components/FiringHistory.svelte`: per-rule list with planned and actual time, status, and each shutter's outcome with reason in German
-- [ ] T040 [US3] Conflict warning in `frontend/src/routes/RuleForm.svelte` from `/preview`: names the other rule, the shutter, the first date and which rule wins; saving stays possible
+- [X] T036 [P] [US3] Implement `backend/src/somfy_shutters/automation/conflicts.py` over 366 days of planned firings (research §8)
+- [X] T037 [US3] Add `PUT`, `PATCH {enabled}`, `GET /api/automations/{id}/firings` and `conflicts` / `last` to `backend/src/somfy_shutters/api/automation_routes.py`
+- [X] T038 [US3] `frontend/src/components/RuleCard.svelte`: switch for enabled, *Zuletzt* line with status and "3 von 4", next firing or the reason it will not fire; open the form for editing
+- [X] T039 [US3] Create `frontend/src/components/FiringHistory.svelte`: per-rule list with planned and actual time, status, and each shutter's outcome with reason in German
+- [X] T040 [US3] Conflict warning in `frontend/src/routes/RuleForm.svelte` from `/preview`: names the other rule, the shutter, the first date and which rule wins; saving stays possible
 
 **Checkpoint**: nothing a rule does is a surprise.
 

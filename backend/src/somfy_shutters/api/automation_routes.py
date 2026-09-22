@@ -143,9 +143,75 @@ async def create_rule(request: Request) -> Any:
     draft = parse_draft(engine, await request.json())
     if isinstance(draft, JSONResponse):
         return draft
+    conflicts = conflicts_json(engine, draft, None)
     rule = engine.store.create(draft)
+    for c in conflicts:
+        if c["winner"] == "this":
+            c["winner"] = rule.id
     await changed(request)
-    return JSONResponse({**rule_json(engine, rule), "conflicts": []}, status_code=201)
+    return JSONResponse({**rule_json(engine, rule), "conflicts": conflicts}, status_code=201)
+
+
+@router.put("/automations/{rule_id}")
+async def replace_rule(request: Request, rule_id: str) -> Any:
+    engine = _engine(request)
+    if engine.store.rule(rule_id) is None:
+        return error(404, "unknown_rule", "Diese Regel gibt es nicht.")
+    draft = parse_draft(engine, await request.json())
+    if isinstance(draft, JSONResponse):
+        return draft
+    conflicts = conflicts_json(engine, draft, rule_id)
+    for c in conflicts:
+        if c["winner"] == "this":
+            c["winner"] = rule_id
+    rule = engine.store.replace(rule_id, draft)
+    assert rule is not None
+    # A skip only makes sense for an instant the rule still fires at.
+    if rule.skip_planned_at is not None and engine.next_for(rule).at != rule.skip_planned_at:
+        rule = engine.store.set_skip(rule_id, None) or rule
+    await changed(request)
+    return {**rule_json(engine, rule), "conflicts": conflicts}
+
+
+@router.patch("/automations/{rule_id}")
+async def patch_rule(request: Request, rule_id: str) -> Any:
+    engine = _engine(request)
+    rule = engine.store.rule(rule_id)
+    if rule is None:
+        return error(404, "unknown_rule", "Diese Regel gibt es nicht.")
+    patch = await request.json()
+    if not isinstance(patch, dict) or set(patch) - {"enabled", "skip_next"} or not patch:
+        return error(422, "invalid_patch", "Nur „enabled“ oder „skip_next“ lassen sich so ändern.")
+    if "enabled" in patch:
+        rule = engine.store.set_enabled(rule_id, bool(patch["enabled"])) or rule
+    if "skip_next" in patch:
+        if patch["skip_next"]:
+            nxt = engine.next_for(rule).at
+            if nxt is None:
+                return error(409, "nothing_to_skip", "Diese Regel hat keine nächste Ausführung.")
+            rule = engine.store.set_skip(rule_id, nxt) or rule
+        else:
+            rule = engine.store.set_skip(rule_id, None) or rule
+    await changed(request)
+    return rule_json(engine, rule)
+
+
+@router.get("/automations/{rule_id}/firings")
+async def rule_firings(request: Request, rule_id: str, limit: int = 50) -> Any:
+    engine = _engine(request)
+    if engine.store.rule(rule_id) is None:
+        return error(404, "unknown_rule", "Diese Regel gibt es nicht.")
+    return {
+        "firings": [
+            {
+                "planned_at": _local(engine, f.planned_at),
+                "fired_at": _local(engine, f.fired_at),
+                "status": f.status.value,
+                "outcomes": [o.model_dump() for o in f.outcomes],
+            }
+            for f in engine.store.firings(rule_id, limit=max(1, min(limit, 500)))
+        ]
+    }
 
 
 @router.delete("/automations/{rule_id}")
@@ -193,9 +259,33 @@ async def preview(request: Request) -> Any:
     }
 
 
-def conflicts_json(engine: AutomationEngine, draft: RuleDraft, editing: str | None) -> list:
-    """Filled in with US3 (automation/conflicts.py)."""
-    return []
+def conflicts_json(
+    engine: AutomationEngine, draft: RuleDraft, editing: str | None
+) -> list[dict[str, Any]]:
+    """Same-minute clashes on a shared shutter, with the rule that wins (FR-022)."""
+    from ..automation.conflicts import find_conflicts
+
+    existing = engine.store.rule(editing) if editing else None
+    found = find_conflicts(
+        draft,
+        engine.store.rules(),
+        list(engine.settings.shutters),
+        engine.clock(),
+        engine.tz,
+        engine.sun(),
+        editing=editing,
+        created_at=existing.created_at if existing else None,
+    )
+    return [
+        {
+            "rule_id": c.rule_id,
+            "rule_name": c.rule_name,
+            "shutter_id": c.shutter_id,
+            "first_at": _local(engine, c.first_at),
+            "winner": c.winner,
+        }
+        for c in found
+    ]
 
 
 @router.get("/location")

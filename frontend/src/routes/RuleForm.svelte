@@ -242,6 +242,14 @@
     </label>
   {/if}
 
+  {#each preview?.conflicts ?? [] as conflict (conflict.rule_id)}
+    <p class="conflict" role="status">
+      Gleiche Minute wie „{conflict.rule_name}“ für {shutters.byId(conflict.shutter_id)?.name ?? conflict.shutter_id},
+      erstmals {nextText({ at: conflict.first_at, reason: null })}. Es gewinnt
+      {conflict.winner === conflict.rule_id ? `„${conflict.rule_name}“` : 'diese Regel'} — sie wird zuletzt ausgeführt.
+    </p>
+  {/each}
+
   {#if message}
     <p class="error" role="alert">{message}</p>
   {/if}
@@ -404,6 +412,15 @@
   .warn {
     font-size: 12px;
     color: var(--amber);
+  }
+  .conflict {
+    margin: 0;
+    font-size: 13px;
+    color: var(--amber);
+    background: var(--amber-soft);
+    border: 1px solid var(--amber-line);
+    border-radius: 12px;
+    padding: 10px 12px;
   }
   .preview {
     margin: 0;
