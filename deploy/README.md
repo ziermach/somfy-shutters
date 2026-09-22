@@ -26,16 +26,86 @@ broker. Nothing in this path leaves the house.
 
 | | |
 |---|---|
-| Pi | Pi 3 or newer, Raspberry Pi OS Bookworm (64-bit). A Zero 2 W works but see [building the frontend](#3-build-the-frontend). |
+| Pi | Pi 3 or newer, Raspberry Pi OS Bookworm (64-bit). A Zero 2 W works but see [building the frontend](#4-build-the-frontend). |
 | Radio | CC1101 (E07-M1101D-SMA) wired to the SPI header, **3.3V only — Pi pin 1 or 17. 5V destroys the module.** |
 | Pi-Somfy | Installed, paired with every window, publishing to MQTT. This project does not install or configure it. |
-| Network | Static lease or reserved IP for the Pi, so the PWA's bookmark keeps working. |
+| Network | Ethernet, WiFi or a phone hotspot — see [network](#1-network). |
 
 Pi-Somfy owns the radio and the rolling-code counters. Never run a second transmitter
 against the same motors — resynchronising means walking to every window and
 re-pairing by hand.
 
-## 1. Mosquitto
+## 1. Network
+
+Wired Ethernet is the least trouble. WiFi works; it needs one setting changed. A phone
+hotspot works for bring-up, with limits worth knowing before you rely on it.
+
+The app never needs the internet. It needs a network so that phones can reach it.
+
+### WiFi: turn off power saving
+
+The Pi's WiFi driver saves power by default, and a sleeping radio delays or drops
+*incoming* packets. The symptoms look like a software bug: commands arrive seconds late,
+the live feed stutters and reconnects, a remote tunnel stalls until the Pi happens to
+send something. Turn it off, permanently:
+
+```bash
+nmcli -t -f NAME,TYPE connection show --active      # find the WiFi connection name
+sudo nmcli connection modify "<connection>" 802-11-wireless.powersave 2
+sudo nmcli connection up "<connection>"
+iw dev wlan0 get power_save                          # expect: Power save: off
+```
+
+`2` means "disable"; it survives reboots because it is stored on the connection, not
+set on the interface. Re-run it if you ever connect to a different network.
+
+Give the Pi a DHCP reservation on the router so its address stays put, and put it
+where the signal is steady — stability matters here, speed does not. A Pi 3B only
+speaks 2.4 GHz; the 3B+ also does 5 GHz. The CC1101 is on 433 MHz and does not
+interfere with either.
+
+### Phone hotspot
+
+Works, and is a reasonable way to bring the system up in a flat with no internet yet.
+Know what it costs:
+
+- **The network leaves with the phone.** When the hotspot phone leaves the house, the
+  Pi is on no network at all: nobody can reach the app, from inside or outside. The
+  shutters still respond to their physical remotes, and the backend keeps running. A
+  spare phone, an old one, or a cheap LTE router left at home fixes this.
+- **Phones switch hotspots off.** Android has a "turn off hotspot automatically" setting
+  — disable it. iOS only shows the hotspot to *new* devices while the Personal Hotspot
+  screen is open, and may stop it after a while with nothing connected; a Pi that has
+  joined once reconnects on its own, but check it is still online after a night.
+- **iPhone: enable "Maximize Compatibility"** under Personal Hotspot. Without it the
+  hotspot may run on 5 GHz only, which a Pi 3B cannot see at all.
+- **No DHCP reservation.** The Pi's address can change between sessions. Use the name
+  instead: `http://<hostname>.local:8000` (Raspberry Pi OS advertises it via mDNS; the
+  hostname is whatever you set in the imager, `raspberrypi` by default).
+- **Client isolation.** Some hotspots stop connected devices from reaching each other.
+  If the hotspot phone can open the app but a second device cannot, that is why.
+- **The clock.** A Pi 3 has no battery-backed clock and sets its time over the
+  internet at boot. Booted without internet it starts with a stale time and jumps
+  forward when a connection appears. Positions show odd ages until then; once sun-based
+  automations exist, they will fire at wrong times. Make sure the hotspot is up before
+  the Pi boots, or check `timedatectl` shows `System clock synchronized: yes`.
+- **Data use is small.** Commands and state updates are bytes. The expensive part is
+  installing — `apt`, `pip`, `npm` — so build the frontend elsewhere (step 4) and do
+  big installs on a better connection if you can.
+
+Apply the power-saving fix above to the hotspot connection too; it is a WiFi
+connection like any other.
+
+### Reaching it from outside, later
+
+Remote access is not part of this deployment yet. When it arrives it will be a
+WireGuard tunnel that the Pi dials *out* to a server with a public address — so no port
+forwarding on the home router, and it works behind a mobile carrier's NAT, hotspot
+included. The Pi's side of that tunnel will need `PersistentKeepalive = 25`: without it
+the router or carrier forgets the mapping after a minute or two of silence, and the
+server can no longer reach back in until the Pi next sends something.
+
+## 2. Mosquitto
 
 ```bash
 sudo apt update && sudo apt install -y mosquitto mosquitto-clients
@@ -68,7 +138,7 @@ If nothing appears here, nothing will appear in the app either — fix it at thi
 > (`listener 1883 0.0.0.0`). Keep 1883 off the internet regardless: no TLS is
 > configured here, and the credentials go over the wire in the clear.
 
-## 2. Install the app
+## 3. Install the app
 
 ```bash
 sudo apt install -y git python3.11 python3.11-venv
@@ -82,7 +152,7 @@ python3.11 -m venv .venv          # or: uv venv --python 3.11 .venv
 The unit file expects exactly `/home/pi/somfy-shutters`. A different path means
 editing the five places it appears in `somfy-shutters.service`.
 
-## 3. Build the frontend
+## 4. Build the frontend
 
 The backend serves `frontend/dist` itself, so production is one process on one port.
 
@@ -104,7 +174,7 @@ rsync -a dist/ pi@somfy.local:/home/pi/somfy-shutters/frontend/dist/
 Without a build the API still works, and the log says
 `no built frontend at … — run npm run build`.
 
-## 4. Configure
+## 5. Configure
 
 ```bash
 cd /home/pi/somfy-shutters
@@ -118,7 +188,7 @@ answers, so the app cheerfully animates a shutter that never moved.
 
 ```toml
 [bridge]
-kind = "sim"          # start here; switch to "mqtt" in step 6
+kind = "sim"          # start here; switch to "mqtt" in step 7
 host = "127.0.0.1"
 port = 1883
 user = "somfy"
@@ -131,7 +201,7 @@ times out of the file for any window you have not measured: the shutter still
 animates on `default_travel_seconds`, marked uncalibrated, and the calibration flow
 fills it in.
 
-## 5. Run it as a service
+## 6. Run it as a service
 
 ```bash
 sudo cp deploy/somfy-shutters.service /etc/systemd/system/
@@ -158,7 +228,7 @@ PWA. There is no authentication — anyone on the LAN can move the shutters. Do 
 port-forward it; reach it from outside over a VPN (WireGuard, Tailscale) if you need
 to.
 
-## 6. Switch to the real radio
+## 7. Switch to the real radio
 
 Only after the simulator works end to end:
 
@@ -229,6 +299,8 @@ sudo systemctl start somfy-shutters
 | App works, shutters do not move | Prove the broker path outside the app: `mosquitto_pub -h 127.0.0.1 -u somfy -P '…' -t 'somfy/0x279621/level/cmd' -m 50`. If that moves nothing, it is Pi-Somfy or the radio, not this app. |
 | Positions never become "sicher" | Expected until a shutter reaches an end stop. Only the end stops are certain. |
 | Unknown address warnings | An address in `shutters.toml` does not match `operateShutters.conf`. Copy it again. |
+| Commands land seconds late, live view keeps reconnecting | WiFi power saving is on. `iw dev wlan0 get power_save` — see [WiFi](#wifi-turn-off-power-saving). |
+| `<hostname>.local` does not resolve | The phone or network blocks mDNS. Use the IP from `hostname -I` on the Pi. |
 | Blank page, API responds | The frontend was never built, or `dist` landed in the wrong place. |
 
 ## Environment
