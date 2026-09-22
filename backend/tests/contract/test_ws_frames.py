@@ -72,7 +72,9 @@ def test_seq_increases_monotonically(test_client) -> None:
     with test_client.websocket_connect("/api/ws") as socket:
         seqs = [socket.receive_json()["seq"]]
         for action in ("close", "open"):
-            test_client.post("/api/shutters/kueche/command", json={"action": action})
+            # Wohnzimmer starts open in the simulator; since feature 006 the bridge's
+            # retained report tells the app so, and "zu" is a real movement.
+            test_client.post("/api/shutters/wohnzimmer/command", json={"action": action})
             seqs.append(socket.receive_json()["seq"])
     assert seqs == sorted(seqs)
     assert len(set(seqs)) == len(seqs)

@@ -77,6 +77,11 @@ def create_app(
 ) -> FastAPI:
     settings = settings or load_settings(os.environ.get("SHUTTERS_CONFIG", DEFAULT_CONFIG))
     bridge = bridge or build_bridge(settings)
+    if settings.bridge.invert_level:
+        log.warning(
+            "bridge.invert_level is set but ignored: current Pi-Somfy declares 100 = open, "
+            "0 = closed, which is what this app uses. Remove it from shutters.toml."
+        )
     store = store or Store(os.environ.get("SHUTTERS_DB", DEFAULT_DB))
     bus = EventBus()
     hub = ws.Hub()

@@ -196,6 +196,25 @@ async def sim_bridge(request: Request, state: Literal["offline", "online"]) -> d
     return {"connected": bridge.connected}
 
 
+class MovementBody(BaseModel):
+    shutter_id: str
+    state: Literal["opening", "closing", "open", "closed", "stopped"]
+
+
+@sim_router.post("/movement")
+async def sim_movement(request: Request, body: MovementBody) -> dict[str, Any]:
+    """Inject a live movement report, as if the bridge heard a physical remote (feature 006)."""
+    tracker = _tracker(request)
+    if body.shutter_id not in tracker.settings.shutters:
+        raise HTTPException(
+            404, detail={"error": "unknown_shutter", "message": "unbekannt", "detail": None}
+        )
+    address = tracker.settings.shutters[body.shutter_id].address
+    tracker.forget_bridge_run(body.shutter_id)
+    await request.app.state.on_report(Report(address, kind="movement", state=body.state))
+    return {"applied": True, "position": shutter_json(body.shutter_id, tracker)["position"]}
+
+
 class LossBody(BaseModel):
     rate: float = Field(ge=0, le=1)
 

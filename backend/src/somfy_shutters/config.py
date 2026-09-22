@@ -63,7 +63,9 @@ class BridgeConfig(BaseModel):
     user: str | None = None
     password: str | None = None
     invert_level: bool = False
-    """Open hardware question 1. Flipping this must be sufficient on its own."""
+    """Ignored since feature 006. Pi-Somfy v3.1 declares 100 = open, 0 = closed, the
+    convention of the whole app. Still accepted so older configs validate; a warning
+    is logged at start when it is set."""
 
 
 class ShutterConfig(BaseModel):

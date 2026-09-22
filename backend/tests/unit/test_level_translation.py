@@ -1,49 +1,48 @@
-"""T015: the direction question lives in exactly one file.
+"""Feature 006: the direction switch is retired.
 
-Open hardware question 1 has not been measured. The acceptance criterion in
-contracts/mqtt.md is that flipping invert_level is sufficient on its own — so
-that is what this asserts.
+Pi-Somfy v3.1 declares 100 = open, 0 = closed — the app's own convention — so no
+translation happens anywhere. `invert_level` stays readable so older configs validate,
+changes nothing, and says so once at start.
 """
 
 from __future__ import annotations
 
-import pytest
+import logging
+from pathlib import Path
 
-from somfy_shutters.bridge.mqtt import MqttBridge
-from somfy_shutters.config import BridgeConfig
+from somfy_shutters.bridge.mqtt import publish_plan
+from somfy_shutters.bridge.sim import SimBridge
+from somfy_shutters.config import Settings
+from somfy_shutters.main import create_app
+from somfy_shutters.store import Store
 
-
-@pytest.mark.parametrize("percent", [0, 1, 30, 62, 99, 100])
-def test_round_trip_without_inversion(percent: int) -> None:
-    bridge = MqttBridge(BridgeConfig(invert_level=False))
-    assert bridge._from_wire(bridge._to_wire(percent)) == percent
-
-
-@pytest.mark.parametrize("percent", [0, 1, 30, 62, 99, 100])
-def test_round_trip_with_inversion(percent: int) -> None:
-    bridge = MqttBridge(BridgeConfig(invert_level=True))
-    assert bridge._from_wire(bridge._to_wire(percent)) == percent
+from ..conftest import CONFIG
 
 
-def test_inversion_actually_reverses_the_wire() -> None:
-    plain = MqttBridge(BridgeConfig(invert_level=False))
-    flipped = MqttBridge(BridgeConfig(invert_level=True))
-    assert plain._to_wire(100) == 100
-    assert flipped._to_wire(100) == 0
-    assert plain._from_wire(0) == 0
-    assert flipped._from_wire(0) == 100
+def test_an_old_config_with_invert_level_still_validates() -> None:
+    config = {**CONFIG, "bridge": {"kind": "sim", "invert_level": True}}
+    assert Settings.model_validate(config).bridge.invert_level is True
 
 
-def test_translation_lives_only_in_the_adapter() -> None:
-    """Nothing outside bridge/mqtt.py may mention invert_level."""
-    from pathlib import Path
+def test_invert_level_changes_nothing_on_the_wire() -> None:
+    assert publish_plan("level", 100) == ("somfy/{id}/command", "OPEN")
+    assert publish_plan("level", 0) == ("somfy/{id}/command", "CLOSE")
 
+
+def test_it_is_logged_once_at_start(tmp_path, caplog) -> None:
+    settings = Settings.model_validate({**CONFIG, "bridge": {"kind": "sim", "invert_level": True}})
+    with caplog.at_level(logging.WARNING):
+        create_app(
+            settings, store=Store(tmp_path / "s.db"), bridge=SimBridge(addresses=["0x279621"])
+        )
+    assert sum("invert_level" in r.message for r in caplog.records) == 1
+
+
+def test_nothing_outside_config_and_main_mentions_it() -> None:
     root = Path(__file__).resolve().parents[2] / "src" / "somfy_shutters"
     offenders = [
         path.relative_to(root).as_posix()
         for path in root.rglob("*.py")
-        if "invert_level" in path.read_text()
-        and path.name != "mqtt.py"
-        and path.name != "config.py"
+        if "invert_level" in path.read_text() and path.name not in {"config.py", "main.py"}
     ]
-    assert offenders == [], f"invert_level leaked into {offenders}"
+    assert offenders == [], f"invert_level is used in {offenders}"

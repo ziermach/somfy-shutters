@@ -310,9 +310,7 @@ async def abort_run(request: Request, shutter_id: str) -> JSONResponse:
     # The run is aborted either way; a bridge that cannot take the halt does not
     # change that.
     with contextlib.suppress(BridgeUnreachable):
-        await bridge.send_level(
-            tracker.settings.shutters[shutter_id].address, tracker.halt_level(shutter_id)
-        )
+        await bridge.send_stop(tracker.settings.shutters[shutter_id].address)
     await tracker.stop(shutter_id)
     await _announce(request, shutter_id, False)
     return JSONResponse({"aborted": True})

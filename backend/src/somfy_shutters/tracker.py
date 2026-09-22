@@ -103,6 +103,9 @@ class Tracker:
         # sent, and when it must be over. Its reports along that way are it doing
         # what we asked, on its own clock — not somebody else moving the shutter.
         self._bridge_runs: dict[str, tuple[float, float, float]] = {}
+        # Shutters the bridge says are moving on somebody else's command — a physical
+        # remote it heard (feature 006). Transient: a restart forgets it.
+        self._external_moving: set[str] = set()
 
     # --- reading -------------------------------------------------------------
 
@@ -448,10 +451,65 @@ class Tracker:
             await self._handle_movement(report.address, report.state)
 
     async def _handle_retained_position(self, address: str, level: int) -> None:
-        """Filled in by US3."""
+        """Old news from the broker's store, delivered on connect.
+
+        It records the bridge's counter — feature 002's relative commands need it — and
+        fills a position the app does not know. A position the app does know is left
+        alone: its own record is newer than the broker's. And it is never "certain",
+        not even at 0 or 100: it is the bridge's old belief, not an end stop observed now.
+        """
+        shutter = self._settings.by_address(address)
+        if shutter is None:
+            return
+        shutter_id = shutter.id
+        if shutter_id in self._movements:
+            return
+        self._bridge_level[shutter_id] = float(level)
+        if self._positions[shutter_id].percent is not None:
+            return
+        await self._accept(
+            shutter_id,
+            PositionEstimate(
+                percent=self.percent_from_level(shutter_id, level),
+                confidence=Confidence.ESTIMATED,
+                certain_at=None,
+                source=Source.REPORT,
+            ),
+        )
+
+    def _bridge_run_active(self, shutter_id: str) -> bool:
+        run = self._bridge_runs.get(shutter_id)
+        return run is not None and self._monotonic() <= run[2]
 
     async def _handle_movement(self, address: str, state: str) -> None:
-        """Filled in by US3."""
+        """The bridge says a shutter starts or stops moving (live only).
+
+        An "opening"/"closing" we did not cause is a physical remote the bridge heard:
+        from that moment the shutter is somebody else's, and the next positions are
+        accepted as they come — no need to wait for two reports to guess it.
+        """
+        shutter = self._settings.by_address(address)
+        if shutter is None:
+            return
+        shutter_id = shutter.id
+        if state in ("opening", "closing"):
+            if shutter_id in self._movements or self._bridge_run_active(shutter_id):
+                return  # our own command, narrated back to us
+            self._external_moving.add(shutter_id)
+            previous = self._positions[shutter_id]
+            await self._accept(
+                shutter_id,
+                PositionEstimate(
+                    percent=previous.percent,
+                    confidence=Confidence.ESTIMATED
+                    if previous.percent is not None
+                    else Confidence.UNKNOWN,
+                    certain_at=self._clock(),
+                    source=Source.REPORT,
+                ),
+            )
+        else:
+            self._external_moving.discard(shutter_id)
 
     async def handle_report(self, address: str, level: int) -> None:
         shutter = self._settings.by_address(address)
@@ -480,6 +538,21 @@ class Tracker:
         last = self._last_report.get(shutter_id)
         now_mono = self._monotonic()
         self._last_report[shutter_id] = (percent, now_mono)
+
+        if shutter_id in self._external_moving and percent not in (0, 100):
+            # The bridge told us somebody else is driving: take the value as it
+            # comes, freshly, without the noise filter or the two-report guess.
+            await self._accept(
+                shutter_id,
+                PositionEstimate(
+                    percent=percent,
+                    confidence=Confidence.ESTIMATED,
+                    certain_at=self._clock(),
+                    source=Source.REPORT,
+                ),
+                corrected=True,
+            )
+            return
 
         if percent in (0, 100):
             # An end stop is mechanically true whoever reports it.
