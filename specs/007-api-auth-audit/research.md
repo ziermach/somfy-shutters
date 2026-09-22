@@ -33,7 +33,8 @@ Crockford base32 is unambiguous when a person does have to read one out).
 
 State-changing requests authenticated **by cookie** must carry an `Origin` header equal
 to the request's own origin; the WebSocket upgrade must too. Bearer requests are exempt:
-no browser attaches a bearer header on its own.
+no browser attaches a bearer header on its own. In open mode (the simulator, §10) there
+is no credential to protect and no check is made.
 
 **Rationale**: FR-028 — present once, never asked again, no login screen. An `HttpOnly`
 cookie survives reloads and PWA restarts, is sent on the WebSocket upgrade (a browser
@@ -84,6 +85,11 @@ and is not on the explicit exemption list: `GET /api/health` (reduced to
 `{"status": "ok"}` for an anonymous caller), `POST /api/auth/pair` (redemption — it is
 how a device gets a credential), and everything outside `/api/` (the built app, its
 manifest, icons and service worker).
+
+`GET /api/health` uses `optional_caller()`: it resolves a credential if one is presented
+and answers the full body with `watch`, else `{"status": "ok"}` — and an anonymous or
+failed attempt there is **neither recorded nor counted** towards a lockout, so a
+monitoring ping cannot lock its own address out.
 
 **Rationale**: FR-002 asks for complete coverage with a minimal, stated list of
 exceptions. Middleware that inspects paths would work but hides the mapping; a
@@ -147,7 +153,8 @@ SC-007).
   (`429`) for 15 minutes. Configurable under `[auth]`.
 - **Commands per credential**: token bucket, 10 requests burst, refilled at 1 per second.
   Applies to routes needing `command`. A group command is one request. The excess is
-  refused and recorded, never forwarded (FR-023).
+  refused and recorded, never forwarded (FR-023). The ability is checked first: a request
+  refused for permission does not draw from the bucket.
 - Both kept in process memory, on `time.monotonic()`.
 
 **Rationale**: FR-021–FR-024. The edge case of a Pi clock jumping hours at boot would
@@ -200,7 +207,7 @@ In open mode every request acts as a built-in pseudo-credential `simulator` with
 abilities, so the record still has an actor and the UI behaves as for an owner.
 
 **Rationale**: SC-008 — development against the simulator needs no new step, and the
-541 existing tests keep running unchanged. The exemption is keyed to the thing that makes
+existing tests keep running unchanged. The exemption is keyed to the thing that makes
 it harmless (no radio), not to a flag a person could leave on. Tests of this feature run
 the simulator with `mode = "required"`.
 
@@ -238,9 +245,15 @@ WebSocket's reconnect rate. A minute of imprecision is invisible in a list that 
 
 ## 13. The last manager
 
-**Decision**: revoking (or letting expire, if an expiry is set at issuance) the last
-active credential holding `manage` requires `confirm_lockout: true`; without it the API
-answers `409 last_manager` and the UI shows why and what recovery then means (FR-013).
+**Decision**: after any revocation at least one active credential holding `manage`
+**and having no expiry** must remain. Otherwise the revocation needs
+`confirm_lockout: true`; without it the API answers `409 last_manager` and the UI shows
+why and what recovery then means (FR-013).
+
+**Rationale**: counting an expiring manager as "remaining" would let the owner revoke the
+permanent one and be locked out silently weeks later, when the other expires. Issuing a
+credential never reduces the set, so only revocation is checked. Recovery credentials
+have no expiry, so the first manager always qualifies.
 
 ## 14. What the frontend needs
 

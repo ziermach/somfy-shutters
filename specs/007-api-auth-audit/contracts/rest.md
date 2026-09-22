@@ -15,7 +15,7 @@ Errors keep the shared shape `{"error", "message", "detail"}`; messages are Germ
 |---|---|---|
 | `401` | `unauthorized` | no, unknown, malformed, expired or revoked credential — one body for all (FR-003) |
 | `403` | `forbidden` | known credential without the route's ability; `detail.needs` names it |
-| `429` | `throttled` | failed-auth lockout or command rate; `Retry-After` header in seconds |
+| `429` | `throttled` | failed-auth lockout or command rate; `Retry-After` header in seconds. Checked after the ability: a `403` never draws from the command rate |
 
 `401` message: "Dieses Gerät ist nicht angemeldet." `403` message: "Dieses Gerät darf das
 nicht." `429` message: "Zu viele Versuche. Bitte kurz warten."
@@ -69,8 +69,9 @@ Body: `{"name": "Kurzbefehl Nacht", "abilities": ["command"], "expires_at": null
 
 `204`. Revokes; open sockets of that credential close at once (FR-005). Outstanding
 pairing codes it minted are cancelled. `404 unknown_credential`.
-`409 last_manager` when it is the last active `manage` credential, unless the body is
-`{"confirm_lockout": true}` (FR-013). Revoking oneself is allowed.
+`409 last_manager` when afterwards no active `manage` credential **without an expiry**
+would remain, unless the body is `{"confirm_lockout": true}` (FR-013, research §13).
+Revoking oneself is allowed.
 
 ## Pairing
 
@@ -119,6 +120,7 @@ Times are local wall clock with offset, as elsewhere in the API.
 ## Changed routes
 
 - `GET /api/health`: anonymous callers get `{"status": "ok"}` only; with `watch` the
-  existing body.
+  existing body. Anonymous or failed calls here are not recorded and not counted towards
+  a lockout (research §4).
 - Every command route: a refused or throttled attempt is recorded before the refusal is
   sent; an accepted one is recorded by `commands.apply` after the frame goes out.

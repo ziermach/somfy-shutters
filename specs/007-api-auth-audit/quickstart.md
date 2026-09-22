@@ -67,8 +67,9 @@ device works, has exactly those abilities, is listed as *gekoppelt*.
 
 **D4.** Two parallel redemptions of one code → exactly one `201`.
 
-**D5.** Eleven wrong codes from one address → the eleventh is `429`; ten wrong codes from
-ten addresses while a code is outstanding → that code is cancelled.
+**D5.** Ten wrong codes while a code is outstanding — from one address or from ten →
+that code is cancelled and recorded `pairing_cancelled`. (The per-address lockout for
+wrong codes comes with throttling, G4.)
 
 ## E — The record (User Story 5)
 
@@ -92,8 +93,9 @@ purge (fake clock in the test).
 screen. On the Pi: `somfy-shutters auth recover` → code → pair → back in. Shutters,
 calibration, rules, groups and history intact; the record has a `recovery` entry.
 
-**F2.** There is no network route for recovery: `grep -r recover backend/src/somfy_shutters/api`
-finds nothing, and A5 would fail if one appeared unguarded.
+**F2.** There is no network route for recovery: the every-route test of A5 (T011) lists
+every `/api/*` route with its ability, and none of them creates a credential without
+`manage` or a pairing code.
 
 ## G — Throttling (User Story 7)
 
@@ -108,10 +110,13 @@ reached the bridge.
 **G3. Clock jump.** Move the fake wall clock back six hours mid-lockout → the lockout still
 ends on time (monotonic), the record stays in id order.
 
+**G4. Guessing codes.** Eleven wrong pairing codes from one address → the eleventh is
+`429`, like any failed authentication (FR-033).
+
 ## H — The exemption (FR-029)
 
 **H1.** `bridge.kind = "sim"`, no `[auth]` → app runs open, `GET /api/auth/me` says
-`"mode": "open"`, all 541+ existing tests pass unchanged.
+`"mode": "open"`, the existing suite passes unchanged.
 
 **H2.** `bridge.kind = "mqtt"` with `[auth] mode = "open"` → the process refuses to start
 with a message naming the setting.

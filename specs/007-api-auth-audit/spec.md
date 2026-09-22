@@ -364,6 +364,11 @@ without the service becoming unusable for other credentials.
 - **Throttle state**: how close a source or credential currently is to being refused,
   and until when.
 
+The plan refines two of these: it adds a fifth ability, *configuring* rules, groups and
+location, which features 003 and 004 introduced after this spec was written; and it names
+automations, recovery and the simulator as actors of their own ("the system itself"
+above). See `plan.md` and `research.md` §3.
+
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes

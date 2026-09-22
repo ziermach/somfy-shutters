@@ -59,13 +59,13 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 ### Tests for User Story 1
 
 - [ ] T011 [P] [US1] `backend/tests/contract/test_every_route_is_guarded.py`: walk `app.routes`; every route under `/api/` must carry a `require(...)` dependency or be on the exemption list **`GET /api/health`, `POST /api/auth/pair`**; with `mode = "required"`, every guarded route called without a credential answers **`401` with body exactly `{"error": "unauthorized", "message": "Dieses Gerät ist nicht angemeldet.", "detail": null}`** and no shutter moved (`/api/sim/truth` unchanged)
-- [ ] T012 [P] [US1] `backend/tests/contract/test_auth_rest.py` (US1 part): no header / `Bearer sst_garbage` / malformed / expired / revoked give **byte-identical** `401` bodies; each is recorded `auth_failed` with its own `detail.reason`; cookie-authenticated `POST` without or with a foreign `Origin` → **`403 bad_origin`**, bearer without `Origin` passes; anonymous `GET /api/health` → exactly `{"status": "ok"}`
+- [ ] T012 [P] [US1] `backend/tests/contract/test_auth_rest.py` (US1 part): no header / `Bearer sst_garbage` / malformed / expired / revoked give **byte-identical** `401` bodies; each is recorded `auth_failed` with its own `detail.reason`; cookie-authenticated `POST` without or with a foreign `Origin` → **`403 bad_origin`**, bearer without `Origin` passes; anonymous `GET /api/health` → exactly `{"status": "ok"}`, and **twenty anonymous or bad-token health calls from one address are neither recorded nor counted** (the address can still pair afterwards); with a `watch` credential the full body
 - [ ] T013 [P] [US1] `backend/tests/contract/test_ws_auth.py`: no credential → accepted then closed **`4401`** with zero frames; cookie with foreign `Origin` → `4401`; valid bearer or cookie → snapshot as before
-- [ ] T014 [P] [US1] Startup test in `backend/tests/unit/test_auth_config.py`: `bridge.kind = "mqtt"` with `mode = "open"` fails `create_app` with the message; sim without `[auth]` runs open and `GET /api/auth/me` returns `"mode": "open"`
+- [ ] T014 [P] [US1] Startup test in `backend/tests/unit/test_auth_config.py`: `bridge.kind = "mqtt"` with `mode = "open"` fails `create_app` with the message; sim without `[auth]` runs open and `GET /api/auth/me` returns `"mode": "open"`. **Upgrade test (FR-027)** in `backend/tests/integration/test_auth_upgrade.py`: build a database with the app as it is before this feature (positions, calibration, rules with firings, groups), start the 007 app on it with `mode = "required"`, and assert every row is still there and readable through the API after pairing via `auth recover`
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] Implement `backend/src/somfy_shutters/auth/gate.py`: `resolve_caller(request)` — bearer header, else cookie `sst`; open mode → `Caller.SIMULATOR`; failures recorded `auth_failed` (actor `anonymous`, `detail.reason`, `detail.source`) and answered with the one `401` body; **cookie + unsafe method requires `Origin` equal to the request origin, else `403 bad_origin`**; `require(ability)` dependency that resolves, then checks the ability → **`403 {"error": "forbidden", "message": "Dieses Gerät darf das nicht.", "detail": {"needs": ...}}`**, recorded `refused_permission` with the path's `shutter_id` if any; successful calls `touch` the credential
+- [ ] T015 [US1] Implement `backend/src/somfy_shutters/auth/gate.py`: `resolve_caller(request)` — bearer header, else cookie `sst`; open mode → `Caller.SIMULATOR`; failures recorded `auth_failed` (actor `anonymous`, `detail.reason`, `detail.source`) and answered with the one `401` body; **cookie + unsafe method requires `Origin` equal to the request origin, else `403 bad_origin`**; `require(ability)` dependency that resolves, then checks the ability → **`403 {"error": "forbidden", "message": "Dieses Gerät darf das nicht.", "detail": {"needs": ...}}`**, recorded `refused_permission` with the path's `shutter_id` if any; successful calls `touch` the credential. Also `optional_caller(request)` for `GET /api/health`: resolves if a credential is presented, else anonymous — **never records, never counts towards a lockout** (research §4). **In open mode no `Origin` check is made** (research §2)
 - [ ] T016 [US1] Guard every router per the route → ability table in [contracts/rest.md](./contracts/rest.md): `backend/src/somfy_shutters/api/rest.py` (incl. `sim_router`: `watch` for GET, `command` otherwise), `automation_routes.py` (`configure`; GETs `watch`), `group_routes.py` (`configure`; command `command`; GET `watch`), `calibration_routes.py` (`calibrate`; `DELETE …/confirm` `command`; GETs `watch`); `/api/health` reduced to `{"status": "ok"}` for anonymous callers
 - [ ] T017 [US1] Authenticate the WebSocket in `backend/src/somfy_shutters/api/ws.py`: resolve before `hub.join`; on failure `accept()` then `close(4401, "unauthorized")`; cookie upgrade needs a matching `Origin`; the hub stores `socket → credential id` and gains `close_for(credential_id, code=4401)`
 - [ ] T018 [US1] `backend/src/somfy_shutters/api/auth_routes.py` (US1 part): `GET /api/auth/me` (`watch`) per contract, and `POST /api/auth/pair` (no credential): `{"code", "name"}` → redeem → **`201` with cookie `sst` (`HttpOnly; SameSite=Strict; Path=/; Max-Age=315360000`, `Secure` when the request was HTTPS)**, or the token in the body when `"token": true`; any failure → the one `401`, counted as a failed authentication; `422 invalid_pairing` for a missing name or malformed code; register in `main.py`
@@ -153,7 +153,7 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 - [ ] T036 [US5] Record configuration and calibration changes (`rule_changed`, `group_changed`, `location_changed`, `pause_changed`, `calibration`) in `api/automation_routes.py`, `api/group_routes.py`, `api/calibration_routes.py`
 - [ ] T037 [US5] Bus listener in `backend/src/somfy_shutters/main.py`: `movement` events with **`origin == "external"`** → `movement_observed`, actor `bridge`; daily `audit.purge(now - audit_retention_days)` beside the firing purge
 - [ ] T038 [US5] `GET /api/audit` (`manage`) in `backend/src/somfy_shutters/api/audit_routes.py` per contract; register in `main.py`
-- [ ] T039 [US5] `frontend/src/routes/Record.svelte`: newest first, one line per entry ("11:02 · Küche · Wohnzimmer zu · ausgeführt"), filters by shutter and by device, *Ältere laden*, refused entries marked, observed movements worded as "bemerkt, nicht von der App"; wording in `frontend/src/lib/auth.ts` with tests
+- [ ] T039 [US5] `frontend/src/routes/Record.svelte`: newest first, one line per entry ("11:02 · Küche · Wohnzimmer zu · ausgeführt"), filters by shutter and by device, *Ältere laden*, refused entries marked, observed movements worded as "bemerkt, nicht von der App"; a note under the filter that **one device entry can stand for several devices sharing a credential**; wording in `frontend/src/lib/auth.ts` with tests
 
 **Checkpoint**: quickstart E passes.
 
@@ -167,11 +167,11 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ### Tests for User Story 6
 
-- [ ] T040 [P] [US6] Extend `backend/tests/unit/test_cli.py` and `test_auth_rest.py`: recovery records a `recovery` entry; revoking the last active `manage` credential → **`409 last_manager`** unless `{"confirm_lockout": true}`; after revoking everything and recovering, shutters, calibration, rules, groups, firings and the record are unchanged (row counts before/after); `auth list` prints no secret
+- [ ] T040 [P] [US6] Extend `backend/tests/unit/test_cli.py` and `test_auth_rest.py`: recovery records a `recovery` entry; revoking so that **no active `manage` credential without an expiry** remains → **`409 last_manager`** unless `{"confirm_lockout": true}` — including the case where the only other manager has an expiry; after revoking everything and recovering, shutters, calibration, rules, groups, firings and the record are unchanged (row counts before/after); `auth list` prints no secret
 
 ### Implementation for User Story 6
 
-- [ ] T041 [US6] Last-manager check in `DELETE /api/auth/credentials/{id}` (`backend/src/somfy_shutters/api/auth_routes.py`); `auth list` and the `recovery` entry in `backend/src/somfy_shutters/cli.py`
+- [ ] T041 [US6] Last-manager check in `DELETE /api/auth/credentials/{id}` — **at least one active `manage` credential with no expiry must remain** (research §13) (`backend/src/somfy_shutters/api/auth_routes.py`); `auth list` and the `recovery` entry in `backend/src/somfy_shutters/cli.py`
 - [ ] T042 [US6] Lockout warning in `frontend/src/routes/Devices.svelte`: on `409 last_manager` explain that only `somfy-shutters auth recover` on the Pi gets back in, and ask again; upgrade note and recovery in `deploy/README.md`
 
 **Checkpoint**: quickstart F passes.
@@ -191,7 +191,7 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ### Implementation for User Story 7
 
-- [ ] T045 [US7] `backend/src/somfy_shutters/auth/throttle.py` (failure windows per source, token buckets per credential, injected `monotonic`) and its use in `auth/gate.py`: a locked source is answered `429` **before** any lookup; `command` routes draw from the bucket; both recorded `throttled`; source address = socket peer, or the first `X-Forwarded-For` hop only when the peer equals `trusted_proxy`
+- [ ] T045 [US7] `backend/src/somfy_shutters/auth/throttle.py` (failure windows per source, token buckets per credential, injected `monotonic`) and its use in `auth/gate.py`: a locked source is answered `429` **before** any lookup; `command` routes draw from the bucket **after** the ability check — a `403` does not consume a token; both recorded `throttled`; source address = socket peer, or the first `X-Forwarded-For` hop only when the peer equals `trusted_proxy`
 
 **Checkpoint**: quickstart G passes.
 
@@ -199,7 +199,7 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ## Phase 10: Polish & Cross-Cutting Concerns
 
-- [ ] T046 [P] Scenario tests A–H of [quickstart.md](./quickstart.md) in `backend/tests/integration/test_auth_quickstart.py` with the simulator and `mode = "required"`
+- [ ] T046 [P] Scenario tests A–H of [quickstart.md](./quickstart.md) in `backend/tests/integration/test_auth_quickstart.py` with the simulator and `mode = "required"`; plus **SC-004**: median time of 200 `POST /api/shutters/{id}/command` requests with a bearer credential is within **5 ms** of the same in open mode
 - [ ] T047 Walk quickstart A4, B, D1 and F1 by hand in two browsers (one a private window), including pairing from a phone on the home network
 - [ ] T048 [P] Update `README.md` ("What works today", test counts), `CLAUDE.md` (auth mode, `somfy-shutters auth recover`) and `deploy/README.md` (first run after upgrade)
 - [ ] T049 On the Pi, once a motor is paired: quickstart I1 — a paired phone moves it and the move is recorded; without a credential nothing reaches Pi-Somfy (broker log). Joins the pending hardware checks of features 001–004
@@ -217,7 +217,7 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 - **US4 (6)** needs US1's redemption and US3's granting rule.
 - **US5 (7)** needs US1; independent of US2–US4 except for naming actors.
 - **US6 (8)** needs US1's CLI and US2's revocation.
-- **US7 (9)** needs US1's gate; independent otherwise.
+- **US7 (9)** needs US1's gate; independent otherwise. Until it lands, wrong pairing codes are limited only by US4's global cap (quickstart D5); the per-address lockout for them is G4.
 - **Polish (10)** after the stories it tests. T049 needs hardware.
 
 ### Within Phase 2
