@@ -1,5 +1,6 @@
 <script lang="ts">
   // Feature 004: every group, in the order the overview shows them.
+  import { auth } from '../lib/auth.svelte';
   import { groups } from '../lib/groups.svelte';
 
   interface Props {
@@ -39,12 +40,14 @@
   <ol class="list">
     {#each groups.groups as group, i (group.id)}
       <li>
-        <button type="button" class="open" onclick={() => onedit(group.id)}>
+        <button type="button" class="open" disabled={!auth.can('configure')} onclick={() => onedit(group.id)}>
           <span class="name">{group.name}</span>
           <span class="count">{count(group.members.length)}</span>
         </button>
-        <button type="button" class="step" disabled={i === 0} onclick={() => move(i, -1)} aria-label="{group.name} nach oben">↑</button>
-        <button type="button" class="step" disabled={i === groups.groups.length - 1} onclick={() => move(i, 1)} aria-label="{group.name} nach unten">↓</button>
+        {#if auth.can('configure')}
+          <button type="button" class="step" disabled={i === 0} onclick={() => move(i, -1)} aria-label="{group.name} nach oben">↑</button>
+          <button type="button" class="step" disabled={i === groups.groups.length - 1} onclick={() => move(i, 1)} aria-label="{group.name} nach unten">↓</button>
+        {/if}
       </li>
     {:else}
       <p class="empty">Noch keine Gruppe. Zum Beispiel ein Raum, eine Etage oder eine Hausseite.</p>
@@ -55,7 +58,9 @@
     <p class="error" role="alert">{message}</p>
   {/if}
 
-  <button type="button" class="add" onclick={() => onedit()}>+ Neue Gruppe</button>
+  {#if auth.can('configure')}
+    <button type="button" class="add" onclick={() => onedit()}>+ Neue Gruppe</button>
+  {/if}
 </section>
 
 <style>

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime, timedelta
 
 from somfy_shutters.auth.models import Ability
@@ -139,3 +140,72 @@ async def test_malformed_pairing_is_422_and_not_counted(locked) -> None:  # noqa
     ).status_code == 422
     assert (await locked.post("/api/auth/pair", json={"code": "000000"})).status_code == 422
     assert entries(locked, "pairing_failed") == []
+
+
+# --- US2: one per device, revocable alone ---------------------------------------------
+
+
+async def test_issue_shows_the_token_once(locked) -> None:  # noqa: F811
+    _, headers, _ = issue(locked)
+    response = await locked.post(
+        "/api/auth/credentials", json={"name": "Handy A", "abilities": ["command"]}, headers=headers
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["token"].startswith("sst_") and body["abilities"] == ["watch", "command"]
+    ok = await locked.get("/api/shutters", headers={"Authorization": f"Bearer {body['token']}"})
+    assert ok.status_code == 200
+    assert entries(locked, "credential_issued")[0].target == body["id"]
+
+
+async def test_the_list_never_shows_a_secret(locked) -> None:  # noqa: F811
+    _, headers, token = issue(locked)
+    issue(locked, "Handy B")
+    listed = await locked.get("/api/auth/credentials", headers=headers)
+    text = listed.text
+    assert "sst_" not in text and token not in text
+    assert not re.search(r"[0-9a-f]{64}", text)
+    [mine] = [c for c in listed.json()["credentials"] if c["is_me"]]
+    assert set(mine) == {
+        "id",
+        "name",
+        "abilities",
+        "origin",
+        "created_at",
+        "last_used_at",
+        "expires_at",
+        "revoked_at",
+        "state",
+        "is_me",
+    }
+
+
+async def test_revoking_one_leaves_the_other(locked) -> None:  # noqa: F811
+    _, owner_headers, _ = issue(locked)
+    a, a_headers, _ = issue(locked, "Handy A", abilities=only(Ability.COMMAND))
+    _, b_headers, _ = issue(locked, "Handy B", abilities=only(Ability.COMMAND))
+    response = await locked.delete(f"/api/auth/credentials/{a.id}", headers=owner_headers)
+    assert response.status_code == 204
+    assert (await locked.get("/api/shutters", headers=a_headers)).status_code == 401
+    assert (await locked.get("/api/shutters", headers=b_headers)).status_code == 200
+    listed = (await locked.get("/api/auth/credentials", headers=owner_headers)).json()
+    assert {c["name"]: c["state"] for c in listed["credentials"]}["Handy A"] == "revoked"
+    assert entries(locked, "credential_revoked")[0].target == a.id
+
+
+async def test_revoking_an_unknown_credential_is_404(locked) -> None:  # noqa: F811
+    _, headers, _ = issue(locked)
+    response = await locked.delete("/api/auth/credentials/c_nope", headers=headers)
+    assert response.status_code == 404 and response.json()["error"] == "unknown_credential"
+
+
+async def test_invalid_credential_is_422(locked) -> None:  # noqa: F811
+    _, headers, _ = issue(locked)
+    for body in (
+        {"name": "", "abilities": ["watch"]},
+        {"name": "x" * 41, "abilities": ["watch"]},
+        {"name": "x", "abilities": ["fly"]},
+        {"name": "x", "abilities": []},
+    ):
+        response = await locked.post("/api/auth/credentials", json=body, headers=headers)
+        assert response.status_code == 422 and response.json()["error"] == "invalid_credential"

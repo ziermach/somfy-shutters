@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { auth } from '../lib/auth.svelte';
   import { percentText } from '../lib/confidence';
   import { shutters } from '../lib/shutters.svelte';
   import type { Shutter } from '../lib/types';
@@ -51,11 +52,13 @@
     </div>
     <span class="pct">{percentText(live)}</span>
   </div>
+  {#if auth.can('command')}
   <div class="row">
     <button type="button" class="btn" disabled={busy || !shutters.canOpen(shutter)} onclick={() => shutters.command(shutter.id, 'open')}>auf</button>
     <button type="button" class="btn" disabled={busy || !shutters.canStop(shutter)} onclick={() => shutters.command(shutter.id, 'stop')}>stop</button>
     <button type="button" class="btn" disabled={busy || !shutters.canClose(shutter)} onclick={() => shutters.command(shutter.id, 'close')}>zu</button>
   </div>
+  {/if}
 </div>
 
 <style>

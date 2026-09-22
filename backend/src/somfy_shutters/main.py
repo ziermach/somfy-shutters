@@ -12,6 +12,7 @@ import logging
 import os
 import time
 from collections.abc import AsyncIterator
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from .api import auth_routes, automation_routes, calibration_routes, group_routes, rest, ws
 from .auth.audit import AuditLog
 from .auth.gate import Gate, Refused
+from .auth.models import SYSTEM, Actor
 from .auth.store import AuthStore
 from .automation.clock import ClockGuard
 from .automation.engine import LOCATION_KEY, AutomationEngine
@@ -47,6 +49,8 @@ log = logging.getLogger(__name__)
 
 TICK_SECONDS = 0.2
 AUTOMATION_CHECK_SECONDS = 30
+AUTH_SWEEP_SECONDS = 30
+"""Feature 008: how late an expired credential's live feed may close (FR-005)."""
 """Clock check and a backstop run_due; the timer itself is APScheduler's."""
 """How often settled movements are noticed. The animation runs client-side, so
 this only decides when the model catches up — not how smooth anything looks."""
@@ -184,6 +188,18 @@ def create_app(
             runs.note_report(shutter.id, percent)
         await tracker.handle_report(address, percent)
 
+    async def sweep_auth(since: datetime, now: datetime) -> None:
+        for credential in auth_store.expired_between(since, now):
+            audit.record(
+                Actor("credential", credential.id, credential.name),
+                "credential_expired",
+                "accepted",
+                target=credential.id,
+            )
+            await hub.close_for(credential.id)
+        for code in auth_store.codes_expired_between(since, now):
+            audit.record(SYSTEM, "pairing_expired", "accepted", target=code.id)
+
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         async def to_clients(event: dict[str, Any]) -> None:
@@ -272,10 +288,27 @@ def create_app(
             await engine.catch_up()
         engine.reschedule()
 
+        async def pump_auth() -> None:
+            """Feature 008: credentials and codes that ran out (research §6).
+
+            Every 30 s: close the live feeds of credentials that expired and record
+            each expiry once — the window (since, now] is never looked at twice.
+            """
+            since = utcnow()
+            while True:
+                await asyncio.sleep(AUTH_SWEEP_SECONDS)
+                now = utcnow()
+                try:
+                    await sweep_auth(since, now)
+                except Exception:
+                    log.exception("auth sweep")
+                since = now
+
         tasks = [
             asyncio.create_task(pump_reports()),
             asyncio.create_task(pump_ticks()),
             asyncio.create_task(pump_automations()),
+            asyncio.create_task(pump_auth()),
         ]
         log.info("ready: %d shutters, bridge=%s", len(settings.shutters), bridge.kind)
         try:
@@ -300,6 +333,8 @@ def create_app(
     app.state.store = store
     app.state.bus = bus
     app.state.hub = hub
+    app.state.sweep_auth = sweep_auth
+    app.state.guesses = auth_routes.Guesses(auth_store, audit)
     app.state.calibration = calibration
     app.state.calibration_store = calibration_store
     app.state.runs = runs

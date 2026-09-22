@@ -4,6 +4,7 @@
   import LocationCard from '../components/LocationCard.svelte';
   import RuleCard from '../components/RuleCard.svelte';
   import { tomorrowMidnight } from '../lib/automations';
+  import { auth } from '../lib/auth.svelte';
   import { automations } from '../lib/automations.svelte';
   import { shutters } from '../lib/shutters.svelte';
 
@@ -40,7 +41,7 @@
 
   <AutomationBanner />
 
-  {#if !automations.state.paused && automations.rules.length}
+  {#if !automations.state.paused && automations.rules.length && auth.can('configure')}
     <div class="pause">
       <span class="label">Pausieren</span>
       <div class="pause-row">
@@ -63,7 +64,9 @@
     {/each}
   </div>
 
-  <button type="button" class="add" onclick={() => onedit()}>+ Neue Regel</button>
+  {#if auth.can('configure')}
+    <button type="button" class="add" onclick={() => onedit()}>+ Neue Regel</button>
+  {/if}
 
   {#if automations.loaded}
     <LocationCard />

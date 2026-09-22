@@ -85,14 +85,14 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ### Tests for User Story 2
 
-- [ ] T022 [P] [US2] Extend `backend/tests/contract/test_auth_rest.py`: `POST /api/auth/credentials` → **`201` with `token` once**; `GET` lists **name, abilities, origin, created_at, last_used_at, expires_at, revoked_at, state, is_me — never a token or hash** (assert no value in the body starts with `sst_` and no 64-hex string appears); revoke → **`204`**, next request with it `401`, the other still works, the list shows `state: "revoked"`; `404 unknown_credential`; issuance and revocation recorded
-- [ ] T023 [P] [US2] Extend `backend/tests/contract/test_ws_auth.py`: a socket open with credential A closes **`4401` within 1 s** of revoking A; B's socket stays open; an expired credential's socket closes on the next sweep
+- [X] T022 [P] [US2] Extend `backend/tests/contract/test_auth_rest.py`: `POST /api/auth/credentials` → **`201` with `token` once**; `GET` lists **name, abilities, origin, created_at, last_used_at, expires_at, revoked_at, state, is_me — never a token or hash** (assert no value in the body starts with `sst_` and no 64-hex string appears); revoke → **`204`**, next request with it `401`, the other still works, the list shows `state: "revoked"`; `404 unknown_credential`; issuance and revocation recorded
+- [X] T023 [P] [US2] Extend `backend/tests/contract/test_ws_auth.py`: a socket open with credential A closes **`4401` within 1 s** of revoking A; B's socket stays open; an expired credential's socket closes on the next sweep
 
 ### Implementation for User Story 2
 
-- [ ] T024 [US2] `GET/POST /api/auth/credentials` and `DELETE /api/auth/credentials/{id}` (`manage`) in `backend/src/somfy_shutters/api/auth_routes.py`; revoke calls `hub.close_for(id)` and `auth.cancel_minted_by(id)`, records `credential_revoked`; issuance records `credential_issued`
-- [ ] T025 [US2] Expiry sweep in the existing tick loop of `backend/src/somfy_shutters/main.py`: **every 30 s** close sockets of credentials that expired, record `credential_expired` once
-- [ ] T026 [US2] `frontend/src/routes/Devices.svelte` (`manage` only): list with name, abilities in words, *zuletzt benutzt vor …*, state; *Widerrufen* with an inline confirm; *Neues Gerät (Token)* showing the token once with a copy button and the warning that it cannot be shown again; navigation from `frontend/src/App.svelte`
+- [X] T024 [US2] `GET/POST /api/auth/credentials` and `DELETE /api/auth/credentials/{id}` (`manage`) in `backend/src/somfy_shutters/api/auth_routes.py`; revoke calls `hub.close_for(id)` and `auth.cancel_minted_by(id)`, records `credential_revoked`; issuance records `credential_issued`
+- [X] T025 [US2] Expiry sweep in the existing tick loop of `backend/src/somfy_shutters/main.py`: **every 30 s** close sockets of credentials that expired, record `credential_expired` once
+- [X] T026 [US2] `frontend/src/routes/Devices.svelte` (`manage` only): list with name, abilities in words, *zuletzt benutzt vor …*, state; *Widerrufen* with an inline confirm; *Neues Gerät (Token)* showing the token once with a copy button and the warning that it cannot be shown again; navigation from `frontend/src/App.svelte`
 
 **Checkpoint**: quickstart B passes.
 
@@ -106,12 +106,12 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ### Tests for User Story 3
 
-- [ ] T027 [P] [US3] `backend/tests/contract/test_abilities.py`: for each ability, a credential holding only it (plus `watch`) is refused **`403` with `detail.needs`** on one route of every other ability and accepted on its own; refusals recorded `refused_permission`; issuing or minting with more than one's own → **`403 exceeds_own` with `detail.abilities`**
+- [X] T027 [P] [US3] `backend/tests/contract/test_abilities.py`: for each ability, a credential holding only it (plus `watch`) is refused **`403` with `detail.needs`** on one route of every other ability and accepted on its own; refusals recorded `refused_permission`; issuing or minting with more than one's own → **`403 exceeds_own` with `detail.abilities`**
 
 ### Implementation for User Story 3
 
-- [ ] T028 [US3] Granting rule in `backend/src/somfy_shutters/auth/store.py` and `api/auth_routes.py`: requested abilities must be a subset of the caller's (**FR-011, FR-032**); `watch` always added
-- [ ] T029 [US3] Frontend hides what `can()` denies: command buttons (`command`), rule/group/location editing (`configure`), calibration screens and **the arrival prompt (`calibrate`)**, Devices and Record (`manage`) — in `frontend/src/routes/*.svelte`, `frontend/src/components/*.svelte`; ability checkboxes in `Devices.svelte` offer only the caller's own abilities; wording in `frontend/src/lib/auth.ts` ("zusehen", "fahren", "einstellen", "kalibrieren", "Geräte verwalten")
+- [X] T028 [US3] Granting rule in `backend/src/somfy_shutters/auth/store.py` and `api/auth_routes.py`: requested abilities must be a subset of the caller's (**FR-011, FR-032**); `watch` always added
+- [X] T029 [US3] Frontend hides what `can()` denies: command buttons (`command`), rule/group/location editing (`configure`), calibration screens and **the arrival prompt (`calibrate`)**, Devices and Record (`manage`) — in `frontend/src/routes/*.svelte`, `frontend/src/components/*.svelte`; ability checkboxes in `Devices.svelte` offer only the caller's own abilities; wording in `frontend/src/lib/auth.ts` ("zusehen", "fahren", "einstellen", "kalibrieren", "Geräte verwalten")
 
 **Checkpoint**: quickstart C passes.
 
@@ -125,12 +125,12 @@ Existing layout: `backend/src/somfy_shutters/`, `backend/tests/`, `frontend/src/
 
 ### Tests for User Story 4
 
-- [ ] T030 [P] [US4] `backend/tests/contract/test_pairing_rest.py`: mint → **`201` with `code` `XXX-XXX` and `expires_at` 5 minutes ahead**; `GET` lists outstanding codes **without the code**; redeem gives exactly the minted abilities and `origin: "paired"`; second redemption `401`; cancel → `401`; revoke the minter → `401`; **ten failed redemptions in total while a code is outstanding cancel it** (recorded `pairing_cancelled`); mint, redeem, fail, cancel, expire all recorded
+- [X] T030 [P] [US4] `backend/tests/contract/test_pairing_rest.py`: mint → **`201` with `code` `XXX-XXX` and `expires_at` 5 minutes ahead**; `GET` lists outstanding codes **without the code**; redeem gives exactly the minted abilities and `origin: "paired"`; second redemption `401`; cancel → `401`; revoke the minter → `401`; **ten failed redemptions in total while a code is outstanding cancel it** (recorded `pairing_cancelled`); mint, redeem, fail, cancel, expire all recorded
 
 ### Implementation for User Story 4
 
-- [ ] T031 [US4] `POST/GET /api/auth/pairing` and `DELETE /api/auth/pairing/{id}` (`manage`) in `backend/src/somfy_shutters/api/auth_routes.py`; the global guess cap (research §7) as an in-memory counter reset when no code is outstanding; expired codes recorded `pairing_expired` by the sweep of T025
-- [ ] T032 [US4] Pairing in `frontend/src/routes/Devices.svelte`: *Gerät koppeln* → choose abilities (own only) → big `XXX-XXX` with a live countdown and *Abbrechen*; the list refreshes when the new device appears
+- [X] T031 [US4] `POST/GET /api/auth/pairing` and `DELETE /api/auth/pairing/{id}` (`manage`) in `backend/src/somfy_shutters/api/auth_routes.py`; the global guess cap (research §7) as an in-memory counter reset when no code is outstanding; expired codes recorded `pairing_expired` by the sweep of T025
+- [X] T032 [US4] Pairing in `frontend/src/routes/Devices.svelte`: *Gerät koppeln* → choose abilities (own only) → big `XXX-XXX` with a live countdown and *Abbrechen*; the list refreshes when the new device appears
 
 **Checkpoint**: quickstart D passes.
 

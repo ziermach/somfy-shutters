@@ -9,6 +9,7 @@
   import Calibration from './routes/Calibration.svelte';
   import CalibrationRun from './routes/CalibrationRun.svelte';
   import Detail from './routes/Detail.svelte';
+  import Devices from './routes/Devices.svelte';
   import GroupForm from './routes/GroupForm.svelte';
   import Groups from './routes/Groups.svelte';
   import Overview from './routes/Overview.svelte';
@@ -22,7 +23,9 @@
     | { name: 'automations' }
     | { name: 'ruleForm'; id?: string }
     | { name: 'groups' }
-    | { name: 'groupForm'; id?: string };
+    | { name: 'groupForm'; id?: string }
+    | { name: 'devices' }
+    | { name: 'record' };
 
   let view = $state<View>({ name: 'overview' });
 
@@ -60,7 +63,7 @@
     </div>
   {/if}
 
-  {#if shutters.confirmable}
+  {#if shutters.confirmable && auth.can('calibrate')}
     <ArrivalPrompt
       name={shutters.confirmable.name}
       onconfirm={() => shutters.confirmArrival()}
@@ -88,6 +91,8 @@
     />
   {:else if view.name === 'ruleForm'}
     <RuleForm id={view.id} onback={() => (view = { name: 'automations' })} />
+  {:else if view.name === 'devices'}
+    <Devices onback={() => (view = { name: 'overview' })} />
   {:else if view.name === 'groups'}
     <Groups
       onedit={(id) => (view = { name: 'groupForm', id })}
@@ -103,6 +108,8 @@
       oncalibration={() => (view = { name: 'calibration' })}
       onautomations={() => (view = { name: 'automations' })}
       ongroups={() => (view = { name: 'groups' })}
+      ondevices={() => (view = { name: 'devices' })}
+      onrecord={() => (view = { name: 'record' })}
     />
   {/if}
   {/if}

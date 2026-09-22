@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { auth } from '../lib/auth.svelte';
   import AutomationBanner from '../components/AutomationBanner.svelte';
   import GroupSection from '../components/GroupSection.svelte';
   import MeasuringBanner from '../components/MeasuringBanner.svelte';
@@ -12,8 +13,10 @@
     oncalibration: () => void;
     onautomations: () => void;
     ongroups: () => void;
+    ondevices: () => void;
+    onrecord: () => void;
   }
-  let { onopen, oncalibration, onautomations, ongroups }: Props = $props();
+  let { onopen, oncalibration, onautomations, ongroups, ondevices, onrecord }: Props = $props();
 
   // Per device (FR-014): grouped or flat, and which groups are folded away.
   let view = $state<View>(loadView());
@@ -47,6 +50,7 @@
     <MeasuringBanner name={shutters.measuring.name} />
   {/if}
 
+  {#if auth.can('command')}
   <div class="row">
     <button type="button" class="btn ghost" disabled={!shutters.bridge.connected || !shutters.shutters.some((s) => !s.measuring && shutters.canOpen(s))} onclick={() => shutters.commandAll('open')}>
       Alle auf
@@ -55,6 +59,7 @@
       Alle zu
     </button>
   </div>
+  {/if}
 
   {#if hasGroups}
     <div class="seg" role="radiogroup" aria-label="Ansicht">
@@ -89,7 +94,7 @@
         <ShutterCard {shutter} {onopen} />
       {/each}
     </div>
-    {#if !hasGroups && shutters.shutters.length > 1}
+    {#if !hasGroups && shutters.shutters.length > 1 && auth.can('configure')}
       <button type="button" class="hint" onclick={ongroups}>Rolladen zu Gruppen zusammenfassen →</button>
     {/if}
   {/if}
@@ -97,8 +102,16 @@
   <div class="row">
     <button type="button" class="btn ghost" onclick={ongroups}>Gruppen</button>
     <button type="button" class="btn ghost" onclick={onautomations}>Automationen</button>
-    <button type="button" class="btn ghost" onclick={oncalibration}>Kalibrierung</button>
+    {#if auth.can('calibrate')}
+      <button type="button" class="btn ghost" onclick={oncalibration}>Kalibrierung</button>
+    {/if}
   </div>
+  {#if auth.can('manage')}
+    <div class="row">
+      <button type="button" class="btn ghost" onclick={ondevices}>Geräte</button>
+      <button type="button" class="btn ghost" onclick={onrecord}>Protokoll</button>
+    </div>
+  {/if}
 
   <p class="footnote">
     Position ist eine Zeitschätzung, kein Rückmeldewert. Nur die Endlagen sind sicher.

@@ -2,6 +2,7 @@
   // Feature 004: one group on the overview — its name, an honest summary of its
   // members, the group's own buttons, and the members' ordinary cards. A group
   // has no position of its own; the summary only counts what the members say.
+  import { auth } from '../lib/auth.svelte';
   import { summarize } from '../lib/groups';
   import { shutters } from '../lib/shutters.svelte';
   import type { Action, Group, Shutter } from '../lib/types';
@@ -44,12 +45,14 @@
   </header>
 
   {#if members.length}
+    {#if auth.can('command')}
     <div class="row">
       <button type="button" class="btn" disabled={offline || !drivable.some((m) => shutters.canOpen(m))} onclick={() => send('open')}>auf</button>
       <button type="button" class="btn" disabled={offline || !drivable.some((m) => shutters.canStop(m))} onclick={() => send('stop')}>stop</button>
       <button type="button" class="btn" disabled={offline || !drivable.some((m) => shutters.canClose(m))} onclick={() => send('close')}>zu</button>
       <button type="button" class="btn" disabled={offline || !drivable.length} aria-expanded={positioning} onclick={() => (positioning = !positioning)}>Position…</button>
     </div>
+    {/if}
 
     {#if positioning}
       <div class="sheet">

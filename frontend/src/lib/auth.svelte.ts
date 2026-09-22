@@ -3,7 +3,20 @@
 // sign of a missing or revoked one is a 401 from any call or a 4401 close of the
 // live feed — either one shows the pairing screen.
 
-import type { Ability, Me } from './auth';
+import type { Ability, CredentialView, Me, OutstandingCode } from './auth';
+
+type Result<T> = { ok: true; value: T } | { ok: false; status: number; message: string };
+
+async function call<T>(url: string, method = 'GET', body?: unknown): Promise<Result<T>> {
+  const response = await fetch(url, {
+    method,
+    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  const parsed = response.status === 204 ? null : await response.json().catch(() => ({}));
+  if (!response.ok) return { ok: false, status: response.status, message: parsed?.message ?? 'Das hat nicht geklappt.' };
+  return { ok: true, value: parsed as T };
+}
 
 class Auth {
   /** Unknown until the first answer; false shows the pairing screen. */
@@ -40,6 +53,33 @@ class Auth {
     if (!response.ok) return body.message ?? 'Koppeln ist fehlgeschlagen.';
     await this.load();
     return null;
+  }
+
+  // --- devices (manage) ---------------------------------------------------------
+
+  credentials(): Promise<Result<{ credentials: CredentialView[] }>> {
+    return call('/api/auth/credentials');
+  }
+
+  issue(name: string, abilities: Ability[]): Promise<Result<CredentialView & { token: string }>> {
+    return call('/api/auth/credentials', 'POST', { name, abilities });
+  }
+
+  /** A 409 means this would lock everyone out; ask, then call again with confirm. */
+  revoke(id: string, confirmLockout = false): Promise<Result<null>> {
+    return call(`/api/auth/credentials/${id}`, 'DELETE', confirmLockout ? { confirm_lockout: true } : undefined);
+  }
+
+  codes(): Promise<Result<{ codes: OutstandingCode[] }>> {
+    return call('/api/auth/pairing');
+  }
+
+  mint(abilities: Ability[]): Promise<Result<OutstandingCode>> {
+    return call('/api/auth/pairing', 'POST', { abilities });
+  }
+
+  cancel(id: string): Promise<Result<null>> {
+    return call(`/api/auth/pairing/${id}`, 'DELETE');
   }
 
   /**

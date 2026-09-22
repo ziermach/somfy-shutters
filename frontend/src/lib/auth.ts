@@ -47,3 +47,62 @@ export function formatCode(typed: string): string {
   const cleaned = typed.replace(/[-\s]/g, '').toUpperCase().slice(0, 6);
   return cleaned.length > 3 ? `${cleaned.slice(0, 3)}-${cleaned.slice(3)}` : cleaned;
 }
+
+export interface CredentialView {
+  id: string;
+  name: string;
+  abilities: Ability[];
+  origin: 'issued' | 'paired' | 'recovery';
+  created_at: string;
+  last_used_at: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  state: 'active' | 'revoked' | 'expired';
+  is_me: boolean;
+}
+
+export interface OutstandingCode {
+  id: string;
+  abilities: Ability[];
+  expires_at: string;
+  /** Only in the response that minted it; never listed again. */
+  code?: string;
+}
+
+const STATES: Record<CredentialView['state'], string> = {
+  active: 'aktiv',
+  revoked: 'widerrufen',
+  expired: 'abgelaufen'
+};
+
+const ORIGINS: Record<CredentialView['origin'], string> = {
+  issued: 'Token',
+  paired: 'gekoppelt',
+  recovery: 'Wiederherstellung'
+};
+
+export function stateText(state: CredentialView['state']): string {
+  return STATES[state];
+}
+
+export function originText(origin: CredentialView['origin']): string {
+  return ORIGINS[origin];
+}
+
+/** "zuletzt vor 3 Min." — or "noch nie benutzt". */
+export function lastUsedText(iso: string | null, now: Date = new Date()): string {
+  if (!iso) return 'noch nie benutzt';
+  const minutes = Math.max(0, Math.round((now.getTime() - Date.parse(iso)) / 60000));
+  if (minutes < 1) return 'gerade eben benutzt';
+  if (minutes < 60) return `zuletzt vor ${minutes} Min.`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `zuletzt vor ${hours} Std.`;
+  return `zuletzt vor ${Math.round(hours / 24)} Tagen`;
+}
+
+/** "4:59" until a code runs out; "abgelaufen" after. */
+export function countdownText(expiresAt: string, now: number = Date.now()): string {
+  const seconds = Math.floor((Date.parse(expiresAt) - now) / 1000);
+  if (seconds <= 0) return 'abgelaufen';
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}

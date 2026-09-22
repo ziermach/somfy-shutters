@@ -1,5 +1,6 @@
 <script lang="ts">
   import { actionText, daysText, groupMembersText, lastText, nextText, targetsText, triggerText, type Rule } from '../lib/automations';
+  import { auth } from '../lib/auth.svelte';
   import { automations } from '../lib/automations.svelte';
   import { groups } from '../lib/groups.svelte';
   import FiringHistory from './FiringHistory.svelte';
@@ -33,7 +34,7 @@
 <div class="rule" class:off={!rule.enabled}>
   <div class="top">
     <div class="meta">
-      <button type="button" class="name" onclick={() => onedit(rule.id)}>{rule.name}</button>
+      <button type="button" class="name" disabled={!auth.can('configure')} onclick={() => onedit(rule.id)}>{rule.name}</button>
       <div class="when">
         <span class="mono">{triggerText(rule.trigger)}</span>
         <span>· {daysText(rule.days)}</span>
@@ -43,19 +44,21 @@
         <div class="members">{line}</div>
       {/each}
     </div>
-    <button
-      type="button"
-      class="switch"
-      role="switch"
-      aria-checked={rule.enabled}
-      aria-label="{rule.name} ein- oder ausschalten"
-      onclick={toggle}
-    ></button>
+    {#if auth.can('configure')}
+      <button
+        type="button"
+        class="switch"
+        role="switch"
+        aria-checked={rule.enabled}
+        aria-label="{rule.name} ein- oder ausschalten"
+        onclick={toggle}
+      ></button>
+    {/if}
   </div>
   <div class="foot">
     <span class="next" class:none={!rule.next.at}>
       Nächste: {nextText(rule.next)}{#if rule.skip_next}{' '}— wird übersprungen{:else if inPause}{' '}— fällt in die Pause{/if}
-      {#if rule.next.at}
+      {#if rule.next.at && auth.can('configure')}
         <button type="button" class="skip" onclick={skip}>{rule.skip_next ? 'doch ausführen' : 'überspringen'}</button>
       {/if}
     </span>

@@ -87,3 +87,22 @@ def test_revoking_closes_that_feed_and_only_that_feed(app_client) -> None:
         assert app_client.app.state.hub.owners() == {
             c.id for c in app_client.app.state.auth.list() if c.name == "B"
         }
+
+
+def test_an_expired_credentials_feed_closes_on_the_sweep(app_client) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    auth = app_client.app.state.auth
+    soon = datetime.now(UTC) + timedelta(seconds=30)
+    credential, token = auth.issue("Gast", ALL_ABILITIES, expires_at=soon)
+    with app_client.websocket_connect(
+        "/api/ws", headers={"Authorization": f"Bearer {token}"}
+    ) as ws:
+        ws.receive_json()
+        auth.clock = lambda: soon + timedelta(seconds=1)
+        app_client.portal.call(app_client.app.state.sweep_auth, soon - timedelta(seconds=30), soon)
+        with pytest.raises(WebSocketDisconnect) as caught:
+            ws.receive_json()
+        assert caught.value.code == 4401
+    [entry] = [e for e in app_client.app.state.audit.query() if e.action == "credential_expired"]
+    assert entry.target == credential.id

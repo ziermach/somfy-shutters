@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { auth } from '../lib/auth.svelte';
   import ConfidenceBadge from '../components/ConfidenceBadge.svelte';
   import MeasuringBanner from '../components/MeasuringBanner.svelte';
   import WindowGraphic from '../components/WindowGraphic.svelte';
@@ -64,6 +65,7 @@
       <ConfidenceBadge position={shutter.position} moving={shutter.movement !== null} />
     </div>
 
+    {#if auth.can('command')}
     <div class="slider">
       <label for="target">Zielposition</label>
       <input
@@ -89,10 +91,13 @@
       <button type="button" class="btn big" disabled={busy || !shutters.canStop(shutter)} onclick={() => shutters.command(shutter.id, 'stop')}>stop</button>
       <button type="button" class="btn big" disabled={busy || !shutters.canClose(shutter)} onclick={() => shutters.command(shutter.id, 'close')}>zu</button>
     </div>
+    {/if}
 
-    <button type="button" class="btn calibrate" disabled={shutter.measuring} onclick={() => oncalibrate(shutter.id)}>
-      {shutter.calibrated ? 'Laufzeiten neu messen' : 'Laufzeiten messen'}
-    </button>
+    {#if auth.can('calibrate')}
+      <button type="button" class="btn calibrate" disabled={shutter.measuring} onclick={() => oncalibrate(shutter.id)}>
+        {shutter.calibrated ? 'Laufzeiten neu messen' : 'Laufzeiten messen'}
+      </button>
+    {/if}
 
     {#if shutter.position.confidence !== 'certain'}
       <div class="conf">
@@ -105,9 +110,11 @@
             Stromausfall oder ein Hindernis können die Anzeige verschoben haben.
           {/if}
         </p>
-        <button type="button" class="btn amber" disabled={busy} onclick={() => shutters.resync(shutter.id)}>
-          Resync — an die Endlage fahren
-        </button>
+        {#if auth.can('command')}
+          <button type="button" class="btn amber" disabled={busy} onclick={() => shutters.resync(shutter.id)}>
+            Resync — an die Endlage fahren
+          </button>
+        {/if}
       </div>
     {/if}
   </section>
