@@ -108,7 +108,9 @@ def create_app(
     guard = ClockGuard()
     # `state` is set to app.state below, once it exists: the engine commands
     # shutters through the same function a button press uses (commands.apply).
-    engine = AutomationEngine(automation_store, state=None, publish=bus.publish, guard=guard)
+    engine = AutomationEngine(
+        automation_store, state=None, publish=bus.publish, guard=guard, groups=group_store
+    )
     runs = RunRegistry()
 
     tracker = Tracker(settings, store, emit=emit, calibration=calibration)

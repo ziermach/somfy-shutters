@@ -10,12 +10,16 @@ export type RuleAction = { kind: 'open' | 'close'; percent?: null } | { kind: 'p
 
 export type FiringStatus = 'fired' | 'partial' | 'failed' | 'skipped' | 'paused' | 'held' | 'missed' | 'no_sun';
 
+/** "all", or shutters and groups picked by hand (feature 004). Groups are resolved
+ *  when the rule fires, so a shutter added to a group is included from then on. */
+export type RuleTargets = 'all' | { shutters: string[]; groups: string[] };
+
 export interface RuleDraft {
   name: string;
   enabled: boolean;
   days: boolean[];
   trigger: Trigger;
-  targets: 'all' | string[];
+  targets: RuleTargets;
   action: RuleAction;
 }
 
@@ -23,6 +27,8 @@ export interface Conflict {
   rule_id: string;
   rule_name: string;
   shutter_id: string;
+  /** The group through which the rule being edited reaches that shutter, if any. */
+  via?: string | null;
   first_at: string;
   winner: string;
 }
@@ -39,6 +45,8 @@ export interface Outcome {
   shutter_id: string;
   result: 'commanded' | 'skipped' | 'failed';
   reason: 'measurement_in_progress' | 'removed' | 'bridge_unreachable' | null;
+  /** Names of the groups it was reached through, as they were then (feature 004). */
+  via?: string[];
 }
 
 export interface Firing {
@@ -98,10 +106,37 @@ export function actionText(action: RuleAction): string {
   return `${action.percent} %`;
 }
 
-export function targetsText(targets: 'all' | string[], names: Record<string, string>): string {
+export function targetsText(
+  targets: RuleTargets,
+  names: Record<string, string>,
+  groups: { id: string; name: string }[] = []
+): string {
   if (targets === 'all') return 'Alle Rolladen';
-  const known = targets.map((id) => names[id]).filter(Boolean);
+  const groupNames = targets.groups.map((id) => groups.find((g) => g.id === id)?.name).filter(Boolean);
+  const shutterNames = targets.shutters.map((id) => names[id]).filter(Boolean);
+  const known = [...groupNames, ...shutterNames];
   return known.length ? known.join(', ') : 'kein Rolladen mehr';
+}
+
+/** What each group target currently means: "Obergeschoss: Bad, Kind" (US4 scenario 5). */
+export function groupMembersText(
+  targets: RuleTargets,
+  names: Record<string, string>,
+  groups: { id: string; name: string; members: string[] }[]
+): string[] {
+  if (targets === 'all') return [];
+  return targets.groups.flatMap((id) => {
+    const group = groups.find((g) => g.id === id);
+    if (!group) return [];
+    const members = group.members.map((m) => names[m] ?? m);
+    return [`${group.name}: ${members.length ? members.join(', ') : 'leer'}`];
+  });
+}
+
+/** The groups a firing reached shutters through, once each: "über Erdgeschoss, Südseite". */
+export function viaText(outcomes: Outcome[]): string | null {
+  const all = [...new Set(outcomes.flatMap((o) => o.via ?? []))];
+  return all.length ? `über ${all.join(', ')}` : null;
 }
 
 const REASONS: Record<string, string> = {
@@ -168,6 +203,11 @@ export function lastText(last: Rule['last']): string | null {
 }
 
 export function outcomeText(outcome: Outcome): string {
+  const via = outcome.via?.length ? ` (über ${outcome.via.join(', ')})` : '';
+  return outcomeReason(outcome) + via;
+}
+
+function outcomeReason(outcome: Outcome): string {
   if (outcome.result === 'commanded') return 'gefahren';
   if (outcome.reason === 'measurement_in_progress') return 'übersprungen — Messung läuft';
   if (outcome.reason === 'removed') return 'übersprungen — nicht mehr konfiguriert';

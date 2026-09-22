@@ -160,7 +160,9 @@ def test_patch_enabled_keeps_everything_else(client) -> None:
     off = client.patch(f"/api/automations/{rule['id']}", json={"enabled": False}).json()
     assert off["enabled"] is False
     assert off["next"] == {"at": None, "reason": "disabled"}
-    assert off["targets"] == ["kueche"] and off["trigger"] == rule["trigger"]
+    # feature 004: a plain list goes in, the targets object comes back
+    assert off["targets"] == {"shutters": ["kueche"], "groups": []}
+    assert off["trigger"] == rule["trigger"]
     on = client.patch(f"/api/automations/{rule['id']}", json={"enabled": True}).json()
     assert on["next"]["at"] is not None
 
@@ -176,7 +178,9 @@ def test_firings_are_listed_newest_first_with_outcomes(client) -> None:
     client.portal.call(engine.run_due, monday + timedelta(days=1))
     got = client.get(f"/api/automations/{rule['id']}/firings").json()["firings"]
     assert [f["planned_at"][:10] for f in got] == ["2026-09-22", "2026-09-21"]
-    assert got[0]["outcomes"] == [{"shutter_id": "kueche", "result": "commanded", "reason": None}]
+    assert got[0]["outcomes"] == [
+        {"shutter_id": "kueche", "result": "commanded", "reason": None, "via": []}
+    ]
     assert client.get("/api/automations").json()["rules"][0]["last"]["status"] == "fired"
     assert client.get("/api/automations/r_nope/firings").status_code == 404
 
@@ -268,3 +272,107 @@ def test_sim_clock_forces_the_verdict_and_returns_to_the_real_check(client) -> N
     assert client.get("/api/automations").json()["clock"]["reliable"] is False
     back = client.post("/api/sim/clock", json={"reliable": None}).json()
     assert back["clock_reliable"] is True
+
+
+# --- feature 004: groups as targets --------------------------------------------------
+
+
+def group(client, name, *members) -> str:
+    response = client.post("/api/groups", json={"name": name, "members": list(members)})
+    assert response.status_code == 201
+    return response.json()["id"]
+
+
+def test_targets_object_round_trips(client) -> None:
+    gid = group(client, "Erdgeschoss", "wohnzimmer", "kueche")
+    targets = {"shutters": ["schlafzimmer"], "groups": [gid]}
+    rule = client.post("/api/automations", json=body(targets=targets)).json()
+    assert rule["targets"] == targets
+    assert client.get("/api/automations").json()["rules"][0]["targets"] == targets
+
+
+def test_unknown_group_is_422(client) -> None:
+    response = client.post("/api/automations", json=body(targets={"groups": ["g_nope"]}))
+    assert response.status_code == 422
+    assert response.json()["error"] == "unknown_group"
+    assert response.json()["detail"] == {"groups": ["g_nope"]}
+
+
+def test_empty_targets_object_is_422(client) -> None:
+    response = client.post("/api/automations", json=body(targets={"shutters": [], "groups": []}))
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_rule"
+
+
+def test_firing_history_says_which_group_reached_each_shutter(client) -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    eg = group(client, "Erdgeschoss", "wohnzimmer", "kueche")
+    sued = group(client, "Südseite", "wohnzimmer", "schlafzimmer")
+    rule = client.post("/api/automations", json=body(targets={"groups": [eg, sued]})).json()
+    monday = datetime(2026, 9, 21, 6, 45, tzinfo=ZoneInfo("Europe/Berlin"))
+    client.portal.call(client.app.state.automation.run_due, monday)
+    [firing] = client.get(f"/api/automations/{rule['id']}/firings").json()["firings"]
+    via = {o["shutter_id"]: o["via"] for o in firing["outcomes"]}
+    assert via == {
+        "wohnzimmer": ["Erdgeschoss", "Südseite"],
+        "kueche": ["Erdgeschoss"],
+        "schlafzimmer": ["Südseite"],
+    }
+
+
+def test_deleting_a_group_removes_it_from_rules(client) -> None:
+    gid = group(client, "Südseite", "wohnzimmer")
+    rule = client.post("/api/automations", json=body(targets={"groups": [gid]})).json()
+    seen: list[str] = []
+
+    async def listen(event: dict) -> None:
+        seen.append(event["type"])
+
+    client.app.state.bus.subscribe(listen)
+    assert client.delete(f"/api/groups/{gid}").status_code == 204
+    [after] = client.get("/api/automations").json()["rules"]
+    assert after["id"] == rule["id"]
+    assert after["targets"] == {"shutters": [], "groups": []}
+    assert after["next"] == {"at": None, "reason": "no_targets"}
+    assert "rules_changed" in seen
+
+
+def test_conflict_names_the_group_it_comes_through(client) -> None:
+    gid = group(client, "Erdgeschoss", "wohnzimmer", "kueche")
+    client.post("/api/automations", json=body(name="A", targets=["kueche"]))
+    rule = client.post(
+        "/api/automations",
+        json=body(name="B", targets={"groups": [gid]}, action={"kind": "close"}),
+    ).json()
+    [c] = rule["conflicts"]
+    assert c["rule_name"] == "A" and c["shutter_id"] == "kueche" and c["via"] == "Erdgeschoss"
+
+
+def test_saving_a_group_warns_about_the_conflict_it_creates(client) -> None:
+    """FR-028: quickstart D6."""
+    gid = group(client, "Südseite", "wohnzimmer")
+    client.post("/api/automations", json=body(name="A", targets=["kueche"]))
+    client.post(
+        "/api/automations",
+        json=body(name="B", targets={"groups": [gid]}, action={"kind": "close"}),
+    )
+    response = client.put(
+        f"/api/groups/{gid}", json={"name": "Südseite", "members": ["wohnzimmer", "kueche"]}
+    )
+    assert response.status_code == 200
+    [c] = response.json()["conflicts"]
+    assert set(c) == {
+        "rule_id",
+        "rule_name",
+        "other_rule_id",
+        "other_rule_name",
+        "shutter_id",
+        "via",
+        "first_at",
+        "winner",
+    }
+    assert {c["rule_name"], c["other_rule_name"]} == {"A", "B"}
+    assert c["shutter_id"] == "kueche" and c["via"] == "Südseite"
+    assert response.json()["members"] == ["wohnzimmer", "kueche"]  # saved regardless

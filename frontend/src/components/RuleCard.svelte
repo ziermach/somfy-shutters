@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { actionText, daysText, lastText, nextText, targetsText, triggerText, type Rule } from '../lib/automations';
+  import { actionText, daysText, groupMembersText, lastText, nextText, targetsText, triggerText, type Rule } from '../lib/automations';
   import { automations } from '../lib/automations.svelte';
+  import { groups } from '../lib/groups.svelte';
   import FiringHistory from './FiringHistory.svelte';
 
   interface Props {
@@ -37,7 +38,10 @@
         <span class="mono">{triggerText(rule.trigger)}</span>
         <span>· {daysText(rule.days)}</span>
       </div>
-      <div class="what">{targetsText(rule.targets, names)} → {actionText(rule.action)}</div>
+      <div class="what">{targetsText(rule.targets, names, groups.groups)} → {actionText(rule.action)}</div>
+      {#each groupMembersText(rule.targets, names, groups.groups) as line (line)}
+        <div class="members">{line}</div>
+      {/each}
     </div>
     <button
       type="button"
@@ -70,6 +74,10 @@
 </div>
 
 <style>
+  .members {
+    font-size: 12px;
+    color: var(--faint);
+  }
   .rule {
     background: var(--surface);
     border: 1px solid var(--surface-2);

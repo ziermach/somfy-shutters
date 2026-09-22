@@ -15,12 +15,14 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .. import commands
+from ..groups import Group, GroupStore
 from ..models import utcnow
 from .clock import ClockGuard, ClockVerdict
-from .models import Firing, FiringStatus, Outcome, Rule, status_from
+from .models import Firing, FiringStatus, Outcome, Rule, RuleDraft, status_from
 from .planner import NextFiring, SunLookup, days_without_sun, firings_between, next_firing
 from .store import AutomationStore
 from .sun import sun_lookup
+from .targets import Resolution, resolve
 
 log = logging.getLogger(__name__)
 
@@ -54,8 +56,10 @@ class AutomationEngine:
         guard: ClockGuard | None = None,
         clock: Callable[[], datetime] = utcnow,
         scheduler: Any = None,
+        groups: GroupStore | None = None,
     ) -> None:
         self.store = store
+        self.groups = groups
         self.state = state
         self.publish = publish
         self.guard = guard or ClockGuard()
@@ -83,19 +87,20 @@ class AutomationEngine:
             return None
         return sun_lookup(where["latitude"], where["longitude"], self.tz)
 
-    def targets(self, rule: Rule) -> tuple[list[str], list[str]]:
-        """(configured targets in configuration order, ids no longer configured)."""
-        configured = list(self.settings.shutters)
-        if rule.targets == "all":
-            return configured, []
-        present = [sid for sid in configured if sid in rule.targets]
-        removed = [sid for sid in rule.targets if sid not in configured]
-        return present, removed
+    def current_groups(self) -> list[Group]:
+        return self.groups.groups() if self.groups is not None else []
+
+    def targets(self, rule: RuleDraft) -> Resolution:
+        """Who the rule reaches right now: groups resolved at this moment (feature 004)."""
+        return resolve(rule.targets, list(self.settings.shutters), self.current_groups())
 
     def next_for(self, rule: Rule, now: datetime | None = None) -> NextFiring:
-        present, _ = self.targets(rule)
         return next_firing(
-            rule, now or self.clock(), self.tz, self.sun(), has_targets=bool(present)
+            rule,
+            now or self.clock(),
+            self.tz,
+            self.sun(),
+            has_targets=bool(self.targets(rule).reached),
         )
 
     def pause(self, now: datetime | None = None) -> Pause:
@@ -194,25 +199,31 @@ class AutomationEngine:
         return firing
 
     async def _command(self, rule: Rule) -> list[Outcome]:
-        present, removed = self.targets(rule)
+        resolution = self.targets(rule)
         outcomes = []
         # FR-010: not retried, not queued. A shutter that could not be commanded
-        # was not commanded.
+        # was not commanded. Each is commanded once, however many targets reach it.
         for result in await commands.apply_many(
-            self.state, present, rule.action.kind, rule.action.percent
+            self.state, resolution.reached, rule.action.kind, rule.action.percent
         ):
+            via = resolution.via.get(result["id"], [])
             if result["accepted"]:
-                outcomes.append(Outcome(shutter_id=result["id"], result="commanded"))
+                outcomes.append(Outcome(shutter_id=result["id"], result="commanded", via=via))
             elif result["error"] == "measurement_in_progress":
                 outcomes.append(
-                    Outcome(shutter_id=result["id"], result="skipped", reason=result["error"])
+                    Outcome(
+                        shutter_id=result["id"], result="skipped", reason=result["error"], via=via
+                    )
                 )
             else:
                 outcomes.append(
-                    Outcome(shutter_id=result["id"], result="failed", reason=result["error"])
+                    Outcome(
+                        shutter_id=result["id"], result="failed", reason=result["error"], via=via
+                    )
                 )
         outcomes.extend(
-            Outcome(shutter_id=sid, result="skipped", reason="removed") for sid in removed
+            Outcome(shutter_id=sid, result="skipped", reason="removed")
+            for sid in resolution.removed
         )
         return outcomes
 

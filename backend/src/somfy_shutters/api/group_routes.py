@@ -13,7 +13,8 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from .. import commands
-from ..groups import GroupDraft, GroupStore, NameTaken, NotAPermutation
+from ..automation.conflicts import conflicts_from_group_change
+from ..groups import Group, GroupDraft, GroupStore, NameTaken, NotAPermutation
 from .rest import TARGET_REQUIRED, CommandBody, many_status
 
 router = APIRouter(prefix="/api")
@@ -62,6 +63,35 @@ def name_taken(exc: NameTaken) -> JSONResponse:
     return error(409, "name_taken", "Diesen Namen gibt es schon.", {"group_id": exc.group_id})
 
 
+def group_conflicts(request: Request, group_id: str, before: list[Group]) -> list[dict[str, Any]]:
+    """Rule conflicts this change created (FR-028). A warning; the group is saved."""
+    engine = request.app.state.automation
+    now = engine.clock()
+    found = conflicts_from_group_change(
+        group_id,
+        before,
+        _groups(request).groups(),
+        engine.store.rules(),
+        list(request.app.state.settings.shutters),
+        now,
+        engine.tz,
+        engine.sun(),
+    )
+    return [
+        {
+            "rule_id": c.rule_id,
+            "rule_name": c.rule_name,
+            "other_rule_id": c.other_rule_id,
+            "other_rule_name": c.other_rule_name,
+            "shutter_id": c.shutter_id,
+            "via": c.via,
+            "first_at": c.first_at.astimezone(engine.tz).isoformat(),
+            "winner": c.winner,
+        }
+        for c in found
+    ]
+
+
 @router.get("/groups")
 async def list_groups(request: Request) -> dict[str, Any]:
     return {"groups": listing(_groups(request))}
@@ -77,6 +107,7 @@ async def create_group(request: Request) -> Any:
     except NameTaken as exc:
         return name_taken(exc)
     await announce(request)
+    # No rule can name a group that did not exist a moment ago: nothing to warn about.
     return JSONResponse({**group.wire(), "conflicts": []}, status_code=201)
 
 
@@ -105,6 +136,7 @@ async def replace_group(request: Request, group_id: str) -> Any:
     draft = parse_draft(request, await request.json())
     if isinstance(draft, JSONResponse):
         return draft
+    before = store.groups()
     try:
         group = store.update(group_id, draft)
     except NameTaken as exc:
@@ -112,7 +144,7 @@ async def replace_group(request: Request, group_id: str) -> Any:
     if group is None:  # deleted between the check and the write
         return error(404, "unknown_group", UNKNOWN_GROUP)
     await announce(request)
-    return {**group.wire(), "conflicts": []}
+    return {**group.wire(), "conflicts": group_conflicts(request, group_id, before)}
 
 
 @router.delete("/groups/{group_id}")
@@ -120,6 +152,12 @@ async def delete_group(request: Request, group_id: str) -> Any:
     if not _groups(request).delete(group_id):
         return error(404, "unknown_group", UNKNOWN_GROUP)
     await announce(request)
+    # FR-026: rules lose the group as a target. Not atomic with the delete; the
+    # engine ignores unknown group ids, so a crash in between is harmless.
+    engine = request.app.state.automation
+    if engine.store.drop_group(group_id):
+        engine.reschedule()
+        await request.app.state.bus.publish({"type": "rules_changed"})
     return Response(status_code=204)
 
 
