@@ -10,9 +10,9 @@
 
 ## User Scenarios & Testing *(mandatory)*
 
-Features 001 and 002 assume the only people who can reach the app are the people
-already standing in the house. That assumption is about to be retired: feature 004
-makes the app reachable from outside the home network, and it cannot start until
+Features 001–004 assume the only people who can reach the app are the people
+already standing in the house. That assumption is about to be retired: a later
+remote-access feature makes the app reachable from outside the home network, and it cannot start until
 this one has landed.
 
 The system currently has no notion of who is asking. Every caller is anonymous and
@@ -30,7 +30,7 @@ calibration, the configuration — refuses an unidentified caller. A device that
 been given a credential keeps working exactly as before.
 
 **Why this priority**: It is the whole point. Until an unidentified caller is refused,
-no other part of this feature matters and feature 004 is unsafe to begin.
+no other part of this feature matters and remote access is unsafe to begin.
 
 **Independent Test**: Reach the system without a credential and confirm every route
 refuses, including the live state feed; then reach it with one and confirm the app is
@@ -89,7 +89,7 @@ to change measured travel times or hand out new credentials. The owner gives eac
 credential only the abilities its holder needs, and an attempt to exceed them fails.
 
 **Why this priority**: It limits the damage of a leaked credential, and it is what makes
-handing one to an outside integration in feature 004 defensible. It is worth less than
+handing one to an outside integration through remote access defensible. It is worth less than
 having any door at all, so it follows P1.
 
 **Independent Test**: Issue a credential limited to watching and commanding, then
@@ -396,7 +396,7 @@ without the service becoming unusable for other credentials.
   permissions.
 - The owner is technically able and physically present at the machine when recovery is
   needed; recovery may involve a terminal on that machine.
-- Transport confidentiality is not this feature's concern. Until feature 004 adds it,
+- Transport confidentiality is not this feature's concern. Until a remote-access feature adds it,
   credentials cross the home network in whatever form the existing transport uses, and
   that is accepted for a local-only installation.
 - A stolen credential is as good as the device it was on; there is no second factor, and
@@ -405,8 +405,8 @@ without the service becoming unusable for other credentials.
   the exact default is a plan decision.
 - The record is for explaining movements, not for security forensics against a skilled
   attacker with access to the machine.
-- Feature 004 (remote access, reverse proxy, voice control) depends on this feature and
+- A later remote-access feature (reverse proxy, voice control) depends on this feature and
   is out of scope here. Nothing in this spec assumes a particular remote arrangement.
-- The existing behaviour of features 001 and 002 is unchanged for an authenticated
+- The existing behaviour of features 001–004 is unchanged for an authenticated
   caller; this feature adds a gate and a ledger, it does not alter how shutters move or
   how positions are estimated.
