@@ -429,11 +429,11 @@ you need to.
 ### Pairing the first phone
 
 With the simulator the app runs open, so there is nothing to do yet. Once
-`bridge.kind = "mqtt"` (step 7) every device needs its own credential. The first one
-comes from the Pi itself:
+`bridge.kind = "mqtt"` (step 8) every device needs its own credential. The first one
+comes from the Pi itself, run as the app's user so it reads the app's config and database:
 
 ```bash
-sudo -u pi /home/pi/somfy-shutters/backend/.venv/bin/somfy-shutters auth recover
+sudo -u somfy /opt/somfy-shutters/backend/.venv/bin/somfy-shutters auth recover
 # Kopplungscode: K7Q-9XM  (gültig bis 14:32)
 ```
 

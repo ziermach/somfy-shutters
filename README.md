@@ -161,6 +161,27 @@ calculation 2.6 minutes off that only a comparison with published times showed, 
 service worker that served every phone the first version it ever loaded, forever — and the
 discovery that Pi-Somfy had replaced the MQTT topics the whole app was built on.
 
+### On the Pi
+
+The full setup — broker, Pi-Somfy, the app as a systemd service — is
+[`deploy/README.md`](deploy/README.md). In short, once it is installed in
+`/opt/somfy-shutters`:
+
+```bash
+# start it, now and at every boot
+sudo cp /opt/somfy-shutters/deploy/somfy-shutters.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now somfy-shutters
+journalctl -u somfy-shutters -f                  # "ready: N shutters" when it is up
+
+# update to the newest GitHub release — no Node needed on the Pi
+sh /opt/somfy-shutters/deploy/update.sh
+```
+
+Every `v*` tag builds the frontend in CI and attaches it to its
+[release](https://github.com/ziermach/somfy-shutters/releases) as `frontend-dist.tar.gz`;
+`update.sh` checks out the tag, reinstalls the backend, swaps in that frontend and
+restarts the service. Cutting one: `git tag v0.2.0 && git push origin v0.2.0`.
+
 ## How it works
 
 ### Calibration
