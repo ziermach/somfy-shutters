@@ -47,7 +47,7 @@ deleted ──live announcement of the address──► row gone → "new"
 | `address` | the shutter this session created or resumed |
 | `attempts` | "PROG senden" presses so far |
 | `in_flight` | a program request is running (a second press is refused) |
-| `announced` | a live announcement arrived after `add` (the bridge is patched) |
+| `programmed` | at least one `program` was sent in this session ("Hat gewackelt" needs it) |
 
 Keyed by address; lost on restart without harm — the `unpaired` row is what makes a flow
 resumable ("Anlernen fortsetzen").

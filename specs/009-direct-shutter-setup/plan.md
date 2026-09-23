@@ -1,49 +1,48 @@
 # Implementation Plan: Setting up shutters directly in the app
 
 **Branch**: `009-direct-shutter-setup` (separate branch at the owner's request; `main` stays as
-it is for testing) | **Date**: 2026-09-22 | **Spec**: [spec.md](./spec.md)
+it is for testing) | **Date**: 2026-09-23 | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `specs/009-direct-shutter-setup/spec.md`
 
 ## Summary
 
-The app becomes the interface for the whole life of a shutter. A new `PiSomfyManager` asks the
-bridge — through its `/cmd/` command route — to create a shutter (the bridge picks the address),
-to send the programming signal, to rename and to delete. The bridge stays the only transmitter.
-A guided flow in the style of the mock walks the person through it: name and travel time,
-PROG on the old remote, "PROG senden", "Hat gewackelt?"; or the power-cycle sequence with a
-stopwatch. A small patch to the bridge, shipped in `deploy/` like the one already there, makes a
-new shutter commandable at once and clears a deleted one's announcement; without it the flow
-asks for one bridge restart. Created-but-unpaired shutters stay out of the household until
-"Hat gewackelt". Feature 005's guide remains the fallback.
+The app becomes the interface for the whole life of a shutter, and the bridge becomes our own
+fork. Pi-Somfy offers creating, programming, renaming and deleting only through its web
+interface; the fork offers them on the message channel the app already speaks, and announces a
+new shutter the moment it exists instead of at the next restart. The app gains a guided flow in
+the style of the mock — name and travel time, PROG on the old remote, "PROG senden", "Hat
+gewackelt?", or the power-cycle sequence with a stopwatch — and keeps every rule it had: it
+never transmits, never invents an address, sends one programming frame per press. A
+created-but-unpaired shutter stays out of the household until "Hat gewackelt". Against an
+unforked bridge everything falls back to feature 005's guide.
 
 ## Technical Context
 
-**Language/Version**: Python 3.11, TypeScript/Svelte 5 — unchanged
+**Language/Version**: Python 3.11, TypeScript/Svelte 5 — unchanged. The fork is Pi-Somfy's own
+Python 2/3-compatible code.
 
-**Primary Dependencies**: none new. The bridge is called with the standard library
-(`urllib.request` in `asyncio.to_thread`): a handful of requests per setup, no reason for an HTTP
-client dependency (constitution V).
+**Primary Dependencies**: none new, in the app or in the fork
 
 **Storage**: existing `household_shutter` gains `pairing` and `estimate_seconds`; `state` gains
 `deleted` ([data-model.md](./data-model.md))
 
-**Testing**: pytest — manager against a fake HTTP server (every command, error shape and
-timeout of [contracts/pisomfy-cmd.md](./contracts/pisomfy-cmd.md)); setup service and REST
-against the simulator's management side; vitest for the power-cycle timing and flow wording;
-quickstart B against a real Pi-Somfy on a desk
+**Testing**: pytest — the management request/response of
+[contracts/mqtt-manage.md](./contracts/mqtt-manage.md) asserted without a broker (as feature 006
+does), setup service and REST against the simulator's management side; vitest for the
+power-cycle timing and the flow's wording; quickstart B against the fork and a local Mosquitto;
+in the fork, a script that exercises the channel end to end
 
-**Target Platform**: Raspberry Pi next to Pi-Somfy v3.1+, web server reachable from the app
-(same Pi: loopback)
+**Target Platform**: Raspberry Pi running the fork, Mosquitto and this app
 
-**Project Type**: web application — backend, frontend, plus a patch file for the bridge
+**Project Type**: web application — backend, frontend, plus a fork of the bridge
 
-**Performance Goals**: new shutter drivable right after "Hat gewackelt" (patched bridge);
-announcement of a new shutter awaited ≤ 5 s
+**Performance Goals**: a new shutter drivable right after "Hat gewackelt"; a management answer
+within 5 s or it counts as unavailable
 
 **Constraints**: the app never transmits; never invents an address; one `program` per press,
-never retried; the bridge password never leaves the server; every setup route needs
-`configure`; nothing published under `homeassistant/#` by the app
+never retried; every setup route needs `configure`; nothing published under `homeassistant/#`
+by the app; management requests carry no secret
 
 **Scale/Scope**: ≤ 20 shutters; one setup at a time per shutter
 
@@ -53,16 +52,16 @@ never retried; the bridge password never leaves the server; every setup route ne
 
 | Principle | How this plan complies |
 |---|---|
-| **I. Pi-Somfy owns the radio** | Untouched. The app sends *requests*; Pi-Somfy transmits every frame, holds every rolling code, assigns every address. No radio code in the app. |
-| **II. MQTT is the only integration boundary** | **Violated as written** — the principle forbids calling Pi-Somfy's Flask routes. → **Amendment 1.3.0 → 1.4.0 (MINOR)**: MQTT stays the only path for *driving* and *state*; shutter **management** (create, program, rename, delete) may use Pi-Somfy's `/cmd/` command route, confined to one adapter file, with a working fallback when it is unavailable. Rationale kept: the swappable-transmitter goal holds because management sits behind its own port (`bridge/manage.py`), as MQTT does. HTML, database and config files remain off limits. |
-| **III. Honest position state** | A new shutter starts unknown; an unpaired one is shown as "nicht angelernt", never as drivable. "PROG senden" succeeding says the bridge sent it, never that the motor learned — the person answers that. |
-| **IV. Local-first** | Pi-Somfy runs on the same Pi; loopback. |
-| **V. Single-Pi simplicity** | No new component or dependency; the bridge patch is a text file applied once, like the existing one. |
-| **Interface rule "addresses … never invented"** | The bridge returns the address; the app validates and stores it, never computes one. |
+| **I. Pi-Somfy owns the radio** | Untouched. The bridge — forked or not — transmits every frame, holds every rolling code and assigns every address. No radio code in the app. |
+| **II. MQTT is the only integration boundary** | Held, and *extended*: two more topics in the same `somfy/` namespace, `somfy/bridge/manage/request` outbound and `.../response` inbound. → **Amendment 1.3.0 → 1.4.0 (MINOR)**: name them, and state that management exists only on a bridge that offers it, with a fallback when it does not. Flask routes, HTML, database and config files remain forbidden, so the rationale is unchanged — this is the opposite of the `/cmd/` route first considered (research §1). |
+| **III. Honest position state** | A new shutter starts unknown; an unpaired one reads "nicht angelernt" and is not drivable. A successful `program` means the bridge transmitted, never that the motor learned — the person answers that. |
+| **IV. Local-first** | Broker and bridge on the same Pi. |
+| **V. Single-Pi simplicity** | No new component, no new dependency. The fork replaces two patch files, so the deploy gets simpler rather than larger. |
+| **Interface rule "addresses … never invented"** | The bridge returns the address; the app validates and stores it. |
 | **Measured values in configuration** | The estimate typed at creation is stored per shutter and ranks below measurements (research §5). |
 
-**Result**: pass, **conditional on the amendment**, which is the first task. Re-checked after
-Phase 1: the contracts keep driving on MQTT and management in one adapter — unchanged.
+**Result**: pass, conditional on the amendment, which is the first task. Re-checked after Phase
+1: the contracts add topics only; driving and state are untouched.
 
 ## Project Structure
 
@@ -71,74 +70,84 @@ Phase 1: the contracts keep driving on MQTT and management in one adapter — un
 ```text
 specs/009-direct-shutter-setup/
 ├── plan.md
-├── research.md            # the bridge's command route, the patch, pairing = unpairing, security
-├── data-model.md          # pairing, estimate, deleted tombstone, setup session
-├── quickstart.md          # simulator, Pi-Somfy on a desk, motor
+├── research.md              # why a fork, what it adds, pairing = unpairing, security
+├── data-model.md            # pairing, estimate, deleted tombstone, setup session
+├── quickstart.md            # simulator, the fork on a desk, the motor
 ├── contracts/
-│   ├── rest.md            # /api/setup…, removal and rename with the bridge
-│   └── pisomfy-cmd.md     # the bridge's /cmd/ as used, and the patch
+│   ├── rest.md              # /api/setup…, removal and rename with the bridge
+│   └── mqtt-manage.md       # the management channel, and what the fork changes
 └── tasks.md
 ```
 
 ### Source Code
 
 ```text
-.specify/memory/constitution.md           # principle II: management route (1.4.0)
-deploy/pi-somfy-live-shutters.patch       # NEW — announce/subscribe on add, withdraw on delete
-deploy/README.md                          # apply the patch; manage_url, loopback binding
+The fork — ziermach/Pi-Somfy, branch `somfy-shutters`, one commit per upstreamable change:
+  1. announceShutter / withdrawShutter, called from add, rename, delete (no restart needed)
+  2. the management channel on somfy/bridge/manage/{request,response}, idempotent by request_id
+  3. sendMQTT(topic, msg, retain=True) — responses must not be retained
+  4. the Pi 5 detection fix (today deploy/pi-somfy-pi5-detection.patch)
+
+This repository:
+.specify/memory/constitution.md           # principle II: the management topics (1.4.0)
+deploy/README.md                          # clone the fork; the patch file retires
+deploy/pi-somfy-pi5-detection.patch       # removed once the fork carries it
 
 backend/src/somfy_shutters/
-├── bridge/manage.py        # NEW — PiSomfyManager (urllib), SimManager; errors
-├── bridge/sim.py           # paired / learning per window; programs log; patched toggle
+├── bridge/base.py          # the management port: add, program, rename, delete, available
+├── bridge/mqtt.py          # request/response over the channel, 5 s, correlation by request_id
+├── bridge/sim.py           # paired / learning per window, programs log, management side
 ├── setup.py                # NEW — SetupService: add, program, paired, delete; sessions; bridge names
-├── roster.py               # unpaired rows, deleted tombstone, removal/rename with the bridge
+├── roster.py               # unpaired rows, deleted tombstone, removal and rename with the bridge
 ├── roster_store.py         # pairing, estimate_seconds, state 'deleted' (migration)
-├── calibration_store.py    # estimate layer in the precedence
-├── config.py               # bridge.manage_url, bridge.manage_password
+├── calibration_store.py    # the estimate layer in the precedence
 ├── auth/gate.py            # CHANGES: /api/setup → shutter_setup
-├── api/setup_routes.py     # NEW — contracts/rest.md, all require(configure)
+├── api/setup_routes.py     # NEW — contracts/rest.md, every route require(configure)
 ├── api/roster_routes.py    # removal ?bridge=true, preview bridge_managed, roster additions
-├── api/rest.py             # rename follows the bridge; sim endpoints
-└── main.py                 # build the manager; wire the setup service
+├── api/rest.py             # rename follows the bridge; sim endpoints (learn, manage, programs)
+└── main.py                 # wire the setup service
 
 frontend/src/
 ├── lib/setup.ts                    # NEW — flow steps, power-cycle windows and judging (pure, tested)
-├── lib/setup.svelte.ts             # NEW — setup store: create, program, paired, delete
+├── lib/setup.svelte.ts             # NEW — setup store
 ├── routes/SetupShutter.svelte      # NEW — name + travel time → pairing → question → done
 ├── components/PowerCycle.svelte    # NEW — the stopwatch sequence
-├── routes/Shutters.svelte          # "Nicht angelernt" section; add → setup or 005 guide
-├── components/RemoveShutter.svelte # bridge delete + unpair options, partial-failure answer
+├── routes/Shutters.svelte          # "Nicht angelernt" section; add → setup or the 005 guide
+├── components/RemoveShutter.svelte # bridge delete and unpair options, partial-failure answer
 └── App.svelte                      # route
 ```
 
-**Structure Decision**: existing layout. Management gets its own port file beside the MQTT
-adapter so the amended principle II stays checkable by looking at one file; the setup flow is a
-service of its own because it holds sessions and talks to three parts (manager, roster, audit).
+**Structure Decision**: existing layout. Management rides the existing MQTT adapter rather than
+a second port, because it is the same boundary — one file still holds every topic name. The
+setup flow is its own service: it owns sessions and touches manager, roster and audit.
 
 ## Design notes
 
-- **Order**: amendment → manager + fake server tests → simulator management side → migration →
-  setup service → routes → frontend flow → power cycle → removal/rename with the bridge →
-  patch file + deploy docs → quickstarts.
+- **Order**: amendment → the fork's four commits (each usable alone) → the app's management port
+  and its tests → simulator → migration → setup service → routes → frontend flow → power cycle →
+  removal and rename with the bridge → deploy docs → quickstarts.
+- **The fork is built first** because everything else is tested against the simulator anyway, and
+  because commit 1 alone already improves feature 005 (no restart after adding in Pi-Somfy's own
+  interface).
 - **No retries on `program`** (research §3): a repeated PROG during one learning mode undoes the
-  pairing. A timeout is reported as "unklar, ob gesendet" and the person decides.
-- **Patched or not** is learned per `add` from the live announcement, not configured (research §2).
-- **Frontend entry**: "+ Rolladen hinzufügen" opens the new flow when `management.available`,
-  else feature 005's guide with the reason (FR-018). The mock's screens are the visual reference.
+  pairing. QoS 1 may deliver twice, so the bridge deduplicates by `request_id`.
+- **Fallback is silence**: an unforked bridge never answers; after 5 s the app says so and shows
+  feature 005's guide (FR-018).
+- **Upstream**: each fork commit is written to stand alone as a pull request to
+  `Nickduino/Pi-Somfy`; commit 1 is the one most likely to be wanted there.
 
 ## Complexity Tracking
 
-| Violation | Why needed | Simpler alternative rejected because |
-|---|---|---|
-| Calling Pi-Somfy's `/cmd/` route (principle II) | Creating, programming, renaming and deleting are not available over MQTT; without them the app cannot be the interface the owner asked for | Way B (adding MQTT commands to the bridge) keeps II intact but means maintaining a larger bridge fork; the owner chose A. Confined to one adapter with a fallback. |
+None. The fork removes a patch file instead of adding one, and no new component or dependency
+appears on the Pi.
 
 ## Risks
 
-- **`/cmd/` is not a documented API** and may change with a bridge update. Mitigation: one
-  adapter, contract tests against recorded answers, fallback to feature 005's guide.
-- **Unauthenticated management on the bridge's own port** (a property of Pi-Somfy today). The
-  deploy guide recommends binding it to loopback once the app is the interface.
-- **A stray PROG pairs the wrong motor** if two are in learning mode. Warnings before every send;
-  `configure` only; audited.
-- **Hardware**: the power-cycle windows and the pairing behaviour are to be confirmed on the
-  motors (quickstart C).
+- **Maintaining the fork.** Upstream keeps moving; the fork must be rebased now and then. Kept
+  small, one concern per commit, and offered upstream to shrink it.
+- **A stray PROG pairs the wrong motor** if two are in learning mode. Warnings before every send,
+  `configure` only, audited.
+- **Whoever may publish on `somfy/#` may now also manage shutters.** That is the broker's
+  account, as for driving; the deploy guide already sets user and password.
+- **Hardware**: the power-cycle windows and the pairing behaviour are unconfirmed on real motors
+  (quickstart C).

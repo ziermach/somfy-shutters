@@ -8,11 +8,11 @@ additionally recorded with its outcome.
 ## `GET /api/setup`
 
 ```json
-{ "management": { "available": true, "reason": null, "patched": true } }
+{ "management": { "available": true, "reason": null } }
 ```
 
-`reason` when unavailable: `not_configured` (no `bridge.manage_url`) | `unreachable` |
-`refused`. `patched`: whether the last `add` was announced live (null before any).
+`reason` when unavailable: `no_answer` (an upstream bridge, which never answers on the
+management channel) | `bridge_offline`. See [contracts/mqtt-manage.md](./mqtt-manage.md).
 
 ## `POST /api/setup/shutters` — create in the bridge (US1)
 
@@ -24,12 +24,11 @@ additionally recorded with its outcome.
 
 ```json
 { "id": "kinderzimmer", "address": "0x279625", "name": "Kinderzimmer",
-  "pairing": "unpaired", "announced": true }
+  "pairing": "unpaired" }
 ```
 
-`announced` false: the bridge is unpatched; the client shows "Pi-Somfy einmal neu starten" before
-pairing. **409 `name_taken`** (checked before the bridge is asked), **422** name 1–40 / seconds
-1–600, **503 `management_unavailable`**, **502 `bridge_refused`** with the bridge's message in
+**409 `name_taken`** (checked before the bridge is asked), **422** name 1–40 / seconds
+1–600, **503 `management_unavailable`**, **502 `bridge_refused`** with the bridge's error and message in
 `detail`.
 
 ## `POST /api/setup/shutters/{id}/program` — "PROG senden"
@@ -82,6 +81,5 @@ delete → `roster` frame.
 | Endpoint | Plays |
 |---|---|
 | `POST /api/sim/window/{address}/learn` | a person holding PROG on the old remote, or a clean power-cycle: the motor learns for 120 s |
-| `POST /api/sim/bridge/patched {"patched": bool}` | a bridge with or without the `deploy/` patch |
 | `GET /api/sim/bridge/programs` | every programming request the simulated bridge transmitted |
 | `POST /api/sim/bridge/manage {"available": bool}` | a bridge whose management access fails (US5) |

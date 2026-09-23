@@ -290,13 +290,11 @@ drive.
   and forbids calling its web interface. This feature needs an amendment that allows the
   bridge's management requests (create, program, rename, delete) from the server side.
   Principle I — the bridge is the only sender — stays untouched.
-- **The bridge offers management requests.** Pi-Somfy's command interface can create a
-  shutter (returning the address it chose), send a programming signal, rename and delete —
-  password-protected, not an officially documented interface. It may change between bridge
-  versions; the fallback of story 5 covers that.
-- **Commands for a new shutter without a bridge restart** need a small change to the bridge,
-  like the patch already shipped for it (`deploy/`): today it listens for a new shutter's
-  commands only after reconnecting. Planning decides the exact change.
+- **The bridge is our own fork.** Today's Pi-Somfy offers creating, programming, renaming and
+  deleting only through its web interface, and announces a new shutter only after a restart.
+  The household therefore runs a fork of Pi-Somfy that offers these on the same message channel
+  the app already uses, and announces a new shutter at once. The changes are meant to be offered
+  upstream. An unforked bridge falls back to story 5.
 - **The power-cycle timings** (off 2–8 s, on 10–15 s, off 2–8 s, on) are the usual SIMU/Somfy
   sequence and come from the mock; they are to be confirmed on the actual motors. Whether the
   sequence also erases the motor's other senders depends on the motor model and is stated as

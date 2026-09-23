@@ -34,20 +34,25 @@ not new after `POST /api/sim/bridge/restart`.
 
 **A6 Rename (US4).** Rename to "Kinder Zimmer" → the simulated bridge holds `Kinder_Zimmer`.
 
-**A7 Unpatched bridge.** `POST /api/sim/bridge/patched {"patched": false}`, add a shutter → the
-flow asks for a Pi-Somfy restart before pairing; `POST /api/sim/bridge/restart` → continues.
+**A7 Fallback (US5).** `POST /api/sim/bridge/manage {"available": false}` plays an upstream
+bridge without the fork: "+ Rolladen hinzufügen" opens feature 005's guide with the reason, and
+`GET /api/setup` says `no_answer`.
 
-**A8 Fallback (US5).** Start with `bridge.manage_url` removed from a `kind = "mqtt"` config (or
-`POST /api/sim/bridge/manage {"available": false}`): "+ Rolladen hinzufügen" opens feature 005's
-guide with the reason.
+## B — The fork on a desk (no motor needed)
 
-## B — Real Pi-Somfy on a desk (no motor needed)
+The Pi-Somfy fork running against a local Mosquitto, the app pointed at the same broker
+(`bridge.kind = "mqtt"`). Watch the wire with
+`mosquitto_sub -t 'somfy/bridge/manage/#' -t 'homeassistant/cover/#' -v`.
 
-Pi-Somfy running with the `deploy/` patch applied, the app pointed at it
-(`bridge.kind = "mqtt"`, `bridge.manage_url = "http://127.0.0.1:80"`). Add a shutter in the app
-→ `operateShutters.conf` has it with the address shown in the app; `mosquitto_sub -t
-'homeassistant/cover/#' -v` shows its announcement at once; delete it → the announcement is
-cleared (empty retained message). "PROG senden" → Pi-Somfy's log shows one program frame.
+- Add a shutter in the app → one request, one response with the address,
+  `operateShutters.conf` holds it, its announcement appears at once, and it takes commands
+  without restarting the bridge.
+- "PROG senden" → exactly one `program` request; Pi-Somfy's log shows one PROG frame. Publish
+  the same request again by hand with the same `request_id` → answered from the store, **no**
+  second frame (idempotency).
+- Delete it → its announcement is cleared (empty retained message).
+- Stop the fork, start upstream Pi-Somfy instead → `GET /api/setup` says `no_answer` and the app
+  falls back to feature 005's guide.
 
 ## C — On the motor (pending hardware)
 
