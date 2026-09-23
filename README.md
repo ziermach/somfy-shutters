@@ -117,7 +117,10 @@ against:
 
 No broker and no hardware needed — `bridge.kind = "sim"` runs a simulated house.
 `shutters.toml` may list shutters by hand, or none at all: the app learns them from the
-bridge (see [Adding and removing shutters](#adding-and-removing-shutters)).
+bridge (see [Adding and removing shutters](#adding-and-removing-shutters)). The example
+lists none, so the simulated house starts empty — play someone setting up shutters in
+Pi-Somfy with `POST /api/sim/bridge/shutters` and `/api/sim/bridge/restart`
+([quickstart 005](specs/005-shutter-add-remove/quickstart.md), A1).
 
 ```bash
 cp config/shutters.example.toml config/shutters.toml
