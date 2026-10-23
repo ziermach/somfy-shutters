@@ -1,0 +1,40 @@
+# Install: see deploy/README.md, section 9 — optional, only for Google Home (or another
+#          Matter controller). Matterbridge runs as the system user "matterbridge".
+#          sudo cp deploy/matterbridge.service /etc/systemd/system/
+#          sudo systemctl enable --now matterbridge
+[Unit]
+Description=Matterbridge — shutters as Matter devices for Google Home
+Documentation=https://github.com/Luligu/matterbridge
+# It only talks to the broker, never to Pi-Somfy or this app directly.
+After=network-online.target mosquitto.service
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=matterbridge
+Group=matterbridge
+WorkingDirectory=/var/lib/matterbridge/Matterbridge
+ExecStart=/usr/bin/matterbridge --service
+Restart=always
+RestartSec=5
+TimeoutStopSec=60
+SyslogIdentifier=matterbridge
+# A Pi 3 has under 1 GB and Pi-Somfy shares it. When memory runs short, the kernel
+# kills Matterbridge, not the radio bridge; V8 is told the limit so it collects
+# garbage before the cgroup does it the hard way.
+MemoryHigh=170M
+MemoryMax=200M
+Environment=NODE_OPTIONS=--max-old-space-size=128
+# Its state (pairing with Google, plugin config) lives in its home; everything else
+# is read-only, which also stops the UI from replacing the patched plugin with npm.
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/matterbridge
+PrivateTmp=true
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

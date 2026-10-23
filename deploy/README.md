@@ -497,6 +497,80 @@ Measure travel times per window through the calibration flow rather than guessin
 anything you type into `shutters.toml` overrides a measurement and is never
 overwritten.
 
+## 9. Google Home through Matterbridge (optional)
+
+Not part of the app: [Matterbridge](https://github.com/Luligu/matterbridge) reads the
+same MQTT topics and offers each shutter to Google Home as a Matter window covering.
+Google's commands go `Matterbridge → Mosquitto → Pi-Somfy`; the app sees them only as
+Pi-Somfy's `opening`/`closing` state, and Pi-Somfy stays the only transmitter. It needs
+a Matter-capable Google hub (Nest Hub, Nest Mini, Nest Wifi Pro).
+
+Home Assistant in Docker is no alternative on a 1 GB Pi: it froze this one. Matterbridge
+needs about 100–150 MB and is capped at 200 MB by the unit.
+
+The plugin is [`matterbridge-mqtt-devices`](https://github.com/hobbyquaker/matterbridge-mqtt-devices)
+with an `invertPosition` option added locally — upstream assumes 0 = open, Pi-Somfy
+reports 100 = open. Without it, *open* publishes position 0 and closes the shutter.
+Build the patched package on a dev machine (`npm run cleanBuild && npm pack`) and copy
+the `.tgz` over.
+
+Node.js 20.19 or newer (Raspberry Pi OS ships older; use NodeSource), then:
+
+```bash
+node -v
+sudo npm install -g matterbridge --omit=dev
+sudo npm install -g /tmp/matterbridge-mqtt-devices-0.11.0.tgz
+
+sudo useradd --system --user-group --create-home --home-dir /var/lib/matterbridge \
+             --shell /usr/sbin/nologin matterbridge
+sudo -u matterbridge mkdir -p /var/lib/matterbridge/Matterbridge
+sudo -u matterbridge -H matterbridge -add "$(npm root -g)/matterbridge-mqtt-devices"
+
+# its own broker account
+sudo mosquitto_passwd -b /etc/mosquitto/passwd matterbridge '<password>'
+sudo systemctl restart mosquitto
+
+sudo cp /opt/somfy-shutters/deploy/matterbridge.service /etc/systemd/system/
+sudo systemctl enable --now matterbridge
+journalctl -u matterbridge -f
+```
+
+`npm root -g` must print a path under `/usr`, or adjust `ExecStart` in the unit to
+`command -v matterbridge`. The unit keeps the global packages read-only, so an update
+offered in the Matterbridge UI fails instead of replacing the patched plugin. Install a
+new `.tgz` by hand.
+
+In the UI at `http://<pi-ip>:8283`, set the plugin's broker to `mqtt://127.0.0.1:1883`
+with the `matterbridge` account and add one device per shutter. The address is the one
+Pi-Somfy announces:
+
+```json
+{
+  "id": "wohnzimmer",
+  "name": "Wohnzimmer",
+  "type": "window-covering",
+  "topicSetCoverState": "somfy/0x279621/command",
+  "payloadOpen": "OPEN",
+  "payloadClosed": "CLOSE",
+  "payloadStop": "STOP",
+  "topicCoverState": "somfy/0x279621/state",
+  "topicSetPosition": "somfy/0x279621/set_position",
+  "topicPosition": "somfy/0x279621/position",
+  "invertPosition": true,
+  "retain": false,
+  "topicAvailability": "somfy/bridge/availability"
+}
+```
+
+- **`retain` stays `false`.** A retained command is replayed to Pi-Somfy on every
+  reconnect, and the shutter drives by itself after each restart.
+- Without the patched plugin, leave out both position topics and `invertPosition`:
+  open, close and stop still work, percentages do not.
+- Google shows the percentage as if measured. It is Pi-Somfy's estimate.
+
+Restart Matterbridge after adding devices, then in the Google Home app: *Add device →
+Matter-enabled device* and scan the QR code from the Matterbridge UI.
+
 ## Operating it
 
 ```bash
