@@ -126,14 +126,23 @@ class CalibrationState {
   }
 
   async mark(id: string, which: 'moving' | 'arrived'): Promise<void> {
-    const response = await fetch(`/api/calibration/${id}/mark`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ mark: which })
-    });
-    const body = await response.json();
+    // A press that fails must say so. Left unhandled, the screen kept its timer and
+    // its "Fertig" button, and every further press vanished without a word.
+    let response: Response;
+    try {
+      response = await fetch(`/api/calibration/${id}/mark`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ mark: which })
+      });
+    } catch {
+      // Never reached the house: the run is still going there, so pressing again is right.
+      this.message = 'Keine Verbindung zum Haus. Nochmal drücken.';
+      return;
+    }
+    const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      this.message = body.message ?? 'Das hat nicht geklappt.';
+      this.message = body.message ?? `Das hat nicht geklappt (Fehler ${response.status}).`;
       this.phase = 'idle';
       this.#stopTicking();
       return;
