@@ -71,6 +71,9 @@ class CalibrationStore:
         self._conn = sqlite3.connect(db_path, isolation_level=None, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         with self._lock:
+            # The same file as store.py, and its reasons: NORMAL is only safe in WAL.
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute("PRAGMA synchronous=NORMAL")
             self._conn.executescript(SCHEMA)
 
     def close(self) -> None:

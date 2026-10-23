@@ -54,6 +54,11 @@ class Store:
         self._conn.row_factory = sqlite3.Row
         with self._lock:
             self._conn.execute("PRAGMA journal_mode=WAL")
+            # Every store shares this file. With the default FULL, each commit waits for
+            # the disk; on the Pi's USB stick one took 18 s, with the event loop blocked
+            # and "Alle zu" stuck between shutters. In WAL, NORMAL cannot corrupt the
+            # file; a power cut may lose the last commits, an app crash loses nothing.
+            self._conn.execute("PRAGMA synchronous=NORMAL")
             self._conn.executescript(SCHEMA)
 
     def close(self) -> None:

@@ -71,6 +71,7 @@ class AuditLog:
         with self._lock:
             # WAL: the record is read while commands are written (research §9).
             self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute("PRAGMA synchronous=NORMAL")  # why: store.py
             self._conn.executescript(SCHEMA)
 
     def close(self) -> None:
