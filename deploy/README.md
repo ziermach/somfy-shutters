@@ -422,9 +422,29 @@ curl -s localhost:8000/api/health
 With a credential it adds `bridge` and `shutters`; `status` is `ok` even when the bridge
 is down, because the service is up and correctly reporting a broken dependency.
 
-Then open `http://<pi-ip>:8000` from a phone on the same network and install it as a
-PWA. Do not port-forward it; reach it from outside over a VPN (WireGuard, Tailscale) if
-you need to.
+Then open `http://<pi-ip>:8000` from a phone on the same network. Do not port-forward
+it; reach it from outside over a VPN (WireGuard, Tailscale) if you need to.
+
+### Putting it on the home screen
+
+Over plain `http://<pi-ip>:8000` the app works fully — pairing, control, live view — but
+browsers install a PWA only from a secure origin (HTTPS or `localhost`). Android Chrome
+answers "Diese App kann nicht installiert werden". Pick one:
+
+- **Shortcut, no setup.** Android Chrome: menu ⋮ → *Zum Startbildschirm hinzufügen* →
+  *Verknüpfung erstellen*. iPhone Safari: Share → *Zum Home-Bildschirm*. One tap opens
+  the app; on Android it runs in a browser tab rather than its own window.
+- **Install on one Android phone.** In `chrome://flags`, enable *Insecure origins
+  treated as secure* with `http://<pi-ip>:8000`, restart Chrome, then *App installieren*.
+  Repeat on every phone.
+- **HTTPS for every device.** Put a TLS proxy in front of port 8000 — `tailscale serve`
+  (needs HTTPS certificates enabled for the tailnet, and also gives you access from
+  outside) or Caddy on the Pi. Set `[auth] trusted_proxy = "127.0.0.1"` so lockouts see
+  the real client address and, when the proxy sends `X-Forwarded-Proto: https`, the
+  credential cookie is marked secure.
+
+Decide before pairing: an installed app may keep cookies apart from the browser, so pair
+in the shortcut or installed app you will actually use.
 
 ### Pairing the first phone
 
@@ -439,7 +459,7 @@ sudo -u somfy /opt/somfy-shutters/backend/.venv/bin/somfy-shutters auth recover
 
 Open the app on the phone, type the code and a name for the phone. From then on that
 phone pairs every further device under **Geräte → Gerät koppeln** — nobody types a long
-secret. On an iPhone, pair inside the installed home-screen app, not in Safari first:
+secret. On an iPhone, pair inside the home-screen app, not in Safari first:
 the two keep separate cookies.
 
 The same command is the way back in if every device is lost; it touches nothing but
